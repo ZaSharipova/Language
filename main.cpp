@@ -4,6 +4,7 @@
 #include "LanguageFunctions.h"
 
 int main(void) {
+    fprintf(stderr, "AAAAAAA");
     DifRoot root = {};
     DifRootCtor(&root);
 

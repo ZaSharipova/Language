@@ -15,5 +15,6 @@ DifNode_t *NewNode(DifRoot *root, DifTypes type, Value value, DifNode_t *left, D
 DifErrors InitArrOfVariable(VariableArr *arr, size_t capacity);
 DifErrors ResizeArray(VariableArr *arr);
 DifErrors DtorVariableArray(VariableArr *arr);
+DifNode_t *NewVariable(DifRoot *root, const char *variable, VariableArr *VariableArr);
 
 #endif //LANGUAGE_FUNCTIONS_H_

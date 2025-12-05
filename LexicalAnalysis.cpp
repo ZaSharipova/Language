@@ -15,12 +15,14 @@
 #define WHILE "while"
 
 #define NEWN(num) NewNode(root, kNumber, ((Value){ .number = (num)}), NULL, NULL, NULL)
+#define NEWV(name) NewVariable(root, name, Variable_Array)
 #define NEWOP(op, left, right) NewNode(root, kOperation, (Value){ .operation = (op)}, left, right, NULL) 
 
-size_t CheckAndReturn(DifRoot *root, const char **string, Stack_Info *tokens) {
+size_t CheckAndReturn(DifRoot *root, const char **string, Stack_Info *tokens, VariableArr *Variable_Array) {
     assert(root);
     assert(string);
     assert(tokens);
+    assert(Variable_Array);
 
     size_t cnt = 0;
 
@@ -92,28 +94,28 @@ size_t CheckAndReturn(DifRoot *root, const char **string, Stack_Info *tokens) {
             continue;
         }
 
-        if (strncmp(*string, "sin", sizeof("sin")) == 0) {
+        if (strncmp(*string, "sin", strlen("sin")) == 0) {
             StackPush(tokens, NEWOP(kOperationSin, NULL, NULL), stderr);
             cnt++;
-            (*string) += sizeof("sin");
+            (*string) += strlen("sin");
             continue;
         }
-        if (strncmp(*string, IF, sizeof(IF)) == 0) {
+        if (strncmp(*string, IF, strlen(IF)) == 0) {
             StackPush(tokens, NEWOP(kOperationIf, NULL, NULL), stderr);
             cnt++;
-            (*string) += sizeof(IF);
+            (*string) += strlen(IF);
             continue;
         }
-        if (strncmp(*string, WHILE, sizeof(WHILE)) == 0) {
+        if (strncmp(*string, WHILE, strlen(WHILE)) == 0) {
             StackPush(tokens, NEWOP(kOperationWhile, NULL, NULL), stderr);
             cnt++;
-            (*string) += sizeof(WHILE);
+            (*string) += strlen(WHILE);
             continue;
         }
-        if (strncmp(*string, ELSE, sizeof(ELSE)) == 0) {
+        if (strncmp(*string, ELSE, strlen(ELSE)) == 0) {
             StackPush(tokens, NEWOP(kOperationElse, NULL, NULL), stderr);
             cnt++;
-            (*string) += sizeof(ELSE);
+            (*string) += strlen(ELSE);
             continue;
         }
 
@@ -129,16 +131,24 @@ size_t CheckAndReturn(DifRoot *root, const char **string, Stack_Info *tokens) {
         }
 
         if (isalnum(**string) || **string == '_') {
-            const char *str = *string;
-            size_t str_size = 0;
+            const char *name_start = *string;
+            size_t len = 0;
             while (isalnum(**string) || **string == '_') {
                 (*string)++;
-                str_size++;
+                len++;
             }
+
+            char *name = (char *) calloc (len + 1, 1);
+            strncpy(name, name_start, len);
+            name[len] = '\0';
+
+            StackPush(tokens, NEWV(name), stderr);
+
+            fprintf(stderr, "%s\n", name);
             cnt++;
-            StackPush(tokens, NewNode(root, kVariable, (Value){ .variable.variable_name = strdup(*string)}, NULL, NULL, NULL), stderr); //
             continue;
         }
+
 
         if (isspace(**string)) {
             while (isspace(**string)) {

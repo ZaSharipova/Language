@@ -65,7 +65,7 @@ static void PrintDotNode(FILE *file, const DifNode_t *node, const DifNode_t *nod
                 node->value.number, (void *)node->left, (void *)node->right, color_number);
         } else {
             fprintf(file, "  Value: %s  \nLeft: %p | Right: %p\" shape=octagon color=black fillcolor=%s style=filled width=4 height=1.5 fixedsize=true];\n", 
-                (node->value).variable.variable_name, (void *)node->left, (void *)node->right, color_variable);
+                (node->value).variable->variable_name, (void *)node->left, (void *)node->right, color_variable);
         }
     } else if (node->type == kOperation) {
         fprintf(file, "    \"%p\" [label=\"{Parent: %p \n | Addr: %p \n | Type: %s\n", 

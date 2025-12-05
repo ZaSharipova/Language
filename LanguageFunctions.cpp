@@ -128,6 +128,12 @@ DifNode_t *NewNode(DifRoot *root, DifTypes type, Value value, DifNode_t *left, D
         new_node->value.number = value.number;
         break;
 
+    case kVariable: {
+        new_node->value = value;
+    
+        break;
+    }
+
     case kOperation:
         new_node->value.operation = value.operation;
         new_node->left = left;
@@ -138,6 +144,37 @@ DifNode_t *NewNode(DifRoot *root, DifTypes type, Value value, DifNode_t *left, D
 
         break;
     }
+
+    return new_node;
+}
+
+DifNode_t *NewVariable(DifRoot *root, const char *variable, VariableArr *VariableArr) {
+    assert(root);
+    assert(variable);
+
+    DifNode_t *new_node = NULL;
+    NodeCtor(&new_node, NULL);
+
+    root->size ++;
+    new_node->type = kVariable;
+    VariableInfo *addr = NULL;
+
+    for (size_t i = 0; i < VariableArr->size; i++) {
+        if (strcmp(variable, VariableArr[i].var_array->variable_name) == 0) {
+           addr = VariableArr[i].var_array;
+        }
+    }
+
+    if (!addr) {
+        ResizeArray(VariableArr);
+        VariableArr->var_array[VariableArr->size].variable_name = variable;
+        addr = &VariableArr->var_array[VariableArr->size];
+        VariableArr->size ++;
+    }
+
+    new_node->value.variable = (VariableInfo *) calloc (1, sizeof(VariableInfo));
+        
+    new_node->value.variable = addr;
 
     return new_node;
 }
