@@ -2,6 +2,7 @@
 #include "Structs.h"
 #include "Enums.h"
 #include "LanguageFunctions.h"
+#include "DoTex.h"
 
 int main(void) {
     fprintf(stderr, "AAAAAAA");
@@ -17,8 +18,10 @@ int main(void) {
     INIT_DUMP_INFO(dump_info);
     dump_info.tree = &root;
     CHECK_ERROR_RETURN(ReadInfix(&root, &dump_info, &Variable_Array, "input.txt", out));
+    PrintTree(root.root, out);
 
     DtorVariableArray(&Variable_Array);
+    fclose(out);
     //TreeDtor(&root);
 
     return kSuccess;

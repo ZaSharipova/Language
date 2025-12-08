@@ -99,7 +99,6 @@ DifErrors StackDtor(Stack_Info *stk, FILE *open_log_file) {
 DifNode_t *GetStackElem(Stack_Info *stk, size_t pos) {
     assert(stk);
 
-    fprintf(stderr, "%zu %zu\n", pos, stk->size);
     if (pos >= (size_t)stk->size) {
         return NULL;
     }

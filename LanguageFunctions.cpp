@@ -160,8 +160,8 @@ DifNode_t *NewVariable(DifRoot *root, const char *variable, VariableArr *Variabl
     VariableInfo *addr = NULL;
 
     for (size_t i = 0; i < VariableArr->size; i++) {
-        if (strcmp(variable, VariableArr[i].var_array->variable_name) == 0) {
-           addr = VariableArr[i].var_array;
+        if (strncmp(variable, VariableArr->var_array[i].variable_name, strlen(variable)) == 0) {
+           addr = &VariableArr->var_array[i];
         }
     }
 
@@ -172,7 +172,6 @@ DifNode_t *NewVariable(DifRoot *root, const char *variable, VariableArr *Variabl
         VariableArr->size ++;
     }
 
-    new_node->value.variable = (VariableInfo *) calloc (1, sizeof(VariableInfo));
         
     new_node->value.variable = addr;
 
