@@ -145,6 +145,8 @@ static GraphOperation PrintExpressionType(const DifNode_t *node) {
             return {"=", "darkseagreen3"};
         case (kOperationIf):
             return {"if", "navajowhite1"};
+        case (kOperationElse):
+            return {"else", "navajowhite1"};
         case (kOperationThen):
             return {";", "pink"};
         case (kOperationWhile):
