@@ -47,6 +47,9 @@ static DifNode_t *GetPrimary(DifRoot *root, Stack_Info *tokens, VariableArr *arr
 static DifNode_t *GetPower(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos);
 static DifNode_t *GetAssignment(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos);
 static DifNode_t *GetOp(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos);
+static DifNode_t *GetWhile(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos);
+static DifNode_t *GetIf(DifRoot *root, Stack_Info *tokens,
+                        VariableArr *arr, size_t *pos, size_t *tokens_pos);
 
 static DifNode_t *GetNumber(DifRoot *root, Stack_Info *tokens, size_t *tokens_pos);
 static DifNode_t *GetString(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos);
@@ -116,27 +119,77 @@ static bool StatementNeedsSemicolon(const DifNode_t *node) {
 
 DifNode_t *GetGoal(DifRoot *root, Stack_Info *tokens, VariableArr *arr,
     size_t *pos, size_t *tokens_pos) {
-    assert(root && tokens && arr && pos && tokens_pos);
+        assert(root);
+        assert(tokens);
+        assert(arr);
+        assert(pos);
+        assert(tokens_pos);
 
-    DifNode_t *first = GetOp(root, tokens, arr, pos, tokens_pos);
-    if (!first) return NULL;
-
-    DifNode_t *last = first;
-
-    while (true) {
-        size_t save_pos = *tokens_pos;
+    DifNode_t *first = NULL;
+    do {
         DifNode_t *next = GetOp(root, tokens, arr, pos, tokens_pos);
         if (!next) break;
-
-        if (last->type == kOperation && last->value.operation == kOperationThen) {
-            last->right = next;
-            next->parent = last;
+        else if (first && !first->right) {
+            first->right = next;
         } else {
-            DifNode_t *then_node = NEWOP(kOperationThen, last, next);
-            last = then_node;
+            first = NEWOP(kOperationThen, next, first);
+            printf("BB%p\n", first);
         }
+    } while (true);
+
+    return first;
+}
+
+DifNode_t *GetOp(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos) {
+    assert(root);
+    assert(tokens);
+    assert(arr);
+    assert(pos);
+
+    size_t save_pos = *tokens_pos;
+
+    DifNode_t *stmt = GetWhile(root, tokens, arr, pos, tokens_pos);
+    if (stmt) {
+        return stmt;
     }
 
+    *tokens_pos = save_pos;
+    stmt = GetIf(root, tokens, arr, pos, tokens_pos);
+    if (stmt) {
+        return stmt;
+    }
+
+    DifNode_t *last = NULL;
+    *tokens_pos = save_pos;
+    int i = 0;
+    do {
+        save_pos = *tokens_pos;
+        stmt = GetAssignment(root, tokens, arr, pos, tokens_pos);
+        if (!stmt) {
+            *tokens_pos = save_pos;
+            break;
+        }
+
+        DifNode_t *token = GetStackElem(tokens, *tokens_pos);
+        if (token && token->type == kOperation && token->value.operation == kOperationThen) {
+            (*tokens_pos)++;
+            if (!last) {
+                last = stmt;
+            } else if (last && !last->right) {
+                last->right = stmt;
+                //last = token;
+            } else {
+                printf("AA%p\n", last);
+                token->left = last;
+                token->right = stmt;
+                stmt->parent = token;
+                last = token;
+            }
+        }
+        //printf("STMT%p\n", stmt);
+
+    } while (true);
+    //printf("hm%zu\n", *tokens_pos);
     return last;
 }
 
@@ -299,7 +352,7 @@ DifNode_t *GetAssignment(DifRoot *root, Stack_Info *tokens, VariableArr *arr, si
     maybe_var->parent = node;
     value->parent = node;
 
-    return node;
+    return NEWOP(kOperationThen, node, NULL);
 }
 
 static DifNode_t *GetIf(DifRoot *root, Stack_Info *tokens,
@@ -349,34 +402,12 @@ static DifNode_t *GetIf(DifRoot *root, Stack_Info *tokens,
         return NULL;
     }
 
-    //DifNode_t *last = first;
-
-    // tok = GetStackElem(tokens, *tokens_pos);
-    // if (!(first->value.operation == kOperationIf || first->value.operation == kOperationWhile)){
-    //     if (!tok || tok->type != kOperation || tok->value.operation != kOperationThen) {
-    //         fprintf(stderr, "SYNTAX_ERROR_IF: expected ';' after statement\n");
-    //         return NULL;
-    //     }
-    //     (*tokens_pos)++;
-        
-    // }
-
     DifNode_t *last = first;
 
     while (true) {
         size_t save_pos = *tokens_pos;
         DifNode_t *stmt = GetOp(root, tokens, arr, pos, tokens_pos);
         if (!stmt) break;
-
-        // if (StatementNeedsSemicolon(stmt)) {
-        //     tok = GetStackElem(tokens, *tokens_pos);
-        //     if (!tok || tok->type != kOperation || tok->value.operation != kOperationThen) {
-        //         fprintf(stderr, "SYNTAX_ERROR_IF: expected ';' after statement\n");
-        //         return NULL;
-        //     }
-        //     (*tokens_pos)++;
-        //     fprintf(stderr, "!");
-        // }
         
         last = NEWOP(kOperationThen, last, stmt);
         fprintf(stderr, "%p", last);
@@ -388,7 +419,7 @@ static DifNode_t *GetIf(DifRoot *root, Stack_Info *tokens,
         return NULL;
     }
     (*tokens_pos)++;
-    fprintf(stderr, "AAA%p\n", tokens[*tokens_pos]);
+    //fprintf(stderr, "AAA%p\n", tokens[*tokens_pos]);
 
     DifNode_t *if_node = NEWOP(kOperationIf, cond, last);
 
@@ -478,49 +509,6 @@ static DifNode_t *GetWhile(DifRoot *root, Stack_Info *tokens, VariableArr *arr, 
     last->parent = while_node;
 
     return while_node;
-}
-
-DifNode_t *GetOp(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(pos);
-
-    size_t save_pos = *tokens_pos;
-
-    DifNode_t *stmt = GetWhile(root, tokens, arr, pos, tokens_pos);
-    if (stmt) {
-        return stmt;
-    }
-
-    *tokens_pos = save_pos;
-    stmt = GetIf(root, tokens, arr, pos, tokens_pos);
-    if (stmt) {
-        return stmt;
-    }
-
-    *tokens_pos = save_pos;
-    stmt = GetAssignment(root, tokens, arr, pos, tokens_pos);
-    if (stmt) {
-        DifNode_t *semicolon = GetStackElem(tokens, *tokens_pos);
-        if (!semicolon || semicolon->type != kOperation || 
-            semicolon->value.operation != kOperationThen) {
-            fprintf(stderr, "SYNTAX_ERROR: expected ';' after assignment\n");
-            return NULL;
-        }
-        fprintf(stderr, "OP%p\n", tokens[*tokens_pos]);
-        (*tokens_pos)++;
-        
-        semicolon->left = stmt;
-        semicolon->right = NULL;
-        stmt->parent = semicolon;
-        
-        return semicolon;
-    }
-
-
-    *tokens_pos = save_pos;
-    return NULL;
 }
 
 DifNode_t *GetPower(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos) {

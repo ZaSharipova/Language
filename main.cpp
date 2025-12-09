@@ -5,7 +5,6 @@
 #include "DoTex.h"
 
 int main(void) {
-    fprintf(stderr, "AAAAAAA");
     DifRoot root = {};
     DifRootCtor(&root);
 
