@@ -102,10 +102,11 @@ DifErrors ReadInfix(DifRoot *root, DumpInfo *dump_info, VariableArr *Variable_Ar
 
 
 /* G :: = OP+
-   OP :: = WHILE | IF | ASSIGNMENT;
+   OP :: = WHILE | IF | ASSIGNMENT; | FUNCTION
    WHILE :: = 'while' ( E ) { OP+ }
    IF :: = 'if' ( E ) { OP+ }
    ASSIGNMENT :: = V '=' E
+   FUNCTION :: = V (T {, T}+) (; | { OP+})
    E :: = T ([+-] T)*
    T :: = POWER ([*:] T)*
    POWER :: = PRIMARY ([^] POWER)*
@@ -114,11 +115,11 @@ DifErrors ReadInfix(DifRoot *root, DumpInfo *dump_info, VariableArr *Variable_Ar
 
 DifNode_t *GetGoal(DifRoot *root, Stack_Info *tokens, VariableArr *arr,
     size_t *pos, size_t *tokens_pos) {
-        assert(root);
-        assert(tokens);
-        assert(arr);
-        assert(pos);
-        assert(tokens_pos);
+    assert(root);
+    assert(tokens);
+    assert(arr);
+    assert(pos);
+    assert(tokens_pos);
 
     DifNode_t *first = NULL;
     do {
@@ -226,7 +227,7 @@ static DifNode_t *GetFunction(DifRoot *root, Stack_Info *tokens, VariableArr *ar
     (*tokens_pos)++;
 
     DifNode_t *args_root = NULL;
-    DifNode_t *last_arg = NULL;
+    DifNode_t *rightmost = NULL; 
     while (true) {
         token = GetStackElem(tokens, *tokens_pos);
         if (!token) {
@@ -250,22 +251,19 @@ static DifNode_t *GetFunction(DifRoot *root, Stack_Info *tokens, VariableArr *ar
         if (token->type == kVariable || token->type == kNumber) {
             arg_node = token;
             (*tokens_pos)++;
-        } else {
-            arg_node = GetOp(root, tokens, arr, pos, tokens_pos);
-            if (!arg_node) {
-                fprintf(stderr, "SYNTAX_ERROR: expression expected as function argument\n");
-                *tokens_pos = save_pos;
-                return NULL;
-            }
-        }
+        } //
 
         if (!args_root) {
             args_root = arg_node;
-        } else if (last_arg && !last_arg->right) {
-            last_arg->right = arg_node;
-            arg_node->parent = last_arg;
         }
-        last_arg = arg_node;
+        else if (!rightmost) {
+            args_root = NEWOP(kOperationComma, args_root, arg_node);
+            rightmost = args_root;
+        }   else {
+            DifNode_t *comma = NEWOP(kOperationComma, rightmost->right, arg_node);
+            rightmost->right = comma;
+            rightmost = comma;
+        }
     }
 
     token = GetStackElem(tokens, *tokens_pos);
