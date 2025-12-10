@@ -152,6 +152,6 @@ static GraphOperation PrintExpressionType(const DifNode_t *node) {
         case (kOperationWhile):
             return {"while", "rosybrown"};
         case (kOperationNone):
-        default: return {NULL, NULL};
+        default: return {"red", "red"};
     }
 }

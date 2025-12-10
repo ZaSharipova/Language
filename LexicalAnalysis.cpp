@@ -160,5 +160,9 @@ size_t CheckAndReturn(DifRoot *root, const char **string, Stack_Info *tokens, Va
         fprintf(stderr, "AAAAAA, SYNTAX_ERROR.");
         return 0;
     }
+    fprintf(stderr, "%zu\n\n", Variable_Array->size);
+    for (size_t i = 0; i < Variable_Array->size; i++) {
+        fprintf(stderr, "%s %lf\n\n", Variable_Array->var_array[i].variable_name, Variable_Array->var_array[i].variable_value);
+    }
     return cnt;
 }

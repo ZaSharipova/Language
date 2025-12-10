@@ -42,6 +42,7 @@ enum OperationTypes {
     kOperationElse,
     kOperationWhile,
     kOperationThen,
+    kFunction,
     kOperationParOpen,
     kOperationParClose,
     kOperationBraceOpen,

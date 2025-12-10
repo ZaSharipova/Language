@@ -16,14 +16,6 @@ int main(void) {
     FILE_OPEN_AND_CHECK(out, "diftex.tex", "w");
 
     INIT_DUMP_INFO(dump_info);
-    dump_info.tree = &root;
-    CHECK_ERROR_RETURN(ReadInfix(&root, &dump_info, &Variable_Array, "input.txt", out));
-    //PrintTree(root.root, out);
-
-    FILE_OPEN_AND_CHECK(ast_file, "ast.txt", "w");
-    PrintAST(root.root, ast_file);
-    fclose(ast_file);
-
     
     FILE_OPEN_AND_CHECK(ast_file_read, "ast.txt", "r");
     FileInfo info = {};
@@ -37,14 +29,10 @@ int main(void) {
     root1.root = new_node_adr;
     dump_info.tree = &root1;
     DoTreeInGraphviz(root1.root, &dump_info, new_node_adr);
-
-    FILE_OPEN_AND_CHECK(code_out, "test.txt", "w");
-    GenerateCodeFromAST(root1.root, code_out);
-    fclose(out);
     
     DtorVariableArray(&Variable_Array);
     fclose(out);
-    //TreeDtor(&root);
+    TreeDtor(&root1);
 
     return kSuccess;
 }

@@ -19,7 +19,7 @@
 
 static long long SizeOfFile(const char *filename);
 static char *ReadToBuf(const char *filename, FILE *file, size_t filesize);
-static void DoBufRead(FILE *file, const char *filename, FileInfo *Info);
+//static void DoBufRead(FILE *file, const char *filename, FileInfo *Info);
 
 #define CHECK_NULL_RETURN(name, cond) \
     DifNode_t *name = cond;           \
@@ -98,25 +98,6 @@ DifErrors ReadInfix(DifRoot *root, DumpInfo *dump_info, VariableArr *Variable_Ar
 
 #define NEWN(num) NewNode(root, kNumber, ((Value){ .number = (num)}), NULL, NULL, arr)
 #define NEWOP(op, left, right) NewNode(root, kOperation, (Value){ .operation = (op) }, left, right, arr) 
-
-static bool StatementNeedsSemicolon(const DifNode_t *node) {
-    if (!node) return false;
-
-    if (node->type == kOperation) {
-        switch (node->value.operation) {
-            case kOperationIf:
-            case kOperationWhile:
-            case kOperationBraceOpen:
-            case kOperationBraceClose:
-                return false;
-            default:
-                return true;
-        }
-    }
-
-    return true;
-}
-
 
 DifNode_t *GetGoal(DifRoot *root, Stack_Info *tokens, VariableArr *arr,
     size_t *pos, size_t *tokens_pos) {
@@ -703,7 +684,7 @@ static char *ReadToBuf(const char *filename, FILE *file, size_t filesize) {
     return buf_out;
 }
 
-static void DoBufRead(FILE *file, const char *filename, FileInfo *Info) {
+void DoBufRead(FILE *file, const char *filename, FileInfo *Info) {
     assert(file);
     assert(filename);
     assert(Info);
