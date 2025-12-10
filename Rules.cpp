@@ -51,6 +51,7 @@ static DifNode_t *GetWhile(DifRoot *root, Stack_Info *tokens, VariableArr *arr, 
 static DifNode_t *GetIf(DifRoot *root, Stack_Info *tokens,
                         VariableArr *arr, size_t *pos, size_t *tokens_pos);
 static DifNode_t *GetElse(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos, DifNode_t *if_node);
+static DifNode_t *GetFunction(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos);
 
 static DifNode_t *GetNumber(DifRoot *root, Stack_Info *tokens, size_t *tokens_pos);
 static DifNode_t *GetString(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos);
@@ -99,6 +100,18 @@ DifErrors ReadInfix(DifRoot *root, DumpInfo *dump_info, VariableArr *Variable_Ar
 #define NEWN(num) NewNode(root, kNumber, ((Value){ .number = (num)}), NULL, NULL, arr)
 #define NEWOP(op, left, right) NewNode(root, kOperation, (Value){ .operation = (op) }, left, right, arr) 
 
+
+/* G :: = OP+
+   OP :: = WHILE | IF | ASSIGNMENT;
+   WHILE :: = 'while' ( E ) { OP+ }
+   IF :: = 'if' ( E ) { OP+ }
+   ASSIGNMENT :: = V '=' E
+   E :: = T ([+-] T)*
+   T :: = POWER ([*:] T)*
+   POWER :: = PRIMARY ([^] POWER)*
+   PRIMARY :: = ( E ) | N | S
+*/
+
 DifNode_t *GetGoal(DifRoot *root, Stack_Info *tokens, VariableArr *arr,
     size_t *pos, size_t *tokens_pos) {
         assert(root);
@@ -141,8 +154,15 @@ DifNode_t *GetOp(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *po
         return stmt;
     }
 
+    *tokens_pos = save_pos;
+    stmt = GetFunction(root, tokens, arr, pos, tokens_pos);
+    if (stmt) {
+        return stmt;
+    }
+
     DifNode_t *last = NULL;
     *tokens_pos = save_pos;
+
     int i = 0;
     do {
         save_pos = *tokens_pos;
@@ -181,6 +201,114 @@ DifNode_t *GetOp(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *po
 #define MUL_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationMul}, left, right, arr)
 #define DIV_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationDiv}, left, right, arr)
 #define POW_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationPow}, left, right, arr)
+
+static DifNode_t *GetFunction(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos) {
+    assert(root);
+    assert(tokens);
+    assert(arr);
+    assert(pos);
+    assert(tokens_pos);
+
+    size_t save_pos = *tokens_pos;
+
+    DifNode_t *name_node = GetStackElem(tokens, *tokens_pos);
+    if (!name_node || name_node->type != kVariable) {
+        *tokens_pos = save_pos;
+        return NULL;
+    }
+    (*tokens_pos)++;
+
+    DifNode_t *token = GetStackElem(tokens, *tokens_pos);
+    if (!token || token->type != kOperation || token->value.operation != kOperationParOpen) {
+        *tokens_pos = save_pos;
+        return NULL;
+    }
+    (*tokens_pos)++;
+
+    DifNode_t *args_root = NULL;
+    DifNode_t *last_arg = NULL;
+    while (true) {
+        token = GetStackElem(tokens, *tokens_pos);
+        if (!token) {
+            fprintf(stderr, "SYNTAX_ERROR: unexpected end of tokens in function args\n");
+            *tokens_pos = save_pos;
+            return NULL;
+        }
+
+        if (token->type == kOperation && token->value.operation == kOperationParClose) {
+            (*tokens_pos)++;
+            break;
+        }
+
+        if (token->type == kOperation && token->value.operation == kOperationComma) {
+            (*tokens_pos)++;
+            continue;
+        }
+
+        DifNode_t *arg_node = NULL;
+
+        if (token->type == kVariable || token->type == kNumber) {
+            arg_node = token;
+            (*tokens_pos)++;
+        } else {
+            arg_node = GetOp(root, tokens, arr, pos, tokens_pos);
+            if (!arg_node) {
+                fprintf(stderr, "SYNTAX_ERROR: expression expected as function argument\n");
+                *tokens_pos = save_pos;
+                return NULL;
+            }
+        }
+
+        if (!args_root) {
+            args_root = arg_node;
+        } else if (last_arg && !last_arg->right) {
+            last_arg->right = arg_node;
+            arg_node->parent = last_arg;
+        }
+        last_arg = arg_node;
+    }
+
+    token = GetStackElem(tokens, *tokens_pos);
+    if (token && token->type == kOperation && token->value.operation == kOperationBraceOpen) {
+        (*tokens_pos)++;
+
+        DifNode_t *body_root = NULL;
+        DifNode_t *last_stmt = NULL;
+
+        while (true) {
+            DifNode_t *stmt = GetOp(root, tokens, arr, pos, tokens_pos);
+            if (!stmt) break;
+
+            if (!body_root) {
+                body_root = stmt;
+            } else {
+                last_stmt->right = stmt;
+                stmt->parent = last_stmt;
+            }
+            last_stmt = stmt;
+        }
+
+        token = GetStackElem(tokens, *tokens_pos);
+        if (!token || token->type != kOperation || token->value.operation != kOperationBraceClose) {
+            fprintf(stderr, "SYNTAX_ERROR: expected '}' at end of function body\n");
+            *tokens_pos = save_pos;
+            return NULL;
+        }
+        (*tokens_pos)++;
+
+        name_node->type = kOperation;
+        name_node->value.operation = kFunction;
+        name_node->left = args_root;
+        name_node->right = body_root;
+    } else {
+        name_node->type = kOperation;
+        name_node->value.operation = kOperationCall;
+        name_node->left = args_root;
+        name_node->right = NULL;
+    }
+
+    return name_node;
+}
 
 static DifNode_t *GetExpression(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos) {
     assert(root);
@@ -540,14 +668,6 @@ static DifNode_t *GetWhile(DifRoot *root, Stack_Info *tokens, VariableArr *arr, 
     return while_node;
 }
 
-DifNode_t *GetFunction(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(pos);
-
-
-}
 DifNode_t *GetPower(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos) {
     assert(root);
     assert(tokens);

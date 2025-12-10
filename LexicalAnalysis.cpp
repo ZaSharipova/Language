@@ -63,6 +63,12 @@ size_t CheckAndReturn(DifRoot *root, const char **string, Stack_Info *tokens, Va
             (*string)++;
             continue;
         }
+        if (**string == ',') {
+            StackPush(tokens, NEWOP(kOperationComma, NULL, NULL), stderr);
+            cnt++;
+            (*string)++;
+            continue;
+        }        
         if (**string == '+') {
             StackPush(tokens, NEWOP(kOperationAdd, NULL, NULL), stderr);
             cnt++;
