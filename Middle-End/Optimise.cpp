@@ -10,7 +10,6 @@
 //#include "Differentiate.h"
 
 #include "DoGraph.h"
-#include "DoTex.h"
 
 static DifNode_t *AddOptimise(DifRoot *root, DifNode_t *node, bool *has_change);
 static DifNode_t *SubOptimise(DifRoot *root, DifNode_t *node, bool *has_change);
@@ -18,7 +17,7 @@ static DifNode_t *MulOptimise(DifRoot *root, DifNode_t *node, bool *has_change);
 static DifNode_t *DivOptimise(DifRoot *root, DifNode_t *node, bool *has_change);
 static DifNode_t *PowOptimise(DifRoot *root, DifNode_t *node, bool *has_change);
 
-static DifNode_t *CheckNodeAndConstOptimise(DifRoot *root, DifNode_t *node, bool *has_change);
+static DifNode_t *CheckNodeAndConstOptimise(DifRoot *root, DifNode_t *node, bool *has_change, VariableArr *arr);
 static DifNode_t *GetSubTree(DifRoot *root, DifNode_t *node, DifNode_t *delete_node, DifNode_t *to_main);
 
 static bool IsThisNumber(DifNode_t *node, double number);
@@ -27,27 +26,26 @@ static bool IsThisNumber(DifNode_t *node, double number);
 static bool IsNumber(DifNode_t *node);
 static bool IsOperation(DifNode_t *node);
 
-static double EvaluateExpression(DifNode_t *node);
+static double EvaluateExpression(DifNode_t *node, VariableArr *arr);
 
-DifNode_t *OptimiseTree(DifRoot *root, DifNode_t *node, FILE *out, const char *main_var) {
+DifNode_t *OptimiseTree(DifRoot *root, DifNode_t *node, FILE *out, const char *main_var, VariableArr *arr) {
     assert(root);
     assert(node);
     assert(out);
     assert(main_var);
+    assert(arr);
 
     bool has_change = true;
 
     while (has_change) {
         has_change = false;
-        node = ConstOptimise(root, node, &has_change); 
+        node = ConstOptimise(root, node, &has_change, arr); 
         if (has_change) {
             node->parent = NULL;
-            DoTex(node, main_var, out);
         }
         node = EraseNeutralElements(root, node, &has_change);
         if (has_change) {
             node->parent = NULL;
-            DoTex(node, main_var, out);
         }
     }
 
@@ -55,15 +53,16 @@ DifNode_t *OptimiseTree(DifRoot *root, DifNode_t *node, FILE *out, const char *m
     return node;
 }
 
-DifNode_t *ConstOptimise(DifRoot *root, DifNode_t *node, bool *has_change) {
+DifNode_t *ConstOptimise(DifRoot *root, DifNode_t *node, bool *has_change, VariableArr *arr) {
     assert(node);
     assert(has_change);
+    assert(arr);
 
-    node->right = CheckNodeAndConstOptimise(root, node->right, has_change);
-    node->left = CheckNodeAndConstOptimise(root, node->left, has_change);
+    node->right = CheckNodeAndConstOptimise(root, node->right, has_change, arr);
+    node->left = CheckNodeAndConstOptimise(root, node->left, has_change, arr);
 
     if (IsNumber(node->left) && IsNumber(node->right)) {
-        double ans = EvaluateExpression(node);
+        double ans = EvaluateExpression(node, arr);
 
         DeleteNode(root, node->left);
         DeleteNode(root, node->right);
@@ -117,8 +116,8 @@ DifNode_t *EraseNeutralElements(DifRoot *root, DifNode_t *node, bool *has_change
     return node;
 }
 
-#define NEWN(num) NewNode(root, kNumber, (Value){ .number = (num)}, NULL, NULL, NULL)
-#define MUL_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationMul}, left, right, NULL)
+#define NEWN(num) NewNode(root, kNumber, (Value){ .number = (num)}, NULL, NULL)
+#define MUL_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationMul}, left, right)
 
 static DifNode_t *AddOptimise(DifRoot *root, DifNode_t *node, bool *has_change) {
     assert(root);
@@ -294,63 +293,65 @@ static bool IsOperation(DifNode_t *node) {
 }
 
 static DifNode_t *CheckNodeAndConstOptimise(DifRoot *root, DifNode_t *node, 
-    bool *has_change) {
+    bool *has_change, VariableArr *arr) {
     assert(has_change);
+    assert(arr);
 
     if (node && !IsNumber(node)) {
-        node = ConstOptimise(root, node, has_change);
+        node = ConstOptimise(root, node, has_change, arr);
         if (!node) return NULL;
     }
     return node;
 }
 
-static double EvaluateExpression(DifNode_t *node) {
+static double EvaluateExpression(DifNode_t *node, VariableArr *arr) {
     assert(node);
+    assert(arr);
 
     if (node->type == kNumber) {
         return node->value.number;
     }
     if (node->type == kVariable) {
-        return node->value.variable->variable_value;
+        return arr->var_array[node->value.pos].variable_value;
     }
 
     switch (node->value.operation) {
     case (kOperationAdd):
-        return EvaluateExpression(node->left) +
-            EvaluateExpression(node->right);
+        return EvaluateExpression(node->left, arr) +
+            EvaluateExpression(node->right, arr);
     case (kOperationSub):
-        return EvaluateExpression(node->left) -
-            EvaluateExpression(node->right);
+        return EvaluateExpression(node->left, arr) -
+            EvaluateExpression(node->right, arr);
     case (kOperationMul):
-        return EvaluateExpression(node->left) *
-            EvaluateExpression(node->right);
+        return EvaluateExpression(node->left, arr) *
+            EvaluateExpression(node->right, arr);
     case (kOperationDiv): {
-        double right = EvaluateExpression(node->right);
+        double right = EvaluateExpression(node->right, arr);
         if (fabs(right) < eps) {
             fprintf(stderr, "Division by zero.\n");
             return 0;
         }
-        return EvaluateExpression(node->left) / right;
+        return EvaluateExpression(node->left, arr) / right;
     }
     case (kOperationPow):
-        return pow(EvaluateExpression(node->left),
-                EvaluateExpression(node->right));
+        return pow(EvaluateExpression(node->left, arr),
+                EvaluateExpression(node->right, arr));
     case (kOperationSin):
-        return sin(EvaluateExpression(node->right));
+        return sin(EvaluateExpression(node->right, arr));
     case (kOperationCos):
-        return cos(EvaluateExpression(node->right));
+        return cos(EvaluateExpression(node->right, arr));
     case (kOperationTg):
-        return tan(EvaluateExpression(node->right));
+        return tan(EvaluateExpression(node->right, arr));
     case (kOperationLn):
-        return log(EvaluateExpression(node->right));
+        return log(EvaluateExpression(node->right, arr));
     case (kOperationArctg):
-        return atan(EvaluateExpression(node->right));
+        return atan(EvaluateExpression(node->right, arr));
     case (kOperationSinh):
-        return sinh(EvaluateExpression(node->right));    
+        return sinh(EvaluateExpression(node->right, arr));    
     case (kOperationCosh):
-        return cosh(EvaluateExpression(node->right));
+        return cosh(EvaluateExpression(node->right, arr));
     case (kOperationTgh):
-        return tanh(EvaluateExpression(node->right));
+        return tanh(EvaluateExpression(node->right, arr));
 
     case (kOperationNone):
     default:

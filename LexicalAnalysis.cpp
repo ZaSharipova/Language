@@ -14,9 +14,9 @@
 #define ELSE "else"
 #define WHILE "while"
 
-#define NEWN(num) NewNode(root, kNumber, ((Value){ .number = (num)}), NULL, NULL, NULL)
+#define NEWN(num) NewNode(root, kNumber, ((Value){ .number = (num)}), NULL, NULL)
 #define NEWV(name) NewVariable(root, name, Variable_Array)
-#define NEWOP(op, left, right) NewNode(root, kOperation, (Value){ .operation = (op)}, left, right, NULL) 
+#define NEWOP(op, left, right) NewNode(root, kOperation, (Value){ .operation = (op)}, left, right) 
 
 size_t CheckAndReturn(DifRoot *root, const char **string, Stack_Info *tokens, VariableArr *Variable_Array) {
     assert(root);

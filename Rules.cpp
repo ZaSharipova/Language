@@ -27,19 +27,6 @@ static char *ReadToBuf(const char *filename, FILE *file, size_t filesize);
         return NULL;                  \
     }
 
-static OpEntry operations[] = {
-    {"tg",    kOperationTg},
-    {"sin",   kOperationSin},
-    {"cos",   kOperationCos},
-    {"ln",    kOperationLn},
-    {"arctg", kOperationArctg},
-    {"pow",   kOperationPow},
-    {"sh",    kOperationSinh},
-    {"ch",    kOperationCosh},
-    {"th",    kOperationTgh},
-};
-size_t max_op_size = 5; //
-
 DifNode_t *GetGoal(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos);
 static DifNode_t *GetExpression(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos);
 static DifNode_t *GetTerm(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos);
@@ -88,7 +75,7 @@ DifErrors ReadInfix(DifRoot *root, DumpInfo *dump_info, VariableArr *Variable_Ar
     dump_info->tree = root;
 
     strcpy(dump_info->message, "Expression read with infix form");
-    DoTreeInGraphviz(root->root, dump_info, root->root);
+    DoTreeInGraphviz(root->root, dump_info, Variable_Array);
     StackDtor(&tokens, stderr);
 
     //PrintFirstExpression(texfile, root->root);
@@ -97,8 +84,8 @@ DifErrors ReadInfix(DifRoot *root, DumpInfo *dump_info, VariableArr *Variable_Ar
     return kSuccess;
 }
 
-#define NEWN(num) NewNode(root, kNumber, ((Value){ .number = (num)}), NULL, NULL, arr)
-#define NEWOP(op, left, right) NewNode(root, kOperation, (Value){ .operation = (op) }, left, right, arr) 
+#define NEWN(num) NewNode(root, kNumber, ((Value){ .number = (num)}), NULL, NULL)
+#define NEWOP(op, left, right) NewNode(root, kOperation, (Value){ .operation = (op) }, left, right) 
 
 
 /* G :: = OP+
@@ -164,7 +151,6 @@ DifNode_t *GetOp(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *po
     DifNode_t *last = NULL;
     *tokens_pos = save_pos;
 
-    int i = 0;
     do {
         save_pos = *tokens_pos;
         stmt = GetAssignment(root, tokens, arr, pos, tokens_pos);
@@ -196,12 +182,12 @@ DifNode_t *GetOp(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *po
     return last;
 }
 
-#define NEWN(num) NewNode(root, kNumber, ((Value){ .number = (num)}), NULL, NULL, arr)
-#define ADD_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationAdd}, left, right, arr)
-#define SUB_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationSub}, left, right, arr)
-#define MUL_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationMul}, left, right, arr)
-#define DIV_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationDiv}, left, right, arr)
-#define POW_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationPow}, left, right, arr)
+#define NEWN(num) NewNode(root, kNumber, ((Value){ .number = (num)}), NULL, NULL)
+#define ADD_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationAdd}, left, right)
+#define SUB_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationSub}, left, right)
+#define MUL_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationMul}, left, right)
+#define DIV_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationDiv}, left, right)
+#define POW_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationPow}, left, right)
 
 static DifNode_t *GetFunction(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos) {
     assert(root);
@@ -512,7 +498,6 @@ static DifNode_t *GetIf(DifRoot *root, Stack_Info *tokens, VariableArr *arr, siz
     DifNode_t *last = first;
 
     while (true) {
-        size_t save_pos = *tokens_pos;
         DifNode_t *stmt = GetOp(root, tokens, arr, pos, tokens_pos);
         if (!stmt) break;
         
@@ -560,7 +545,6 @@ static DifNode_t *GetElse(DifRoot *root, Stack_Info *tokens, VariableArr *arr, s
     DifNode_t *last = NULL;
 
     while (true) {
-        size_t save_pos = *tokens_pos;
         DifNode_t *stmt = GetOp(root, tokens, arr, pos, tokens_pos);
         if (!stmt) break;
         
@@ -741,19 +725,19 @@ static DifNode_t *GetString(DifRoot *root, Stack_Info *tokens, VariableArr *arr,
 #undef DIV_
 #undef POW_
 
-static OperationTypes ParseOperator(const char *string) {
-    assert(string);
+// static OperationTypes ParseOperator(const char *string) {
+//     assert(string);
 
-    size_t op_size = sizeof(operations)/sizeof(operations[0]);
+//     size_t op_size = sizeof(operations)/sizeof(operations[0]);
 
-    for (size_t i = 0; i < op_size; i++) {
-        if (strncmp(string, operations[i].name, strlen(operations[i].name)) == 0) { //
-            return operations[i].type;
-        }
-    }
+//     for (size_t i = 0; i < op_size; i++) {
+//         if (strncmp(string, operations[i].name, strlen(operations[i].name)) == 0) { //
+//             return operations[i].type;
+//         }
+//     }
 
-    return kOperationNone;
-}
+//     return kOperationNone;
+// }
 
 static long long SizeOfFile(const char *filename) {
     assert(filename);

@@ -13,12 +13,12 @@
 static const char *PrintOperationType(const DifNode_t *node);
 static GraphOperation PrintExpressionType(const DifNode_t *node);
 static void DoSnprintf(DumpInfo *Info);
-static void PrintDotNode(FILE *file, const DifNode_t *node, const DifNode_t *node_colored, bool flag);
+static void PrintDotNode(FILE *file, const DifNode_t *node, bool flag, VariableArr *arr);
 
-void DoTreeInGraphviz(const DifNode_t *node, DumpInfo *Info, const DifNode_t *node_colored) {
+void DoTreeInGraphviz(const DifNode_t *node, DumpInfo *Info, VariableArr *arr) {
     assert(node);
     assert(Info);
-    assert(node_colored);
+    assert(arr);
 
     FILE *file = fopen(Info->filename_to_write_graphviz, "w");
     if (!file) {
@@ -41,7 +41,7 @@ void DoTreeInGraphviz(const DifNode_t *node, DumpInfo *Info, const DifNode_t *no
         fprintf(file, "    // Empty tree\n");
     }
 
-    PrintDotNode(file, node, node_colored, Info->flag_new);
+    PrintDotNode(file, node, Info->flag_new, arr);
 
     fprintf(file, "}\n");
     fclose(file);
@@ -49,10 +49,10 @@ void DoTreeInGraphviz(const DifNode_t *node, DumpInfo *Info, const DifNode_t *no
     DoSnprintf(Info);
 }
 
-static void PrintDotNode(FILE *file, const DifNode_t *node, const DifNode_t *node_colored, bool flag) {
+static void PrintDotNode(FILE *file, const DifNode_t *node, bool flag, VariableArr *arr) {
     assert(file);
     assert(node);
-    assert(node_colored);
+    assert(arr);
 
     const char *color_number    = "dodgerblue";
     const char *color_variable  = "gold";
@@ -65,7 +65,7 @@ static void PrintDotNode(FILE *file, const DifNode_t *node, const DifNode_t *nod
                 node->value.number, (void *)node->left, (void *)node->right, color_number);
         } else {
             fprintf(file, "  Value: %s  \nLeft: %p | Right: %p\" shape=octagon color=black fillcolor=%s style=filled width=4 height=1.5 fixedsize=true];\n", 
-                (node->value).variable->variable_name, (void *)node->left, (void *)node->right, color_variable);
+                arr->var_array[(node->value).pos].variable_name, (void *)node->left, (void *)node->right, color_variable);
         }
     } else if (node->type == kOperation) {
         fprintf(file, "    \"%p\" [label=\"{Parent: %p \n | Addr: %p \n | Type: %s\n", 
@@ -77,13 +77,13 @@ static void PrintDotNode(FILE *file, const DifNode_t *node, const DifNode_t *nod
     if (node->left) {
         fprintf(file, "    \"%p\" -> \"%p\";\n", 
                 (void *)node, (void *)node->left);
-        PrintDotNode(file, node->left, node_colored, flag);
+        PrintDotNode(file, node->left, flag, arr);
     }
 
     if (node->right) {
         fprintf(file, "    \"%p\" -> \"%p\";\n\n", 
                 (void *)node, (void *)node->right);
-        PrintDotNode(file, node->right, node_colored, flag);
+        PrintDotNode(file, node->right, flag, arr);
     }
 }
 
@@ -157,6 +157,10 @@ static GraphOperation PrintExpressionType(const DifNode_t *node) {
             return {"call func", "slategray1"};
         case (kOperationComma):
             return {",", "thistle"};
+        case (kOperationParOpen):
+        case (kOperationParClose):
+        case (kOperationBraceOpen):
+        case (kOperationBraceClose):
         case (kOperationNone):
         default: return {"red", "red"};
     }

@@ -2,7 +2,6 @@
 #include "Structs.h"
 #include "Enums.h"
 #include "LanguageFunctions.h"
-#include "DoTex.h"
 #include "DoGraph.h"
 
 int main(void) {
@@ -21,7 +20,7 @@ int main(void) {
     //PrintTree(root.root, out);
 
     FILE_OPEN_AND_CHECK(ast_file, "ast.txt", "w");
-    PrintAST(root.root, ast_file);
+    PrintAST(root.root, ast_file, &Variable_Array);
     fclose(ast_file);
 
     
@@ -36,10 +35,10 @@ int main(void) {
     ParseNodeFromString(info.buf_ptr, &pos, root.root, &new_node_adr, &Variable_Array);
     root1.root = new_node_adr;
     dump_info.tree = &root1;
-    DoTreeInGraphviz(root1.root, &dump_info, new_node_adr);
+    DoTreeInGraphviz(root1.root, &dump_info, &Variable_Array);
 
     FILE_OPEN_AND_CHECK(code_out, "test.txt", "w");
-    GenerateCodeFromAST(root1.root, code_out);
+    GenerateCodeFromAST(root1.root, code_out, &Variable_Array);
     fclose(out);
     
     DtorVariableArray(&Variable_Array);

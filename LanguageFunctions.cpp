@@ -116,8 +116,7 @@ DifErrors DtorVariableArray(VariableArr *arr) {
     return kSuccess;
 }
 
-DifNode_t *NewNode(DifRoot *root, DifTypes type, Value value, DifNode_t *left, DifNode_t *right,
-    VariableArr *Variable_Array) {
+DifNode_t *NewNode(DifRoot *root, DifTypes type, Value value, DifNode_t *left, DifNode_t *right) {
     assert(root);
 
     DifNode_t *new_node = NULL;
@@ -161,23 +160,24 @@ DifNode_t *NewVariable(DifRoot *root, const char *variable, VariableArr *Variabl
 
     root->size ++;
     new_node->type = kVariable;
+    size_t pos = 0;
     VariableInfo *addr = NULL;
 
     for (size_t i = 0; i < VariableArr->size; i++) {
         if (strncmp(variable, VariableArr->var_array[i].variable_name, strlen(variable)) == 0) {
-           addr = &VariableArr->var_array[i];
+            pos = i;
         }
     }
 
     if (!addr) {
         ResizeArray(VariableArr);
         VariableArr->var_array[VariableArr->size].variable_name = variable;
-        addr = &VariableArr->var_array[VariableArr->size];
+        pos = VariableArr->size;
         VariableArr->size ++;
     }
 
-        
-    new_node->value.variable = addr;
+    
+    new_node->value.pos = pos;
 
     return new_node;
 }
@@ -212,12 +212,13 @@ const char *ConvertEnumToOperation(OperationTypes type) {
     return NULL;
 }
 
-DifErrors PrintAST(DifNode_t *node, FILE *file) {
+DifErrors PrintAST(DifNode_t *node, FILE *file, VariableArr *arr) {
     if (!node) {
         fprintf(file, "nil");
         return kSuccess;
     }
     assert(file);
+    assert(arr);
 
     fprintf(file, "( ");
     
@@ -226,7 +227,7 @@ DifErrors PrintAST(DifNode_t *node, FILE *file) {
             fprintf(file, "\"%d\"", (int)node->value.number);
             break;
         case kVariable:
-            fprintf(file, "\"%s\"", node->value.variable->variable_name);
+            fprintf(file, "\"%s\"", arr->var_array[node->value.pos].variable_name);
             break;
         case kOperation:
             fprintf(file, "\"%s\"", ConvertEnumToOperation(node->value.operation));
@@ -237,19 +238,12 @@ DifErrors PrintAST(DifNode_t *node, FILE *file) {
     }
     
     fprintf(file, " ");
-    PrintAST(node->left, file);
+    PrintAST(node->left, file, arr);
     fprintf(file, " ");
-    PrintAST(node->right, file);
+    PrintAST(node->right, file, arr);
     fprintf(file, " )");
     
     return kSuccess;
-}
-
-DifErrors ReadAST(FILE *file, DifNode_t **node_to_add) {
-    assert(file);
-    assert(node_to_add);
-
-
 }
 
 static void SkipSpaces(const char *buf, size_t *pos) {
@@ -320,7 +314,7 @@ static DifErrors CheckType(Dif_t title, DifNode_t *node, VariableArr *vars) {
 
     for (size_t j = 0; j < vars->size; j++) {
         if (strcmp(vars->var_array[j].variable_name, title) == 0) {
-            node->value.variable = &vars->var_array[j];
+            node->value.pos = j;
             return kSuccess;
         }
     }
@@ -331,7 +325,7 @@ static DifErrors CheckType(Dif_t title, DifNode_t *node, VariableArr *vars) {
     vars->var_array[vars->size].variable_name = strdup(title);
     vars->var_array[vars->size].variable_value = 0;
 
-    node->value.variable = &vars->var_array[vars->size];
+    node->value.pos = vars->size;
     vars->size++;
 
     return kSuccess;
@@ -411,8 +405,9 @@ DifErrors ParseNodeFromString(const char *buffer, size_t *pos, DifNode_t *parent
     return kSuccess;
 }
 
-void GenerateCodeFromAST(DifNode_t *node, FILE *out) {
+void GenerateCodeFromAST(DifNode_t *node, FILE *out, VariableArr *arr) {
     assert(out);
+    assert(arr);
     if (!node)
         return;
 
@@ -422,7 +417,7 @@ void GenerateCodeFromAST(DifNode_t *node, FILE *out) {
             break;
 
         case kVariable:
-            fprintf(out, "%s", node->value.variable->variable_name);
+            fprintf(out, "%s", arr->var_array[node->value.pos].variable_name);
             break;
 
         case kOperation: {
@@ -439,20 +434,20 @@ void GenerateCodeFromAST(DifNode_t *node, FILE *out) {
 
             if (node->value.operation == kOperationIf) {
                 fprintf(out, "if (");
-                GenerateCodeFromAST(node->left, out);
+                GenerateCodeFromAST(node->left, out, arr);
                 fprintf(out, ") {\n");
-                GenerateCodeFromAST(node->right, out); 
+                GenerateCodeFromAST(node->right, out, arr); 
                 fprintf(out, "}");
             }
             else if (node->value.operation == kOperationThen) {
-                GenerateCodeFromAST(node->left, out);
+                GenerateCodeFromAST(node->left, out, arr);
                 fprintf(out, ";\n");
-                GenerateCodeFromAST(node->right, out);
+                GenerateCodeFromAST(node->right, out, arr);
             }
             else if (node->value.operation == kOperationIs) {
-                GenerateCodeFromAST(node->left, out);
+                GenerateCodeFromAST(node->left, out, arr);
                 fprintf(out, " = ");
-                GenerateCodeFromAST(node->right, out);
+                GenerateCodeFromAST(node->right, out, arr);
             }
             else if (node->value.operation == kOperationAdd  ||
                      node->value.operation == kOperationSub  ||
@@ -460,14 +455,14 @@ void GenerateCodeFromAST(DifNode_t *node, FILE *out) {
                      node->value.operation == kOperationDiv  ||
                      node->value.operation == kOperationPow) {
                 fprintf(out, "(");
-                GenerateCodeFromAST(node->left, out);
+                GenerateCodeFromAST(node->left, out, arr);
                 fprintf(out, " %s ", op_str);
-                GenerateCodeFromAST(node->right, out);
+                GenerateCodeFromAST(node->right, out, arr);
                 fprintf(out, ")");
             }
             else {
-                GenerateCodeFromAST(node->left, out);
-                GenerateCodeFromAST(node->right, out);
+                GenerateCodeFromAST(node->left, out, arr);
+                GenerateCodeFromAST(node->right, out, arr);
             }
             break;
         }
