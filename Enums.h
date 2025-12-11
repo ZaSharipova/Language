@@ -45,6 +45,8 @@ enum OperationTypes {
     kOperationComma,
     kFunction,
     kOperationCall,
+    kOperationWrite,
+    kOperationRead,
     kOperationParOpen,
     kOperationParClose,
     kOperationBraceOpen,

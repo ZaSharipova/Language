@@ -157,6 +157,10 @@ static GraphOperation PrintExpressionType(const DifNode_t *node) {
             return {"call func", "slategray1"};
         case (kOperationComma):
             return {",", "thistle"};
+        case (kOperationWrite):
+            return {"write", "	tan"};
+        case (kOperationRead):
+        
         case (kOperationParOpen):
         case (kOperationParClose):
         case (kOperationBraceOpen):

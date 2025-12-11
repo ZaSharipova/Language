@@ -39,6 +39,7 @@ static DifNode_t *GetIf(DifRoot *root, Stack_Info *tokens,
                         VariableArr *arr, size_t *pos, size_t *tokens_pos);
 static DifNode_t *GetElse(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos, DifNode_t *if_node);
 static DifNode_t *GetFunction(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos);
+static DifNode_t *GetPrintf(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos);
 
 static DifNode_t *GetNumber(DifRoot *root, Stack_Info *tokens, size_t *tokens_pos);
 static DifNode_t *GetString(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos);
@@ -56,17 +57,17 @@ DifErrors ReadInfix(DifRoot *root, DumpInfo *dump_info, VariableArr *Variable_Ar
 
     FileInfo Info = {};
     DoBufRead(file, filename, &Info);
-    printf("%s", Info.buf_ptr);
 
     fclose(file);
 
     Stack_Info tokens = {};
     StackCtor(&tokens, 1, stderr);
     CheckAndReturn(root, (const char **)&Info.buf_ptr, &tokens, Variable_Array);
+    //printf("%s\n", Info.buf_ptr);
 
     size_t pos = 0;
     size_t tokens_pos = 0;
-    // const char *new_string = Info.buf_ptr;
+
     root->root = GetGoal(root, &tokens, Variable_Array, &pos, &tokens_pos);
     if (!root->root) {
         return kFailure;
@@ -78,9 +79,6 @@ DifErrors ReadInfix(DifRoot *root, DumpInfo *dump_info, VariableArr *Variable_Ar
     DoTreeInGraphviz(root->root, dump_info, Variable_Array);
     StackDtor(&tokens, stderr);
 
-    //PrintFirstExpression(texfile, root->root);
-    //DoDump(dump_info);
-
     return kSuccess;
 }
 
@@ -89,7 +87,7 @@ DifErrors ReadInfix(DifRoot *root, DumpInfo *dump_info, VariableArr *Variable_Ar
 
 
 /* G :: = OP+
-   OP :: = WHILE | IF | ASSIGNMENT; | FUNCTION
+   OP :: = WHILE | IF | ASSIGNMENT+; | FUNCTION
    WHILE :: = 'while' ( E ) { OP+ }
    IF :: = 'if' ( E ) { OP+ }
    ASSIGNMENT :: = V '=' E
@@ -108,6 +106,7 @@ DifNode_t *GetGoal(DifRoot *root, Stack_Info *tokens, VariableArr *arr,
     assert(pos);
     assert(tokens_pos);
 
+    int cnt = 0;
     DifNode_t *first = NULL;
     do {
         DifNode_t *next = GetOp(root, tokens, arr, pos, tokens_pos);
@@ -115,8 +114,12 @@ DifNode_t *GetGoal(DifRoot *root, Stack_Info *tokens, VariableArr *arr,
         else if (first && !first->right) {
             first->right = next;
         } else {
-            first = NEWOP(kOperationThen, next, first);
-            printf("BB%p\n", first);
+            if (cnt % 2 == 0) {
+                first = NEWOP(kOperationThen, next, first);
+            } else {
+                first = NEWOP(kOperationThen, first, next);
+            }
+            cnt++;
         }
     } while (true);
 
@@ -130,7 +133,12 @@ DifNode_t *GetOp(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *po
     assert(pos);
 
     size_t save_pos = *tokens_pos;
+    DifNode_t *print_f = GetPrintf(root, tokens, arr, pos, tokens_pos);
+    if (print_f) {
+        return print_f;
+    }
 
+    *tokens_pos = save_pos;
     DifNode_t *stmt = GetWhile(root, tokens, arr, pos, tokens_pos);
     if (stmt) {
         return stmt;
@@ -151,7 +159,8 @@ DifNode_t *GetOp(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *po
     DifNode_t *last = NULL;
     *tokens_pos = save_pos;
 
-    do {
+
+    do { // сделать по-другому
         save_pos = *tokens_pos;
         stmt = GetAssignment(root, tokens, arr, pos, tokens_pos);
         if (!stmt) {
@@ -166,9 +175,7 @@ DifNode_t *GetOp(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *po
                 last = stmt;
             } else if (last && !last->right) {
                 last->right = stmt;
-                //last = token;
             } else {
-                printf("AA%p\n", last);
                 token->left = last;
                 token->right = stmt;
                 stmt->parent = token;
@@ -188,6 +195,45 @@ DifNode_t *GetOp(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *po
 #define MUL_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationMul}, left, right)
 #define DIV_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationDiv}, left, right)
 #define POW_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationPow}, left, right)
+
+static DifNode_t *GetPrintf(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos) {
+    assert(root);
+    assert(tokens);
+    assert(arr);
+    assert(pos);
+
+    DifNode_t *print_f = GetStackElem(tokens, *tokens_pos);
+    //if (print_f && print_f->type == kOperation) printf("%d\n", print_f->value.operation);
+    if (print_f && print_f->type == kOperation && print_f->value.operation == kOperationWrite) {
+        (*tokens_pos)++;
+
+        DifNode_t *par = GetStackElem(tokens, *tokens_pos);
+        if (!(par && par->type == kOperation && par->value.operation == kOperationParOpen)) {
+            return NULL;
+        }
+        (*tokens_pos)++;
+
+        DifNode_t *printf_arg = GetStackElem(tokens, *tokens_pos);
+        if (!(printf_arg && (printf_arg->type == kVariable || printf_arg->type == kNumber))) { // сделать и для функций
+            fprintf(stderr, "NO AVAILABLE ARGUMENT FOR PRINTF WRITTEN.\n");
+            return NULL; //
+        }
+        (*tokens_pos)++;
+
+        par = GetStackElem(tokens, *tokens_pos);
+        if (!(par && par->type == kOperation && par->value.operation == kOperationParClose)) {
+            return NULL; //
+        }
+        (*tokens_pos)++;
+
+        print_f->left = printf_arg;
+        printf_arg->parent = print_f;
+        (*tokens_pos)++;
+        return print_f;
+    } else {
+        return NULL;
+    }
+}
 
 static DifNode_t *GetFunction(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *pos, size_t *tokens_pos) {
     assert(root);
@@ -289,6 +335,8 @@ static DifNode_t *GetFunction(DifRoot *root, Stack_Info *tokens, VariableArr *ar
         name_node->value.operation = kOperationCall;
         name_node->left = args_root;
         name_node->right = NULL;
+        DifNode_t *token = GetStackElem(tokens, *tokens_pos);
+        (*tokens_pos)++;
     }
 
     return name_node;
@@ -330,7 +378,6 @@ static DifNode_t *GetExpression(DifRoot *root, Stack_Info *tokens, VariableArr *
         node = GetStackElem(tokens, *tokens_pos);
     }
 
-    fprintf(stderr, "expression\n");
     return val;
 }
 
@@ -502,7 +549,6 @@ static DifNode_t *GetIf(DifRoot *root, Stack_Info *tokens, VariableArr *arr, siz
         if (!stmt) break;
         
         last = NEWOP(kOperationThen, last, stmt);
-        fprintf(stderr, "%p", last);
     }
 
     tok = GetStackElem(tokens, *tokens_pos);
@@ -711,8 +757,6 @@ static DifNode_t *GetString(DifRoot *root, Stack_Info *tokens, VariableArr *arr,
     } else {
         return NULL;
     }
-
-    fprintf(stderr, "string\n");
 
     return node;
 }
