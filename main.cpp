@@ -3,6 +3,7 @@
 #include "Enums.h"
 #include "LanguageFunctions.h"
 #include "DoGraph.h"
+#include "TreeToAsm.h"
 
 int main(void) {
     DifRoot root = {};
@@ -32,14 +33,18 @@ int main(void) {
     DifNode_t new_node = {};
     DifNode_t *new_node_adr = &new_node;
     size_t pos = 0;
-    ParseNodeFromString(info.buf_ptr, &pos, root.root, &new_node_adr, &Variable_Array);
-    root1.root = new_node_adr;
-    dump_info.tree = &root1;
-    DoTreeInGraphviz(root1.root, &dump_info, &Variable_Array);
 
-    FILE_OPEN_AND_CHECK(code_out, "test.txt", "w");
-    GenerateCodeFromAST(root1.root, code_out, &Variable_Array);
-    fclose(out);
+    FILE_OPEN_AND_CHECK(asm_file, "asm.asm", "w");
+    PrintProgram(asm_file, root.root, &Variable_Array);
+    fclose(asm_file);
+    // ParseNodeFromString(info.buf_ptr, &pos, root.root, &new_node_adr, &Variable_Array);
+    // root1.root = new_node_adr;
+    // dump_info.tree = &root1;
+    // DoTreeInGraphviz(root1.root, &dump_info, &Variable_Array);
+
+    // FILE_OPEN_AND_CHECK(code_out, "test.txt", "w");
+    // GenerateCodeFromAST(root1.root, code_out, &Variable_Array);
+    // fclose(out);
     
     DtorVariableArray(&Variable_Array);
     fclose(out);

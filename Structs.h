@@ -12,13 +12,13 @@ typedef char* Dif_t;
 
 struct VariableInfo {
     const char *variable_name;
-    double variable_value;
+    int variable_value;
 };
 
 union Value {
     OperationTypes operation;
     double number;
-    
+
     size_t pos; //
 };
 
@@ -82,5 +82,14 @@ struct Stack_Info {
     ssize_t size;
     ssize_t capacity;
 };
+
+struct FuncInfo {
+    char name[32];
+    int ram_base;
+    int param_count;
+    DifNode_t *args;
+    DifNode_t *body;
+};
+
 
 #endif //STRUCTS_H_

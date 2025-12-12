@@ -278,9 +278,10 @@ static DifNode_t *GetFunctionDeclare(DifRoot *root, Stack_Info *tokens, Variable
     while (true) {
         token = GetStackElem(tokens, *tokens_pos);
         if (!token) {
-            fprintf(stderr, "SYNTAX_ERROR: unexpected end in function args\n");
-            *tokens_pos = save_pos;
-            return NULL;
+            //fprintf(stderr, "SYNTAX_ERROR: unexpected end in function args\n");
+            //*tokens_pos = save_pos;
+            break;
+            //return NULL;
         }
 
         if (token->type == kOperation && token->value.operation == kOperationParClose) {
@@ -301,13 +302,18 @@ static DifNode_t *GetFunctionDeclare(DifRoot *root, Stack_Info *tokens, Variable
 
         if (!args_root) {
             args_root = arg;
-        } else if (!rightmost) {
-            args_root->right = arg;
-            arg->parent = args_root;
-            rightmost = args_root;
         } else {
-            DifNode_t *comma = NEWOP(kOperationComma, arg, rightmost->right);
-            rightmost->right = comma;
+            DifNode_t *comma = NEWOP(kOperationComma, NULL, NULL);
+            if (!rightmost) {
+                comma->left = args_root;
+                comma->right = arg;
+                args_root = comma;
+            } else {
+                comma->left = rightmost->right;
+                comma->right = arg;
+                rightmost->right = comma;
+            }
+    
             rightmost = comma;
         }
     }
@@ -328,16 +334,15 @@ static DifNode_t *GetFunctionDeclare(DifRoot *root, Stack_Info *tokens, Variable
     static int pos = 0;
 
     while (true) {
-    DifNode_t *stmt = GetOp(root, tokens, arr, tokens_pos);
-    if (!stmt) break;
+        DifNode_t *stmt = GetOp(root, tokens, arr, tokens_pos);
+        if (!stmt) break;
 
-    if (!body_root) {
-        body_root = stmt;
-    } else {
-        body_root = NEWOP(kOperationThen, body_root, stmt);
+        if (!body_root) {
+            body_root = stmt;
+        } else {
+            body_root = NEWOP(kOperationThen, body_root, stmt);
+        }
     }
-}
-
 
     token = GetStackElem(tokens, *tokens_pos);
     if (!token || token->type != kOperation || token->value.operation != kOperationBraceClose) {

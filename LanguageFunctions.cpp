@@ -169,21 +169,20 @@ DifNode_t *NewVariable(DifRoot *root, const char *variable, VariableArr *Variabl
         }
     }
 
-    if (!addr) {
+    if (pos == 0) {
         ResizeArray(VariableArr);
         VariableArr->var_array[VariableArr->size].variable_name = variable;
         pos = VariableArr->size;
         VariableArr->size ++;
     }
-
     
     new_node->value.pos = pos;
 
     return new_node;
 }
 
-const char *ConvertEnumToOperation(OperationTypes type) {
-    switch (type) {
+const char *ConvertEnumToOperation(DifNode_t *node, VariableArr *arr) {
+    switch (node->value.operation) {
         case kOperationAdd:       return "+";
         case kOperationSub:       return "-";
         case kOperationMul:       return "*";
@@ -208,6 +207,8 @@ const char *ConvertEnumToOperation(OperationTypes type) {
         case kOperationBraceClose:return "}";
         case kOperationWrite: return "print";
         case kOperationRead: return "scanf";
+        case kOperationCall:
+        case kOperationFunction: return arr->var_array[node->left->value.pos].variable_name;
 
         case kOperationNone:      return "none";
     }
@@ -233,7 +234,8 @@ DifErrors PrintAST(DifNode_t *node, FILE *file, VariableArr *arr) {
             fprintf(file, "\"%s\"", arr->var_array[node->value.pos].variable_name);
             break;
         case kOperation:
-            fprintf(file, "\"%s\"", ConvertEnumToOperation(node->value.operation));
+            if (node->value.operation == kOperationFunction) fprintf(file, "declare ");
+            fprintf(file, "\"%s\"", ConvertEnumToOperation(node, arr));
             break;
         default:
             fprintf(file, "\"UNKNOWN\"");
