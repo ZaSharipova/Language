@@ -27,7 +27,7 @@
     dump_info.filename_to_write_graphviz = "output.txt";           \
     strcpy(dump_info.message, "Expression tree");
 
-DifErrors ReadInfix(DifRoot *root, DumpInfo *dump_info, VariableArr *Variable_Array, const char *filename, FILE *texfile);
+DifErrors ReadInfix(DifRoot *root, DumpInfo *dump_info, VariableArr *Variable_Array, const char *filename);
 void DoBufRead(FILE *file, const char *filename, FileInfo *Info);
 
 #endif //RULES_H_

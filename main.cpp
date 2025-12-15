@@ -4,6 +4,7 @@
 #include "LanguageFunctions.h"
 #include "DoGraph.h"
 #include "TreeToAsm.h"
+#include "TreeToCode.h"
 
 int main(void) {
     DifRoot root = {};
@@ -13,11 +14,9 @@ int main(void) {
     DifErrors err = kSuccess;
     CHECK_ERROR_RETURN(InitArrOfVariable(&Variable_Array, 4));
 
-    FILE_OPEN_AND_CHECK(out, "diftex.tex", "w");
-
     INIT_DUMP_INFO(dump_info);
     dump_info.tree = &root;
-    CHECK_ERROR_RETURN(ReadInfix(&root, &dump_info, &Variable_Array, "input.txt", out));
+    CHECK_ERROR_RETURN(ReadInfix(&root, &dump_info, &Variable_Array, "input.txt"));
     //PrintTree(root.root, out);
 
     FILE_OPEN_AND_CHECK(ast_file, "ast.txt", "w");
@@ -36,17 +35,17 @@ int main(void) {
     FILE_OPEN_AND_CHECK(asm_file, "asm.asm", "w");
     PrintProgram(asm_file, root.root, &Variable_Array);
     fclose(asm_file);
-    // ParseNodeFromString(info.buf_ptr, &pos, root.root, &new_node_adr, &Variable_Array);
-    // root1.root = new_node_adr;
-    // dump_info.tree = &root1;
-    // DoTreeInGraphviz(root1.root, &dump_info, &Variable_Array);
 
-    // FILE_OPEN_AND_CHECK(code_out, "test.txt", "w");
-    // GenerateCodeFromAST(root1.root, code_out, &Variable_Array);
-    // fclose(out);
+    size_t pos = 0;
+    ParseNodeFromString(info.buf_ptr, &pos, root.root, &new_node_adr, &Variable_Array);
+    root1.root = new_node_adr;
+    dump_info.tree = &root1;
+    DoTreeInGraphviz(root1.root, &dump_info, &Variable_Array);
+
+    FILE_OPEN_AND_CHECK(code_out, "test.txt", "w");
+    GenerateCodeFromAST(root1.root, code_out, &Variable_Array, 0);
     
     DtorVariableArray(&Variable_Array);
-    fclose(out);
     //TreeDtor(&root);
 
     return kSuccess;

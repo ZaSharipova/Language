@@ -79,12 +79,11 @@ static DifNode_t *GetPower(DifRoot *root, Stack_Info *tokens, VariableArr *arr, 
 static DifNode_t *GetNumber(DifRoot *root, Stack_Info *tokens, size_t *tokens_pos);
 static DifNode_t *GetString(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos);
 
-DifErrors ReadInfix(DifRoot *root, DumpInfo *dump_info, VariableArr *Variable_Array, const char *filename, FILE *texfile) {
+DifErrors ReadInfix(DifRoot *root, DumpInfo *dump_info, VariableArr *Variable_Array, const char *filename) {
     assert(root);
     assert(dump_info);
     assert(Variable_Array);
     assert(filename);
-    assert(texfile);
 
     FILE_OPEN_AND_CHECK(file, filename, "r");
 
@@ -105,7 +104,7 @@ DifErrors ReadInfix(DifRoot *root, DumpInfo *dump_info, VariableArr *Variable_Ar
     
     dump_info->tree = root;
 
-    strcpy(dump_info->message, "Expression read with infix form");
+    strcpy(dump_info->message, "Code");
     DoTreeInGraphviz(root->root, dump_info, Variable_Array);
     StackDtor(&tokens, stderr);
 
@@ -791,9 +790,7 @@ static char *ReadToBuf(const char *filename, FILE *file, size_t filesize) {
 
     size_t j = 0;
     for (size_t i = 0; i < bytes_read; i++) {
-        if (buf_in[i] != '\n' && buf_in[i] != ' ') {
-            buf_out[j++] = buf_in[i];
-        }
+        buf_out[j++] = buf_in[i];
     }
 
     buf_out[j] = '\0';
