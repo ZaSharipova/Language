@@ -53,21 +53,21 @@ static const OpEntry OP_TABLE[] = {
     { "if",     kOperationIf },
     { "else",   kOperationElse },
     { "while",  kOperationWhile },
-    { "func",   kOperationFunction},
-    { "call",   kOperationCall},
-    { "print",  kOperationWrite},
-    { "scanf",  kOperationRead},
+    { "func",   kOperationFunction },
+    { "call",   kOperationCall },
+    { "print",  kOperationWrite },
+    { "scanf",  kOperationRead },
 
-    {"<", kOperationB},
-    {"<=", kOperationBE},
-    {">", kOperationA},
-    {">=", kOperationAE},
-    {"==", kOperationE},
+    {"<",       kOperationB },
+    {"<=",      kOperationBE },
+    {">",       kOperationA },
+    {">=",      kOperationAE },
+    {"==",      kOperationE },
 
     { ";",      kOperationThen },
-    {",",       kOperationComma},
+    {",",       kOperationComma },
 
-    { "NULL",      kOperationNone },
+    { "NULL",   kOperationNone },
 };
 static const size_t OP_TABLE_SIZE = sizeof(OP_TABLE) / sizeof(OP_TABLE[0]);
 

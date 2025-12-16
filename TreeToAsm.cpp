@@ -16,6 +16,7 @@ int NewLabel() {
     return label_counter++;
 }
 
+static const char *ChooseCompareMode(DifNode_t *node);
 void PrintExpr(FILE *file, DifNode_t *expr, VariableArr *arr, int ram_base);
 
 static void FindVarPos(FILE *file, VariableArr *arr, DifNode_t *node, int ram_base, int *param_count) {
@@ -80,11 +81,11 @@ void PrintStatement(FILE *file, DifNode_t *stmt, VariableArr *arr, int *ram_base
 
                 case kOperationIf: {
                         int lbl_false = NewLabel();
-                        PrintExpr(file, stmt->left, arr, *ram_base);
-                        PRINT(file, "PUSH 0");
+                        PrintExpr(file, stmt->left->left, arr, *ram_base);
+                        PrintExpr(file, stmt->left->right, arr, *ram_base);
                         PRINT(file, "SUB");
 
-                        PRINT(file, "JE :F_%d", lbl_false); //
+                        PRINT(file, "%s :F_%d", ChooseCompareMode(stmt->left), lbl_false); //
 
                         PrintStatement(file, stmt->right, arr, ram_base, param_count);
 
@@ -186,7 +187,6 @@ void PrintFunction(FILE *file, DifNode_t *func_node, VariableArr *arr) {
             PRINT(file, "PUSH 1");
             PRINT(file, "ADD");
             PRINT(file, "POPR RAX");
-
         }
         param_count++;
     }
@@ -238,5 +238,21 @@ void PrintProgram(FILE *file, DifNode_t *root, VariableArr *arr) {
     
     if (root->right) {
         PrintProgram(file, root->right, arr);
+    }
+}
+
+
+static const char *ChooseCompareMode(DifNode_t *node) {
+    assert(node);
+
+    if (node && node->type == kOperation) {
+        switch (node->value.operation) {
+            case (kOperationA):  return "JA";
+            case (kOperationAE): return "JAE";
+            case (kOperationB):  return "JB";
+            case (kOperationBE): return "JBE";
+            case (kOperationE):  return "JE";
+            default: return "NULL";
+        }
     }
 }
