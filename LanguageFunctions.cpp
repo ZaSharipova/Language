@@ -90,6 +90,10 @@ DifErrors InitArrOfVariable(VariableArr *arr, size_t capacity) {
         return kNoMemory;
     }
 
+    for (size_t i = 0; i < arr->capacity; i++) {
+        arr->var_array[i].variable_value = -666;
+    }
+    
     return kSuccess;
 }
 
@@ -103,6 +107,10 @@ DifErrors ResizeArray(VariableArr *arr)  {
             return kNoMemory;
         }
         arr->var_array = ptr;
+    }
+
+    for (size_t i = arr->size; i < arr->capacity; i++) {
+        arr->var_array[i].variable_value = -666;
     }
 
     return kSuccess;
@@ -163,7 +171,7 @@ DifNode_t *NewVariable(DifRoot *root, const char *variable, VariableArr *Variabl
     new_node->type = kVariable;
     size_t pos = 0;
     bool found_flag = false;
-    VariableInfo *addr = NULL;
+
     for (size_t i = 0; i < VariableArr->size; i++) {
         if (strcmp(variable, VariableArr->var_array[i].variable_name) == 0) {
             pos = i;

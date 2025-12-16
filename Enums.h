@@ -45,6 +45,7 @@ enum OperationTypes {
     kOperationComma,
     kOperationFunction,
     kOperationCall,
+    kOperationReturn,
     kOperationWrite,
     kOperationRead,
     kOperationParOpen,
@@ -69,6 +70,11 @@ enum Realloc_Mode {
     kDecrease,
     kNoChange,
     kIncreaseZero,
+};
+
+enum VariableModes {
+    kVarVariable,
+    kVarFunction,
 };
 
 #endif //ENUMS_H_

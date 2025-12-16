@@ -18,6 +18,28 @@ int NewLabel() {
 
 void PrintExpr(FILE *file, DifNode_t *expr, VariableArr *arr, int ram_base);
 
+static void FindVarPos(FILE *file, VariableArr *arr, DifNode_t *node, int ram_base) {
+    int var_idx = -1;
+    for (size_t i = 0; i < arr->size; i++) {
+        if (strncmp(arr->var_array[i].variable_name, arr->var_array[node->value.pos].variable_name, strlen(arr->var_array[i].variable_name)) == 0) {
+            if (arr->var_array[i].pos_in_code == 0) {
+                var_idx = arr->var_array[i].pos_in_code = ram_base;
+                    PRINT(file, "PUSH %d", arr->var_array[i].variable_value);
+                    PRINT(file, "POPMN [RAX]");
+                    PRINT(file, "PUSHR RAX");
+                    PRINT(file, "PUSH 1");
+                    PRINT(file, "ADD");
+                    PRINT(file, "POPR RAX");
+            }
+            var_idx = arr->var_array[i].pos_in_code;
+            PRINT(file, "PUSH %d", arr->var_array[i].variable_value);
+            PRINT(file, "POPMN [%d]", var_idx);
+            break;
+        }
+    }
+    if (var_idx == -1) { fprintf(stderr, "Unknown variable\n"); exit(1); }
+}
+
 void PrintStatement(FILE *file, DifNode_t *stmt, VariableArr *arr, int ram_base) {
     assert(file);
     assert(arr);
@@ -31,14 +53,22 @@ void PrintStatement(FILE *file, DifNode_t *stmt, VariableArr *arr, int ram_base)
                     PrintExpr(file, stmt->right, arr, ram_base); {
 
                         int var_idx = -1;
-                        for (size_t i = 0; i < arr->size; i++) {
-                            if (strncmp(arr->var_array[i].variable_name, arr->var_array[stmt->left->value.pos].variable_name, strlen(arr->var_array[i].variable_name)) == 0) {
-                                var_idx = (int)i;
-                                break;
-                            }
-                        }
-                        if (var_idx == -1) { fprintf(stderr, "Unknown variable\n"); exit(1); }
-                        PRINT(file, "POPMN [%d]", ram_base + var_idx);
+                        FindVarPos(file, arr, stmt->left, ram_base);
+                        // for (size_t i = 0; i < arr->size; i++) {
+                        //     if (strncmp(arr->var_array[i].variable_name, arr->var_array[stmt->left->value.pos].variable_name, strlen(arr->var_array[i].variable_name)) == 0) {
+                        //         if (arr->var_array[i].pos_in_code == 0) {
+                        //             var_idx = arr->var_array[i].pos_in_code = ram_base;
+                        //         }
+                        //         var_idx = arr->var_array[i].pos_in_code;
+                        //         break;
+                        //     }
+                        // }
+                        // if (var_idx == -1) { fprintf(stderr, "Unknown variable\n"); exit(1); }
+                        // PRINT(file, "POPMN [RAX]");
+                        // PRINT(file, "PUSHR RAX");
+                        // PRINT(file, "PUSH 1");
+                        // PRINT(file, "ADD");
+                        // PRINT(file, "POPR RAX");
                     }
                     break;
 
@@ -91,11 +121,11 @@ void PrintExpr(FILE *file, DifNode_t *expr, VariableArr *arr, int ram_base) {
 
     switch (expr->type) {
         case kNumber:
-            PRINT(file, "PUSH %d", expr->value.number);
+            PRINT(file, "PUSH %.0f", expr->value.number);
             break;
         case kVariable: {
                 int var_idx = expr->value.pos;
-                PRINT(file, "PUSHMN [%d]", ram_base + var_idx);
+                FindVarPos(file, arr, expr, ram_base);
             }
             break;
         case kOperation:
@@ -132,30 +162,55 @@ void PrintFunction(FILE *file, DifNode_t *func_node, VariableArr *arr) {
     assert(arr);
     if (!func_node) return;
 
-    int ram_base = 100; //
+    int ram_base = 0; //
     int param_count = 0;
-
-    PRINT(file, "\n:%s", arr->var_array[func_node->left->value.pos].variable_name);
 
     DifNode_t *args = func_node->right->left;
     for (DifNode_t *arg = args; arg != NULL; arg = arg->right) {
         if (arg && arg->type == kVariable) {
             PRINT(file, "PUSH %d", arr->var_array[arg->value.pos].variable_value);
-            PRINT(file, "POPMN [%d]", ram_base + param_count);
         }
         param_count++;
     }
     for (DifNode_t *arg = args; arg != NULL; arg = arg->left) {
         if (arg && arg->type == kVariable) {
             PRINT(file, "PUSH %d", arr->var_array[arg->value.pos].variable_value);
-            PRINT(file, "POPMN [%d]", ram_base + param_count);
         }
         param_count++;
     }
 
+    PRINT(file, "\n:%s", arr->var_array[func_node->left->value.pos].variable_name);
+
+    for (DifNode_t *arg = args; arg != NULL; arg = arg->right) {
+        if (arg && arg->type == kVariable) {
+            PRINT(file, "POPMN [RAX]");
+            PRINT(file, "PUSHR RAX");
+            PRINT(file, "PUSH 1");
+            PRINT(file, "ADD");
+            PRINT(file, "POPR RAX");
+
+        }
+        param_count++;
+    }
+    for (DifNode_t *arg = args; arg != NULL; arg = arg->left) {
+        if (arg && arg->type == kVariable) {
+            PRINT(file, "POPMN [RAX]");
+            PRINT(file, "PUSHR RAX");
+            PRINT(file, "PUSH 1");
+            PRINT(file, "ADD");
+            PRINT(file, "POPR RAX");
+        }
+        param_count++;
+    }
+
+    ram_base += param_count;
     DifNode_t *body = func_node->right->right;
     PrintStatement(file, body, arr, ram_base);
 
+    PRINT(file, "PUSHR RAX");
+    PRINT(file, "PUSH %d", param_count);
+    PRINT(file, "SUB");
+    PRINT(file, "POPR RAX");
     PRINT(file, "RET");
 }
 

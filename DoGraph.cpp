@@ -162,6 +162,8 @@ static GraphOperation PrintExpressionType(const DifNode_t *node) {
         case (kOperationWrite):
             return {"write", "	tan"};
         case (kOperationRead):
+        case (kOperationReturn):
+            return {"return", "tan"};
 
         case (kOperationParOpen):
         case (kOperationParClose):

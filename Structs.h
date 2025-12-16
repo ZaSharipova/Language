@@ -7,12 +7,15 @@
 
 #define MAX_IMAGE_SIZE 60
 #define MAX_TEXT_SIZE 120
+#define POISON -666
 
-typedef char* Dif_t;
+typedef char * Dif_t;
 
 struct VariableInfo {
+    VariableModes type;
     const char *variable_name;
     int variable_value;
+    int pos_in_code;
 };
 
 union Value {

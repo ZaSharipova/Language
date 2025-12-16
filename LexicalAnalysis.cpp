@@ -16,6 +16,7 @@
 #define PRINT "print"
 #define SCANF "scanf"
 #define DECLARE "func"
+#define RETURN "return"
 
 static bool SkipComment(const char **string);
 static void SkipSpaces(const char **string);
@@ -81,6 +82,7 @@ size_t CheckAndReturn(DifRoot *root, const char **string, Stack_Info *tokens, Va
         CHECK_STROKE_AND_PUSH(PRINT, kOperationWrite);
         CHECK_STROKE_AND_PUSH(SCANF, kOperationRead);
         CHECK_STROKE_AND_PUSH(DECLARE, kOperationFunction);
+        CHECK_STROKE_AND_PUSH(RETURN, kOperationReturn);
 
         if (ParseNumberToken(root, string, tokens, &cnt)) {
             continue;
@@ -96,10 +98,10 @@ size_t CheckAndReturn(DifRoot *root, const char **string, Stack_Info *tokens, Va
         return 0;
     }
 
-    // fprintf(stderr, "%zu\n\n", Variable_Array->size);
-    // for (size_t i = 0; i < Variable_Array->size; i++) {
-    //     fprintf(stderr, "%s %d\n\n", Variable_Array->var_array[i].variable_name, Variable_Array->var_array[i].variable_value);
-    // }
+    fprintf(stderr, "%zu\n\n", Variable_Array->size);
+    for (size_t i = 0; i < Variable_Array->size; i++) {
+        fprintf(stderr, "%s %d\n\n", Variable_Array->var_array[i].variable_name, Variable_Array->var_array[i].variable_value);
+    }
 
     return cnt;
 }
