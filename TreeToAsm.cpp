@@ -51,7 +51,7 @@ void PrintParamsToStack(FILE *file, DifNode_t *stmt, VariableArr *arr, int *para
     assert(param_count);
 
     DifNode_t *args = stmt->right->left;
-    for (DifNode_t *arg = args; arg != NULL; arg = arg->right) {
+    for (DifNode_t *arg = args; arg != NULL; arg = arg->right) { // нужно expression
         if (arg && arg->type == kVariable) {
             PRINT(file, "PUSHMN [%d]", arr->var_array[arg->value.pos].pos_in_code);
         }
@@ -144,7 +144,7 @@ void PrintStatement(FILE *file, DifNode_t *stmt, VariableArr *arr, int *ram_base
 
                         PRINT(file, "%s :F_%d\n", ChooseCompareMode(stmt->left), lbl_false); //
                         PrintStatement(file, stmt->right, arr, ram_base, param_count); // переделать для else
-                        PRINT(file, "\n:F_%d\n", lbl_false);
+                        PRINT(file, "\n:F_%d\n", lbl_false); // не нужен пробел
                     }
                     break;
 

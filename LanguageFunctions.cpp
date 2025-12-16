@@ -191,20 +191,27 @@ DifNode_t *NewVariable(DifRoot *root, const char *variable, VariableArr *Variabl
     return new_node;
 }
 
-DifErrors PrintAST(DifNode_t *node, FILE *file, VariableArr *arr) {
+static void PrintIndent(FILE *file, int indent) {
+    for (int i = 0; i < indent; ++i)
+        fputc('\t', file);
+}
+
+DifErrors PrintAST(DifNode_t *node, FILE *file, VariableArr *arr, int indent) {
     assert(file);
     assert(arr);
 
     if (!node) {
-        fprintf(file, "nil");
+        PrintIndent(file, indent);
+        fprintf(file, "nil\n");
         return kSuccess;
     }
 
+    PrintIndent(file, indent);
     fprintf(file, "( ");
     
     switch (node->type) {
         case kNumber:
-            fprintf(file, "\"%d\"", (int)node->value.number);
+            fprintf(file, "\"%.0f\"", node->value.number);
             break;
         case kVariable:
             fprintf(file, "\"%s\"", arr->var_array[node->value.pos].variable_name);
@@ -216,15 +223,21 @@ DifErrors PrintAST(DifNode_t *node, FILE *file, VariableArr *arr) {
             fprintf(file, "\"UNKNOWN\"");
             break;
     }
+    fprintf(file, "\n");
     
-    fprintf(file, " ");
-    PrintAST(node->left, file, arr);
-    fprintf(file, " ");
-    PrintAST(node->right, file, arr);
-    fprintf(file, " )");
+    PrintAST(node->left, file, arr, indent + 1);
+    
+    // if (node->right) {
+        fprintf(file, "\n");
+        PrintAST(node->right, file, arr, indent + 1);
+    // }
+    
+    PrintIndent(file, indent);
+    fprintf(file, ")\n");
     
     return kSuccess;
 }
+
 
 static const char *ConvertEnumToOperation(DifNode_t *node, VariableArr *arr) {
     assert(node);
@@ -258,6 +271,7 @@ static const char *ConvertEnumToOperation(DifNode_t *node, VariableArr *arr) {
         case kOperationComma:     return ",";
         case kOperationCall:      return "call";
         case kOperationFunction:  return "func";
+        case kOperationReturn:    return "return";
         case kOperationB:         return "<";
         case kOperationBE:        return "<=";
         case kOperationA:         return ">";

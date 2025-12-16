@@ -20,7 +20,7 @@ int main(void) {
     //PrintTree(root.root, out);
 
     FILE_OPEN_AND_CHECK(ast_file, "ast.txt", "w");
-    PrintAST(root.root, ast_file, &Variable_Array);
+    PrintAST(root.root, ast_file, &Variable_Array, 0);
     fclose(ast_file);
 
     
