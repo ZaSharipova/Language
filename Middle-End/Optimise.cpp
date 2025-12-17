@@ -1,4 +1,4 @@
-#include "Optimise.h"
+#include "Middle-End/Optimise.h"
 
 #include <stdio.h>
 #include <assert.h>
@@ -6,29 +6,29 @@
 
 #include "Enums.h"
 #include "Structs.h"
-#include "LanguageFunctions.h"
+#include "Front-End/LanguageFunctions.h"
 //#include "Differentiate.h"
 
 #include "DoGraph.h"
 
-static DifNode_t *AddOptimise(DifRoot *root, DifNode_t *node, bool *has_change);
-static DifNode_t *SubOptimise(DifRoot *root, DifNode_t *node, bool *has_change);
-static DifNode_t *MulOptimise(DifRoot *root, DifNode_t *node, bool *has_change);
-static DifNode_t *DivOptimise(DifRoot *root, DifNode_t *node, bool *has_change);
-static DifNode_t *PowOptimise(DifRoot *root, DifNode_t *node, bool *has_change);
+static LangNode_t *AddOptimise(LangRoot *root, LangNode_t *node, bool *has_change);
+static LangNode_t *SubOptimise(LangRoot *root, LangNode_t *node, bool *has_change);
+static LangNode_t *MulOptimise(LangRoot *root, LangNode_t *node, bool *has_change);
+static LangNode_t *DivOptimise(LangRoot *root, LangNode_t *node, bool *has_change);
+static LangNode_t *PowOptimise(LangRoot *root, LangNode_t *node, bool *has_change);
 
-static DifNode_t *CheckNodeAndConstOptimise(DifRoot *root, DifNode_t *node, bool *has_change, VariableArr *arr);
-static DifNode_t *GetSubTree(DifRoot *root, DifNode_t *node, DifNode_t *delete_node, DifNode_t *to_main);
+static LangNode_t *CheckNodeAndConstOptimise(LangRoot *root, LangNode_t *node, bool *has_change, VariableArr *arr);
+static LangNode_t *GetSubTree(LangRoot *root, LangNode_t *node, LangNode_t *delete_node, LangNode_t *to_main);
 
-static bool IsThisNumber(DifNode_t *node, double number);
-// static bool IsZero(DifNode_t *node);
-// static bool IsOne(DifNode_t *node);
-static bool IsNumber(DifNode_t *node);
-static bool IsOperation(DifNode_t *node);
+static bool IsThisNumber(LangNode_t *node, double number);
+// static bool IsZero(LangNode_t *node);
+// static bool IsOne(LangNode_t *node);
+static bool IsNumber(LangNode_t *node);
+static bool IsOperation(LangNode_t *node);
 
-static double EvaluateExpression(DifNode_t *node, VariableArr *arr);
+static double EvaluateExpression(LangNode_t *node, VariableArr *arr);
 
-DifNode_t *OptimiseTree(DifRoot *root, DifNode_t *node, FILE *out, const char *main_var, VariableArr *arr) {
+LangNode_t *OptimiseTree(LangRoot *root, LangNode_t *node, FILE *out, const char *main_var, VariableArr *arr) {
     assert(root);
     assert(node);
     assert(out);
@@ -53,7 +53,7 @@ DifNode_t *OptimiseTree(DifRoot *root, DifNode_t *node, FILE *out, const char *m
     return node;
 }
 
-DifNode_t *ConstOptimise(DifRoot *root, DifNode_t *node, bool *has_change, VariableArr *arr) {
+LangNode_t *ConstOptimise(LangRoot *root, LangNode_t *node, bool *has_change, VariableArr *arr) {
     assert(node);
     assert(has_change);
     assert(arr);
@@ -78,7 +78,7 @@ DifNode_t *ConstOptimise(DifRoot *root, DifNode_t *node, bool *has_change, Varia
     return node;
 }
 
-DifNode_t *EraseNeutralElements(DifRoot *root, DifNode_t *node, bool *has_change) {
+LangNode_t *EraseNeutralElements(LangRoot *root, LangNode_t *node, bool *has_change) {
     assert(root);
     assert(node);
     assert(has_change);
@@ -119,7 +119,7 @@ DifNode_t *EraseNeutralElements(DifRoot *root, DifNode_t *node, bool *has_change
 #define NEWN(num) NewNode(root, kNumber, (Value){ .number = (num)}, NULL, NULL)
 #define MUL_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationMul}, left, right)
 
-static DifNode_t *AddOptimise(DifRoot *root, DifNode_t *node, bool *has_change) {
+static LangNode_t *AddOptimise(LangRoot *root, LangNode_t *node, bool *has_change) {
     assert(root);
     assert(node);
     assert(has_change);
@@ -137,7 +137,7 @@ static DifNode_t *AddOptimise(DifRoot *root, DifNode_t *node, bool *has_change) 
     return node;
 }
 
-static DifNode_t *SubOptimise(DifRoot *root, DifNode_t *node, bool *has_change) {
+static LangNode_t *SubOptimise(LangRoot *root, LangNode_t *node, bool *has_change) {
     assert(root);
     assert(node);
     assert(has_change);
@@ -149,10 +149,10 @@ static DifNode_t *SubOptimise(DifRoot *root, DifNode_t *node, bool *has_change) 
 
     if (IsThisNumber(node->left, 0)) {
         *has_change = true;
-        DifNode_t *right = GetSubTree(root, node, node->left, node->right);
+        LangNode_t *right = GetSubTree(root, node, node->left, node->right);
 
-        // DifNode_t *negative_node = NEWN(-1.0);
-        // DifNode_t *mul_node = MUL_(negative_node, right);
+        // LangNode_t *negative_node = NEWN(-1.0);
+        // LangNode_t *mul_node = MUL_(negative_node, right);
         // if (negative_node) negative_node->parent = mul_node; //
         // if (right) right->parent = mul_node;
 
@@ -162,7 +162,7 @@ static DifNode_t *SubOptimise(DifRoot *root, DifNode_t *node, bool *has_change) 
     return node;
 }
 
-static DifNode_t *MulOptimise(DifRoot *root, DifNode_t *node, bool *has_change) {
+static LangNode_t *MulOptimise(LangRoot *root, LangNode_t *node, bool *has_change) {
     assert(root);
     assert(node);
     assert(has_change);
@@ -187,7 +187,7 @@ static DifNode_t *MulOptimise(DifRoot *root, DifNode_t *node, bool *has_change) 
     return node;
 }
 
-static DifNode_t *DivOptimise(DifRoot *root, DifNode_t *node, bool *has_change) {
+static LangNode_t *DivOptimise(LangRoot *root, LangNode_t *node, bool *has_change) {
     assert(root);
     assert(node);
     assert(has_change);
@@ -207,7 +207,7 @@ static DifNode_t *DivOptimise(DifRoot *root, DifNode_t *node, bool *has_change) 
     return node;
 }
 
-static DifNode_t *PowOptimise(DifRoot *root, DifNode_t *node, bool *has_change) {
+static LangNode_t *PowOptimise(LangRoot *root, LangNode_t *node, bool *has_change) {
     assert(root);
     assert(node);
     assert(has_change);
@@ -237,13 +237,13 @@ static DifNode_t *PowOptimise(DifRoot *root, DifNode_t *node, bool *has_change) 
 #undef NEWN
 #undef MUL_
 
-static DifNode_t *GetSubTree(DifRoot *root, DifNode_t *node, DifNode_t *delete_node, DifNode_t *to_main) {
+static LangNode_t *GetSubTree(LangRoot *root, LangNode_t *node, LangNode_t *delete_node, LangNode_t *to_main) {
     assert(root);
     assert(node);
     assert(delete_node);
     assert(to_main);
     
-    DifNode_t *res = to_main;
+    LangNode_t *res = to_main;
 
     if (res) {
         res->parent = node->parent;
@@ -260,7 +260,7 @@ static DifNode_t *GetSubTree(DifRoot *root, DifNode_t *node, DifNode_t *delete_n
     return res;
 }
 
-static bool IsThisNumber(DifNode_t *node, double number) {
+static bool IsThisNumber(LangNode_t *node, double number) {
     if (!node) {
         return false;
     }
@@ -268,7 +268,7 @@ static bool IsThisNumber(DifNode_t *node, double number) {
     return (node->type == kNumber && fabs(node->value.number - number) < eps);
 }
 
-// static bool IsOne(DifNode_t *node) {
+// static bool IsOne(LangNode_t *node) {
 //     if (!node) {
 //         return false;
 //     }
@@ -276,7 +276,7 @@ static bool IsThisNumber(DifNode_t *node, double number) {
 //     return (node->type == kNumber && fabs(node->value.number - 1) < eps);
 // }
 
-static bool IsNumber(DifNode_t *node) {
+static bool IsNumber(LangNode_t *node) {
     if (!node) {
         return false;
     }
@@ -284,7 +284,7 @@ static bool IsNumber(DifNode_t *node) {
     return (node->type == kNumber);
 }
 
-static bool IsOperation(DifNode_t *node) {
+static bool IsOperation(LangNode_t *node) {
     if (!node) {
         return false;
     }
@@ -292,7 +292,7 @@ static bool IsOperation(DifNode_t *node) {
     return (node->type == kOperation);
 }
 
-static DifNode_t *CheckNodeAndConstOptimise(DifRoot *root, DifNode_t *node, 
+static LangNode_t *CheckNodeAndConstOptimise(LangRoot *root, LangNode_t *node, 
     bool *has_change, VariableArr *arr) {
     assert(has_change);
     assert(arr);
@@ -304,7 +304,7 @@ static DifNode_t *CheckNodeAndConstOptimise(DifRoot *root, DifNode_t *node,
     return node;
 }
 
-static double EvaluateExpression(DifNode_t *node, VariableArr *arr) {
+static double EvaluateExpression(LangNode_t *node, VariableArr *arr) {
     assert(node);
     assert(arr);
 

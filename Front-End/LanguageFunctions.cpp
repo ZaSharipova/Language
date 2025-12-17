@@ -1,4 +1,4 @@
-#include "LanguageFunctions.h"
+#include "Front-End/LanguageFunctions.h"
 
 #include "Enums.h"
 #include "Structs.h"
@@ -8,13 +8,13 @@
 #include <string.h>
 #include <ctype.h>
 
-#include "Rules.h"
+#include "Front-End/Rules.h"
 
-static const char *ConvertEnumToOperation(DifNode_t *node, VariableArr *arr);
+static const char *ConvertEnumToOperation(LangNode_t *node, VariableArr *arr);
 
 size_t DEFAULT_SIZE = 60;
 
-DifErrors DifRootCtor(DifRoot *root) {
+DifErrors LangRootCtor(LangRoot *root) {
     assert(root);
 
     root->root = NULL;
@@ -23,10 +23,10 @@ DifErrors DifRootCtor(DifRoot *root) {
     return kSuccess;
 }
 
-DifErrors NodeCtor(DifNode_t **node, Value *value) {
+DifErrors NodeCtor(LangNode_t **node, Value *value) {
     assert(node);
 
-    *node = (DifNode_t *) calloc (DEFAULT_SIZE, sizeof(DifNode_t));
+    *node = (LangNode_t *) calloc (DEFAULT_SIZE, sizeof(LangNode_t));
     if (!*node) {
         fprintf(stderr, "No memory to calloc NODE.\n");
         return kNoMemory;
@@ -46,7 +46,7 @@ DifErrors NodeCtor(DifNode_t **node, Value *value) {
     return kSuccess;
 }
 
-DifErrors DeleteNode(DifRoot *root, DifNode_t *node) {
+DifErrors DeleteNode(LangRoot *root, LangNode_t *node) {
     assert(root);
     if (!node)
         return kSuccess;
@@ -67,7 +67,7 @@ DifErrors DeleteNode(DifRoot *root, DifNode_t *node) {
     return kSuccess;
 }
 
-DifErrors TreeDtor(DifRoot *tree) {
+DifErrors TreeDtor(LangRoot *tree) {
     assert(tree);
 
     DeleteNode(tree, tree->root);
@@ -127,10 +127,10 @@ DifErrors DtorVariableArray(VariableArr *arr) {
     return kSuccess;
 }
 
-DifNode_t *NewNode(DifRoot *root, DifTypes type, Value value, DifNode_t *left, DifNode_t *right) {
+LangNode_t *NewNode(LangRoot *root, DifTypes type, Value value, LangNode_t *left, LangNode_t *right) {
     assert(root);
 
-    DifNode_t *new_node = NULL;
+    LangNode_t *new_node = NULL;
     NodeCtor(&new_node, NULL);
 
     root->size++;
@@ -159,12 +159,12 @@ DifNode_t *NewNode(DifRoot *root, DifTypes type, Value value, DifNode_t *left, D
     return new_node;
 }
 
-DifNode_t *NewVariable(DifRoot *root, const char *variable, VariableArr *VariableArr) {
+LangNode_t *NewVariable(LangRoot *root, const char *variable, VariableArr *VariableArr) {
     assert(root);
     assert(variable);
     assert(VariableArr);
 
-    DifNode_t *new_node = NULL;
+    LangNode_t *new_node = NULL;
     NodeCtor(&new_node, NULL);
 
     root->size ++;
@@ -196,7 +196,7 @@ static void PrintIndent(FILE *file, int indent) {
         fputc('\t', file);
 }
 
-DifErrors PrintAST(DifNode_t *node, FILE *file, VariableArr *arr, int indent) {
+DifErrors PrintAST(LangNode_t *node, FILE *file, VariableArr *arr, int indent) {
     assert(file);
     assert(arr);
 
@@ -239,7 +239,7 @@ DifErrors PrintAST(DifNode_t *node, FILE *file, VariableArr *arr, int indent) {
 }
 
 
-static const char *ConvertEnumToOperation(DifNode_t *node, VariableArr *arr) {
+static const char *ConvertEnumToOperation(LangNode_t *node, VariableArr *arr) {
     assert(node);
     assert(arr);
 

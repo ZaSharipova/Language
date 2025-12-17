@@ -1,4 +1,4 @@
-#include "Rules.h"
+#include "Front-End/Rules.h"
 
 #include "Enums.h"
 #include "Structs.h"
@@ -10,23 +10,21 @@
 #include <ctype.h>
 #include <sys/stat.h>
 
-#include "Enums.h"
-#include "Structs.h"
-#include "LanguageFunctions.h"
+#include "Front-End/LanguageFunctions.h"
 #include "StackFunctions.h"
 #include "DoGraph.h"
-#include "LexicalAnalysis.h"
+#include "Front-End/LexicalAnalysis.h"
 
 static long long SizeOfFile(const char *filename);
 static char *ReadToBuf(const char *filename, FILE *file, size_t filesize);
 
-static bool IsThatOperation(DifNode_t *node, OperationTypes type);
-static DifNode_t *ParseFunctionArgs(DifRoot *root, Stack_Info *tokens, size_t *tokens_pos, size_t *cnt);
-static DifNode_t *ParseFunctionBody(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos);
-static DifNode_t *ParseStatementSequence(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos);
+static bool IsThatOperation(LangNode_t *node, OperationTypes type);
+static LangNode_t *ParseFunctionArgs(Language *lang_info, size_t *cnt);
+static LangNode_t *ParseFunctionBody(Language *lang_info);
+static LangNode_t *ParseStatementSequence(Language *lang_info);
 
 #define CHECK_NULL_RETURN(name, cond) \
-    DifNode_t *name = cond;           \
+    LangNode_t *name = cond;           \
     if (name == NULL) {               \
         return NULL;                  \
     }
@@ -37,18 +35,18 @@ static DifNode_t *ParseStatementSequence(DifRoot *root, Stack_Info *tokens, Vari
         if (node_var) {                         \
             return (node_var);                  \
         }                                       \
-        *tokens_pos = save_pos;                 \
+        *(lang_info->tokens_pos) = save_pos;    \
     } while (0)
 
-#define CHECK_EXPECTED_TOKEN(out_tok, TRUE_COND, error_handler) \
-    do {                                                        \
-        (out_tok) = GetStackElem((tokens), *(tokens_pos));      \
-        if (!(TRUE_COND)) {                                     \
-            error_handler;                                      \
-            *(tokens_pos) = (save_pos);                         \
-            return NULL;                                        \
-        }                                                       \
-        (*(tokens_pos))++;                                      \
+#define CHECK_EXPECTED_TOKEN(out_tok, TRUE_COND, error_handler)                  \
+    do {                                                                         \
+        (out_tok) = GetStackElem((lang_info->tokens), *(lang_info->tokens_pos)); \
+        if (!(TRUE_COND)) {                                                      \
+            error_handler;                                                       \
+            *(lang_info->tokens_pos) = (save_pos);                               \
+            return NULL;                                                         \
+        }                                                                        \
+        (*lang_info->tokens_pos)++;                                              \
     } while (0)
 
 // TODO: 1. перевод из дерева в ассеблер
@@ -58,30 +56,29 @@ static DifNode_t *ParseStatementSequence(DifRoot *root, Stack_Info *tokens, Vari
 
 // TODO: проверка на инициализированность
 
-static DifNode_t *GetGoal(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos);
+static LangNode_t *GetGoal(Language *lang_info);
 
-static DifNode_t *GetAssignment(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos);
-static DifNode_t *GetOp(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos);
-static DifNode_t *GetWhile(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos);
-static DifNode_t *GetIf(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos);
-static DifNode_t *GetElse(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos, DifNode_t *if_node);
-static DifNode_t *GetFunctionDeclare(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos);
-static DifNode_t *GetFunctionCall(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos);
-DifNode_t *GetReturn(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos);
-static DifNode_t *GetPrintf(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos);
+static LangNode_t *GetAssignment(Language *lang_info);
+static LangNode_t *GetOp(Language *lang_info);
+static LangNode_t *GetWhile(Language *lang_info);
+static LangNode_t *GetIf(Language *lang_info);
+static LangNode_t *GetElse(Language *lang_info, LangNode_t *if_node);
+static LangNode_t *GetFunctionDeclare(Language *lang_info);
+static LangNode_t *GetFunctionCall(Language *lang_info);
+LangNode_t *GetReturn(Language *lang_info);
+static LangNode_t *GetPrintf(Language *lang_info);
 
-static DifNode_t *GetExpression(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos);
-static DifNode_t *GetTerm(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos);
-static DifNode_t *GetPrimary(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos);
-static DifNode_t *GetPower(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos);
+static LangNode_t *GetExpression(Language *lang_info);
+static LangNode_t *GetTerm(Language *lang_info);
+static LangNode_t *GetPrimary(Language *lang_info);
+static LangNode_t *GetPower(Language *lang_info);
 
-static DifNode_t *GetNumber(DifRoot *root, Stack_Info *tokens, size_t *tokens_pos);
-static DifNode_t *GetString(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos);
+static LangNode_t *GetNumber(Language *lang_info);
+static LangNode_t *GetString(Language *lang_info);
 
-DifErrors ReadInfix(DifRoot *root, DumpInfo *dump_info, VariableArr *Variable_Array, const char *filename) {
-    assert(root);
+DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filename) {
+    assert(lang_info);
     assert(dump_info);
-    assert(Variable_Array);
     assert(filename);
 
     FILE_OPEN_AND_CHECK(file, filename, "r");
@@ -92,26 +89,28 @@ DifErrors ReadInfix(DifRoot *root, DumpInfo *dump_info, VariableArr *Variable_Ar
 
     Stack_Info tokens = {};
     StackCtor(&tokens, 1, stderr);
-    CheckAndReturn(root, (const char **)&Info.buf_ptr, &tokens, Variable_Array);
+    CheckAndReturn(lang_info->root, (const char **)&Info.buf_ptr, &tokens, lang_info->arr);
+    lang_info->tokens = &tokens;
 
     size_t tokens_pos = 0;
+    lang_info->tokens_pos = &tokens_pos;
 
-    root->root = GetGoal(root, &tokens, Variable_Array, &tokens_pos);
-    if (!root->root) {
+    lang_info->root->root = GetGoal(lang_info);
+    if (!lang_info->root->root) {
         return kFailure;
     }
     
-    dump_info->tree = root;
+    dump_info->tree = lang_info->root;
 
     strcpy(dump_info->message, "Code");
-    DoTreeInGraphviz(root->root, dump_info, Variable_Array);
+    DoTreeInGraphviz(lang_info->root->root, dump_info, lang_info->arr);
     StackDtor(&tokens, stderr);
 
     return kSuccess;
 }
 
 #define NEWN(num) NewNode(root, kNumber, ((Value){ .number = (num)}), NULL, NULL)
-#define NEWOP(op, left, right) NewNode(root, kOperation, (Value){ .operation = (op) }, left, right) 
+#define NEWOP(op, left, right) NewNode(lang_info->root, kOperation, (Value){ .operation = (op) }, left, right) 
 
 /* G :: = FUNCTION_D+
    OP :: = WHILE | IF | ASSIGNMENT+; | FUNCTION_C
@@ -126,16 +125,13 @@ DifErrors ReadInfix(DifRoot *root, DumpInfo *dump_info, VariableArr *Variable_Ar
    PRIMARY :: = ( E ) | N | S
 */
 
-static DifNode_t *GetGoal(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(tokens_pos);
+static LangNode_t *GetGoal(Language *lang_info) {
+    assert(lang_info);
 
     int cnt = 0;
-    DifNode_t *first = NULL;
+    LangNode_t *first = NULL;
     do {
-        DifNode_t *next = GetFunctionDeclare(root, tokens, arr, tokens_pos);
+        LangNode_t *next = GetFunctionDeclare(lang_info);
         if (!next) break;
         else if (first && !first->right) {
             first->right = next;
@@ -148,94 +144,85 @@ static DifNode_t *GetGoal(DifRoot *root, Stack_Info *tokens, VariableArr *arr, s
     return first;
 }
 
-DifNode_t *GetReturn(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(tokens_pos);
+LangNode_t *GetReturn(Language *lang_info) {
+    assert(lang_info);
 
-    DifNode_t *return_node = GetStackElem(tokens, *tokens_pos);
+    LangNode_t *return_node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (!IsThatOperation(return_node, kOperationReturn)) {
         return NULL;
     }
-    (*tokens_pos)++;
+    (*lang_info->tokens_pos)++; 
 
-    DifNode_t *node = GetExpression(root, tokens, arr, tokens_pos);
+    LangNode_t *node = GetExpression(lang_info);
     if (!node) {
         return NULL;
     }
-    (*tokens_pos)++;
+    (*lang_info->tokens_pos)++; 
 
     return NEWOP(kOperationReturn, node, NULL);
 }
 
-DifNode_t *GetScanf(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(tokens_pos);
+LangNode_t *GetScanf(Language *lang_info) {
+    assert(lang_info);
 
-    size_t save_pos = *tokens_pos;
+    size_t save_pos = (*lang_info->tokens_pos);
 
-    DifNode_t *return_node = GetStackElem(tokens, *tokens_pos);
+    LangNode_t *return_node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (!IsThatOperation(return_node, kOperationRead)) {
         return NULL;
     }
-    (*tokens_pos)++;
+    (*lang_info->tokens_pos)++; 
 
-    DifNode_t *tok = GetStackElem(tokens, *tokens_pos);
+    LangNode_t *tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (!IsThatOperation(tok, kOperationParOpen)) {
-        *tokens_pos = save_pos;
+        (*lang_info->tokens_pos) = save_pos;
         return NULL;
     }
-    (*tokens_pos)++;
+    (*lang_info->tokens_pos)++; 
     
-    DifNode_t *node = GetString(root, tokens, arr, tokens_pos);
+    LangNode_t *node = GetString(lang_info);
     if (!node) {
-        *tokens_pos = save_pos;
+        (*lang_info->tokens_pos) = save_pos;
         return NULL;
     }
 
-    tok = GetStackElem(tokens, *tokens_pos);
+    tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (!IsThatOperation(tok, kOperationParClose)) {
-        *tokens_pos = save_pos;
+        (*lang_info->tokens_pos) = save_pos;
         return NULL;
     }
-    (*tokens_pos)++;
+    (*lang_info->tokens_pos)++; 
 
-    tok = GetStackElem(tokens, *tokens_pos);
+    tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (!IsThatOperation(tok, kOperationThen)) {
-        *tokens_pos = save_pos;
+        (*lang_info->tokens_pos) = save_pos;
         return NULL;
     }
-    (*tokens_pos)++;
+    (*lang_info->tokens_pos)++; 
 
     return NEWOP(kOperationRead, node, NULL);
 }
 
-DifNode_t *GetOp(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(tokens_pos);
+LangNode_t *GetOp(Language *lang_info) {
+    assert(lang_info);
 
-    DifNode_t *stmt = NULL;
-    size_t save_pos = *tokens_pos;
+    LangNode_t *stmt = NULL;
+    size_t save_pos = (*lang_info->tokens_pos);
 
-    TRY_PARSE_RETURN(stmt, GetReturn(root, tokens, arr, tokens_pos));
-    TRY_PARSE_RETURN(stmt, GetPrintf(root, tokens, arr, tokens_pos));
-    TRY_PARSE_RETURN(stmt, GetScanf(root, tokens, arr, tokens_pos));
-    TRY_PARSE_RETURN(stmt, GetWhile (root, tokens, arr, tokens_pos));
-    TRY_PARSE_RETURN(stmt, GetIf    (root, tokens, arr, tokens_pos));
-    TRY_PARSE_RETURN(stmt, GetFunctionCall(root, tokens, arr, tokens_pos));
+    TRY_PARSE_RETURN(stmt, GetReturn(lang_info));
+    TRY_PARSE_RETURN(stmt, GetPrintf(lang_info));
+    TRY_PARSE_RETURN(stmt, GetScanf(lang_info));
+    TRY_PARSE_RETURN(stmt, GetWhile (lang_info));
+    TRY_PARSE_RETURN(stmt, GetIf    (lang_info));
+    TRY_PARSE_RETURN(stmt, GetFunctionCall(lang_info));
 
-    DifNode_t *seq = NULL;
+    LangNode_t *seq = NULL;
 
     while (1) {
-        save_pos = *tokens_pos;
-        stmt = GetAssignment(root, tokens, arr, tokens_pos);
+        save_pos = (*lang_info->tokens_pos);
+        stmt = GetAssignment(lang_info);
         if (!stmt) {
-            *tokens_pos = save_pos;
+            (*lang_info->tokens_pos) = save_pos;
             break;
         }
 
@@ -244,13 +231,13 @@ DifNode_t *GetOp(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *to
         } else {
             seq = NEWOP(kOperationThen, seq, stmt);
         }
-        DifNode_t *tok = GetStackElem(tokens, *tokens_pos);
+        LangNode_t *tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
         if (!IsThatOperation(tok, kOperationThen)) {
             break;
         }
 
-        (*tokens_pos)++;
-    }
+        (*lang_info->tokens_pos)++; 
+    }   
 
     return seq;
 }
@@ -262,58 +249,53 @@ DifNode_t *GetOp(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *to
 #define DIV_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationDiv}, left, right)
 #define POW_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationPow}, left, right)
 
-static DifNode_t *GetPrintf(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos) { //
-    assert(root);
-    assert(tokens);
-    assert(arr);
+static LangNode_t *GetPrintf(Language *lang_info) { //
+    assert(lang_info);
 
-    DifNode_t *print_f = GetStackElem(tokens, *tokens_pos);
+    LangNode_t *print_f = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (IsThatOperation(print_f, kOperationWrite)) {
-        (*tokens_pos)++;
+        (*lang_info->tokens_pos)++; 
 
-        size_t save_pos = *tokens_pos;
-        DifNode_t *par = NULL;
+        size_t save_pos = *(lang_info->tokens_pos);
+        LangNode_t *par = NULL;
         CHECK_EXPECTED_TOKEN(par, IsThatOperation(par, kOperationParOpen),);
 
-        DifNode_t *printf_arg = GetStackElem(tokens, *tokens_pos);
+        LangNode_t *printf_arg = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
         if (!(printf_arg && (printf_arg->type == kVariable || printf_arg->type == kNumber))) { // сделать и для функций
             fprintf(stderr, "NO AVAILABLE ARGUMENT FOR PRINTF WRITTEN.\n");
             return NULL; //
         }
-        (*tokens_pos)++;
+        (*lang_info->tokens_pos)++; 
 
         CHECK_EXPECTED_TOKEN(par, IsThatOperation(par, kOperationParClose), );
 
         print_f->left = printf_arg;
         printf_arg->parent = print_f;
-        (*tokens_pos)++;
+        (*lang_info->tokens_pos)++; 
         return print_f;
     } else {
         return NULL;
     }
 }
 
-static DifNode_t *GetFunctionDeclare(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(tokens_pos);
+static LangNode_t *GetFunctionDeclare(Language *lang_info) {
+    assert(lang_info);
     
-    size_t save_pos = *tokens_pos;
-    DifNode_t *token = NULL, *func_name = NULL;
+    size_t save_pos = *(lang_info->tokens_pos);
+    LangNode_t *token = NULL, *func_name = NULL;
     
     CHECK_EXPECTED_TOKEN(token, IsThatOperation(token, kOperationFunction), );
     CHECK_EXPECTED_TOKEN(func_name, func_name && func_name->type == kVariable, );
     CHECK_EXPECTED_TOKEN(token, IsThatOperation(token, kOperationParOpen), );
     
-    arr->var_array[func_name->value.pos].type = kVarFunction;
+    lang_info->arr->var_array[func_name->value.pos].type = kVarFunction;
     size_t cnt = 0;
-    DifNode_t *args_root = ParseFunctionArgs(root, tokens, tokens_pos, &cnt);
-    if (arr->var_array[func_name->value.pos].variable_value != (int)cnt) {
-        if (arr->var_array[func_name->value.pos].variable_value == POISON) arr->var_array[func_name->value.pos].variable_value = (int)cnt;
+    LangNode_t *args_root = ParseFunctionArgs(lang_info, &cnt);
+    if (lang_info->arr->var_array[func_name->value.pos].variable_value != (int)cnt) {
+        if (lang_info->arr->var_array[func_name->value.pos].variable_value == POISON) lang_info->arr->var_array[func_name->value.pos].variable_value = (int)cnt;
         else {
             fprintf(stderr, "Number of function arguments is not the same as in declaration: had to be %d, got %zu\n", 
-                arr->var_array[func_name->value.pos].variable_value, cnt);
+                lang_info->arr->var_array[func_name->value.pos].variable_value, cnt);
             return NULL;
         }
     }
@@ -321,60 +303,57 @@ static DifNode_t *GetFunctionDeclare(DifRoot *root, Stack_Info *tokens, Variable
     CHECK_EXPECTED_TOKEN(token, IsThatOperation(token, kOperationBraceOpen),
         fprintf(stderr, "%s", "SYNTAX_ERROR_FUNC: expected '{' after function declaration\n"));
     
-    DifNode_t *body_root = ParseFunctionBody(root, tokens, arr, tokens_pos);
+    LangNode_t *body_root = ParseFunctionBody(lang_info);
     
     CHECK_EXPECTED_TOKEN(token, IsThatOperation(token, kOperationBraceClose),
-        fprintf(stderr, "SYNTAX_ERROR_FUNC: expected '}' at end of function body %zu.\n", *tokens_pos));
+        fprintf(stderr, "SYNTAX_ERROR_FUNC: expected '}' at end of function body %zu.\n", *(lang_info->tokens_pos)));
     
     return NEWOP(kOperationFunction, func_name, NEWOP(kOperationThen, args_root, body_root));
 }
 
-static DifNode_t *GetFunctionCall(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(tokens_pos);
+static LangNode_t *GetFunctionCall(Language *lang_info) {
+    assert(lang_info);
 
-    size_t save_pos = *tokens_pos;
-    DifNode_t *name_token = GetStackElem(tokens, *tokens_pos);
+    size_t save_pos = *lang_info->tokens_pos;
+    LangNode_t *name_token = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (!name_token || name_token->type != kVariable) {
-        *tokens_pos = save_pos;
+        *lang_info->tokens_pos= save_pos;
         return NULL;
     }
-    (*tokens_pos)++;
+    (*lang_info->tokens_pos)++; 
 
-    DifNode_t *par_open = GetStackElem(tokens, *tokens_pos);
+    LangNode_t *par_open = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (!IsThatOperation(par_open, kOperationParOpen)) {
-        *tokens_pos = save_pos;
+        *lang_info->tokens_pos= save_pos;
         return NULL;
     }
-    (*tokens_pos)++;
+    (*lang_info->tokens_pos)++; 
 
-    DifNode_t *args_root = NULL;
-    DifNode_t *rightmost = NULL;
+    LangNode_t *args_root = NULL;
+    LangNode_t *rightmost = NULL;
 
     while (true) {
-        DifNode_t *next_tok = GetStackElem(tokens, *tokens_pos);
+        LangNode_t *next_tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
         if (!next_tok) {
             fprintf(stderr, "SYNTAX_ERROR: unexpected end of tokens in call args\n");
-            *tokens_pos = save_pos;
+            *lang_info->tokens_pos = save_pos;
             return NULL;
         }
 
         if (IsThatOperation(next_tok, kOperationParClose)) {
-            (*tokens_pos)++;
+            (*(lang_info->tokens_pos))++;
             break;
         }
 
         if (IsThatOperation(next_tok, kOperationComma)) {
-            (*tokens_pos)++;
+            (*(lang_info->tokens_pos))++;
             continue;
         }
 
-        DifNode_t *arg = GetExpression(root, tokens, arr, tokens_pos);
+        LangNode_t *arg = GetExpression(lang_info);
         if (!arg) {
             fprintf(stderr, "SYNTAX_ERROR: expected argument in function call\n");
-            *tokens_pos = save_pos;
+            *lang_info->tokens_pos = save_pos;
             return NULL;
         }
         
@@ -383,7 +362,7 @@ static DifNode_t *GetFunctionCall(DifRoot *root, Stack_Info *tokens, VariableArr
         if (!args_root) {
             args_root = arg;
         } else {
-            DifNode_t *comma_node = NEWOP(kOperationComma, rightmost ? rightmost->right : args_root, arg);
+            LangNode_t *comma_node = NEWOP(kOperationComma, rightmost ? rightmost->right : args_root, arg);
             if (!rightmost) {
                 args_root = comma_node;
             } else {
@@ -398,56 +377,50 @@ static DifNode_t *GetFunctionCall(DifRoot *root, Stack_Info *tokens, VariableArr
 }
 
 
-static DifNode_t *GetExpression(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(tokens_pos);
+static LangNode_t *GetExpression(Language *lang_info) {
+    assert(lang_info);
 
-    DifNode_t *val = GetTerm(root, tokens, arr, tokens_pos);
+    LangNode_t *val = GetTerm(lang_info);
     if (!val) return NULL;
 
-    root->size++;
-    DifNode_t *node = GetStackElem(tokens, *tokens_pos);
+    lang_info->root->size++;
+    LangNode_t *node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
 
     while (IsThatOperation(node, kOperationAdd) || IsThatOperation(node, kOperationSub)) {
-        (*tokens_pos)++;
+        (*lang_info->tokens_pos)++;
 
-        DifNode_t *val2 = GetTerm(root, tokens, arr, tokens_pos);
+        LangNode_t *val2 = GetTerm(lang_info);
         if (!val2) return val;
 
-        root->size++;
+        lang_info->root->size++;
         node->left  = val;
         node->right = val2;
         val->parent  = node;
         val2->parent = node;
         val = node;
 
-        node = GetStackElem(tokens, *tokens_pos);
+        node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     }
 
     return val;
 }
 
-static DifNode_t *GetTerm(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(tokens_pos);
+static LangNode_t *GetTerm(Language *lang_info) {
+    assert(lang_info);
 
-    DifNode_t *left = GetPower(root, tokens, arr, tokens_pos);
+    LangNode_t *left = GetPower(lang_info);
     if (!left) return NULL;
 
-    root->size++;
-    DifNode_t *node = GetStackElem(tokens, *tokens_pos);
+    lang_info->root->size++;
+    LangNode_t *node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
 
     while (IsThatOperation(node, kOperationMul) || IsThatOperation(node, kOperationDiv)) {
-        (*tokens_pos)++;
+        (*lang_info->tokens_pos)++; 
 
-        DifNode_t *right = GetTerm(root, tokens, arr, tokens_pos);
+        LangNode_t *right = GetTerm(lang_info);
         if (!right) return left;
 
-        root->size++;
+        if (lang_info &&  lang_info->root->size++);
 
         node->left  = left;
         node->right = right;
@@ -456,34 +429,31 @@ static DifNode_t *GetTerm(DifRoot *root, Stack_Info *tokens, VariableArr *arr, s
 
         left = node;
 
-        node = GetStackElem(tokens, *tokens_pos);
+        node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     }
 
     return left;
 }
 
-static DifNode_t *GetPrimary(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(tokens_pos);
+static LangNode_t *GetPrimary(Language *lang_info) {
+    assert(lang_info);
 
-    DifNode_t *node = GetStackElem(tokens, *tokens_pos);
+    LangNode_t *node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (!node) {
         return NULL;
     }
 
     if (IsThatOperation(node, kOperationParOpen)) {
-        (*tokens_pos)++;
+        (*lang_info->tokens_pos)++; 
 
-        DifNode_t *val = GetExpression(root, tokens, arr, tokens_pos);
+        LangNode_t *val = GetExpression(lang_info);
         if (!val) {
             return NULL;
         }
 
-        node = GetStackElem(tokens, *tokens_pos);
+        node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
         if (IsThatOperation(node, kOperationParClose)) {
-            (*tokens_pos)++;
+            (*lang_info->tokens_pos)++; 
         } else {
             fprintf(stderr, "SYNTAX_ERROR_P: expected ')'\n");
             return NULL;
@@ -493,54 +463,51 @@ static DifNode_t *GetPrimary(DifRoot *root, Stack_Info *tokens, VariableArr *arr
     }
 
     
-    DifNode_t *value_number = GetNumber(root, tokens, tokens_pos);
+    LangNode_t *value_number = GetNumber(lang_info);
     if (value_number) {
         return value_number;
     }
 
-    value_number = GetFunctionCall(root, tokens, arr, tokens_pos);
+    value_number = GetFunctionCall(lang_info);
     if (value_number) {
         return value_number;
     }
 
-    return GetString(root, tokens, arr, tokens_pos);
+    return GetString(lang_info);
 }
 
 
-DifNode_t *GetAssignment(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(tokens_pos);
+LangNode_t *GetAssignment(Language *lang_info) {
+    assert(lang_info);
 
-    size_t save_pos = *tokens_pos;
+    size_t save_pos = *lang_info->tokens_pos;
     
-    DifNode_t *maybe_var = GetString(root, tokens, arr, tokens_pos);
+    LangNode_t *maybe_var = GetString(lang_info);
     if (!maybe_var) {
-        *tokens_pos = save_pos;
+        *lang_info->tokens_pos = save_pos;
         return NULL;
     }
 
-    DifNode_t *assign_op = GetStackElem(tokens, *tokens_pos);
+    LangNode_t *assign_op = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (!assign_op || assign_op->type != kOperation || assign_op->value.operation != kOperationIs) {
-        *tokens_pos = save_pos;
+        (*lang_info->tokens_pos) = save_pos;
         return NULL;
     }
-    (*tokens_pos)++;
-    DifNode_t *value = NULL;
+    (*lang_info->tokens_pos)++;
+    LangNode_t *value = NULL;
 
-    DifNode_t *tok = GetStackElem(tokens, *tokens_pos);
-    DifNode_t *next = GetStackElem(tokens, *tokens_pos + 1);
+    LangNode_t *tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
+    LangNode_t *next = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos) + 1);
     if (tok && IsThatOperation(next, kOperationParOpen)) {
-        value = GetFunctionCall(root, tokens, arr, tokens_pos);
+        value = GetFunctionCall(lang_info);
     }
     else {
-        value = GetExpression(root, tokens, arr, tokens_pos);
+        value = GetExpression(lang_info);
     }
     
     if (!value) {
         fprintf(stderr, "SYNTAX_ERROR_ASSIGNMENT: no body of assignment\n");
-        *tokens_pos = save_pos;
+        (*lang_info->tokens_pos) = save_pos;
         return NULL;
     }
 
@@ -549,38 +516,35 @@ DifNode_t *GetAssignment(DifRoot *root, Stack_Info *tokens, VariableArr *arr, si
     maybe_var->parent = assign_op;
     value->parent = assign_op;
 
-    if (arr->var_array[maybe_var->value.pos].variable_value == POISON && 
+    if (lang_info->arr->var_array[maybe_var->value.pos].variable_value == POISON && 
         value->type == kNumber) {
-        arr->var_array[maybe_var->value.pos].variable_value = value->value.number;
+        lang_info->arr->var_array[maybe_var->value.pos].variable_value = value->value.number;
     }
     
     return NEWOP(kOperationThen, assign_op, NULL);
 }
 
-static DifNode_t *GetIf(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(tokens_pos);
+static LangNode_t *GetIf(Language *lang_info) {
+    assert(lang_info);
 
-    size_t save_pos = *tokens_pos;
-    DifNode_t *tok = NULL;
+    size_t save_pos = *lang_info->tokens_pos;
+    LangNode_t *tok = NULL;
 
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationIf),);
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationParOpen),
         fprintf(stderr, "%s", "SYNTAX_ERROR_IF: expected '('\n"));
     
-    DifNode_t *cond = GetExpression(root, tokens, arr, tokens_pos);
+    LangNode_t *cond = GetExpression(lang_info);
     if (!cond) {
         fprintf(stderr, "SYNTAX_ERROR_IF: expected condition\n");
         return NULL;
     }
 
-    DifNode_t *sign = GetStackElem(tokens, *tokens_pos);
+    LangNode_t *sign = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (IsThatOperation(sign, kOperationBE) || IsThatOperation(sign, kOperationB) || IsThatOperation(sign, kOperationAE) 
             || IsThatOperation(sign, kOperationA) || IsThatOperation(sign, kOperationE)) {
-        (*tokens_pos)++;
-        DifNode_t *number = GetExpression(root, tokens, arr, tokens_pos);
+        (*lang_info->tokens_pos)++;
+        LangNode_t *number = GetExpression(lang_info);
         if (!number) {
             fprintf(stderr, "SYNTAX_ERROR_IF: no expression if if written.\n");
         }
@@ -597,16 +561,16 @@ static DifNode_t *GetIf(DifRoot *root, Stack_Info *tokens, VariableArr *arr, siz
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationBraceOpen), 
         fprintf(stderr, "%s", "SYNTAX_ERROR_IF: expected '{'\n"));
 
-    DifNode_t *first = GetOp(root, tokens, arr, tokens_pos);
+    LangNode_t *first = GetOp(lang_info);
     if (!first) {
         fprintf(stderr, "SYNTAX_ERROR_IF: empty if-body\n");
         return NULL;
     }
 
-    DifNode_t *last = first;
+    LangNode_t *last = first;
 
     while (true) {
-        DifNode_t *stmt = GetOp(root, tokens, arr, tokens_pos);
+        LangNode_t *stmt = GetOp(lang_info);
         if (!stmt) break;
         
         last = NEWOP(kOperationThen, last, stmt);
@@ -615,9 +579,9 @@ static DifNode_t *GetIf(DifRoot *root, Stack_Info *tokens, VariableArr *arr, siz
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationBraceClose), 
         fprintf(stderr, "%s", "SYNTAX_ERROR_IF: expected '}'\n"));
 
-    DifNode_t *if_node = NEWOP(kOperationIf, cond, last);
+    LangNode_t *if_node = NEWOP(kOperationIf, cond, last);
 
-    DifNode_t *else_node = GetElse(root, tokens, arr, tokens_pos, last);
+    LangNode_t *else_node = GetElse(lang_info, last);
     if (else_node) {
         if_node->right = else_node;
         else_node->parent = if_node;
@@ -626,21 +590,18 @@ static DifNode_t *GetIf(DifRoot *root, Stack_Info *tokens, VariableArr *arr, siz
     return if_node;
 }
 
-static DifNode_t *GetElse(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos, DifNode_t *if_node) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(tokens_pos);
+static LangNode_t *GetElse(Language *lang_info, LangNode_t *if_node) {
+    assert(lang_info);
     assert(if_node);
 
-    size_t save_pos = *tokens_pos;
-    DifNode_t *node = NULL, *tok = NULL, *last = NULL;
+    size_t save_pos = *lang_info->tokens_pos;
+    LangNode_t *node = NULL, *tok = NULL, *last = NULL;
 
     CHECK_EXPECTED_TOKEN(node, IsThatOperation(node, kOperationElse), );
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationBraceOpen), );
 
     while (true) {
-        DifNode_t *stmt = GetOp(root, tokens, arr, tokens_pos);
+        LangNode_t *stmt = GetOp(lang_info);
         if (!stmt) break;
         
         if (last) last = NEWOP(kOperationThen, last, stmt);
@@ -654,26 +615,23 @@ static DifNode_t *GetElse(DifRoot *root, Stack_Info *tokens, VariableArr *arr, s
     node->right = last;
     if_node->parent = node;
     last->parent = node;
-    root->size++;
+    lang_info->root->size++;
 
     return node;
 }
 
-static DifNode_t *GetWhile(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(tokens_pos);
+static LangNode_t *GetWhile(Language *lang_info) {
+    assert(lang_info);
 
-    size_t save_pos = *tokens_pos;
-    DifNode_t *tok = NULL;
+    size_t save_pos = *(lang_info->tokens_pos);
+    LangNode_t *tok = NULL;
 
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationWhile), );
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationParOpen), );
 
-    DifNode_t *condition_node = GetExpression(root, tokens, arr, tokens_pos);
+    LangNode_t *condition_node = GetExpression(lang_info);
     if (!condition_node) {
-        *tokens_pos = save_pos;
+        *(lang_info->tokens_pos)= save_pos;
         return NULL;
     }
 
@@ -682,16 +640,16 @@ static DifNode_t *GetWhile(DifRoot *root, Stack_Info *tokens, VariableArr *arr, 
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationBraceOpen),
         fprintf(stderr, "%s", "SYNTAX_ERROR_WHILE: expected '{'\n"));
 
-    DifNode_t *body_node = ParseStatementSequence(root, tokens, arr, tokens_pos);
+    LangNode_t *body_node = ParseStatementSequence(lang_info);
     if (!body_node) {
-        *tokens_pos = save_pos;
+        *(lang_info->tokens_pos) = save_pos;
         return NULL;
     }
 
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationBraceClose),
         fprintf(stderr, "%s", "SYNTAX_ERROR_WHILE: expected '}'\n"));
 
-    DifNode_t *while_node = GetStackElem(tokens, *tokens_pos - 1);
+    LangNode_t *while_node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos) - 1);
     while_node->type = kOperation;
     while_node->value.operation = kOperationWhile;
     while_node->left  = condition_node;
@@ -702,21 +660,18 @@ static DifNode_t *GetWhile(DifRoot *root, Stack_Info *tokens, VariableArr *arr, 
     return while_node;
 }
 
-DifNode_t *GetPower(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(tokens_pos);
+LangNode_t *GetPower(Language *lang_info) {
+    assert(lang_info);
 
-    DifNode_t *val = GetPrimary(root, tokens, arr, tokens_pos);
+    LangNode_t *val = GetPrimary(lang_info);
     if (!val) {
         return NULL;
     }
 
-    DifNode_t *node = GetStackElem(tokens, *tokens_pos);
+    LangNode_t *node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     while (IsThatOperation(node, kOperationPow)) {
-        (*tokens_pos)++;
-        DifNode_t *val2 = GetPower(root, tokens, arr, tokens_pos);
+        (*(lang_info->tokens_pos))++;
+        LangNode_t *val2 = GetPower(lang_info);
         if (!val2) {
             return NULL;
         }
@@ -729,36 +684,31 @@ DifNode_t *GetPower(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t 
         val2->parent = node;
         val = node;
 
-        node = GetStackElem(tokens, *tokens_pos);
+        node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     }
 
     return val;
 }
 
-static DifNode_t *GetNumber(DifRoot *root, Stack_Info *tokens, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(tokens_pos);
+static LangNode_t *GetNumber(Language *lang_info) {
+    assert(lang_info);
 
-    DifNode_t *node = GetStackElem(tokens, *tokens_pos);
+    LangNode_t *node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
 
     if (node && node->type == kNumber) {
-        (*tokens_pos)++;
+        (*(lang_info->tokens_pos))++;
         return node;
     }
 
     return NULL;
 }
 
-static DifNode_t *GetString(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(tokens_pos);
+static LangNode_t *GetString(Language *lang_info) {
+    assert(lang_info);
 
-    DifNode_t *node = GetStackElem(tokens, *tokens_pos);
+    LangNode_t *node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (node && node->type == kVariable) {
-        (*tokens_pos)++;
+        (*(lang_info->tokens_pos))++;
     } else {
         return NULL;
     }
@@ -773,35 +723,33 @@ static DifNode_t *GetString(DifRoot *root, Stack_Info *tokens, VariableArr *arr,
 #undef DIV_
 #undef POW_
 
-static DifNode_t *ParseFunctionArgs(DifRoot *root, Stack_Info *tokens, size_t *tokens_pos, size_t *cnt) {
-    assert(root);
-    assert(tokens);
-    assert(tokens_pos);
+static LangNode_t *ParseFunctionArgs(Language *lang_info, size_t *cnt) {
+    assert(lang_info);
     assert(cnt);
 
-    DifNode_t *args_root = NULL, *rightmost = NULL;
+    LangNode_t *args_root = NULL, *rightmost = NULL;
     
     while (true) {
-        DifNode_t *token = GetStackElem(tokens, *tokens_pos);
+        LangNode_t *token = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
         if (!token || IsThatOperation(token, kOperationParClose)) {
-            if (IsThatOperation(token, kOperationParClose)) (*tokens_pos)++;
+            if (IsThatOperation(token, kOperationParClose)) (*(lang_info->tokens_pos))++;
             break;
         }
         
         if (IsThatOperation(token, kOperationComma)) {
-            (*tokens_pos)++;
+            (*(lang_info->tokens_pos))++;
             continue;
         }
         
         if (token->type == kVariable || token->type == kNumber) {
-            DifNode_t *arg = token;
-            (*tokens_pos)++;
+            LangNode_t *arg = token;
+            (*(lang_info->tokens_pos))++;
             (*cnt)++;
             
             if (!args_root) {
                 args_root = arg;
             } else {
-                DifNode_t *comma = NEWOP(kOperationComma, NULL, NULL);
+                LangNode_t *comma = NEWOP(kOperationComma, NULL, NULL);
                 if (!rightmost) {
                     comma->left = args_root;
                     comma->right = arg;
@@ -819,16 +767,13 @@ static DifNode_t *ParseFunctionArgs(DifRoot *root, Stack_Info *tokens, size_t *t
     return args_root;
 }
 
-static DifNode_t *ParseFunctionBody(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(tokens_pos);
+static LangNode_t *ParseFunctionBody(Language *lang_info) {
+    assert(lang_info);
 
-    DifNode_t *body_root = NULL;
+    LangNode_t *body_root = NULL;
     
     while (true) {
-        DifNode_t *stmt = GetOp(root, tokens, arr, tokens_pos);
+        LangNode_t *stmt = GetOp(lang_info);
         if (!stmt) {
             break;
         }
@@ -838,44 +783,41 @@ static DifNode_t *ParseFunctionBody(DifRoot *root, Stack_Info *tokens, VariableA
     return body_root;
 }
 
-static DifNode_t *ParseStatementSequence(DifRoot *root, Stack_Info *tokens, VariableArr *arr, size_t *tokens_pos) {
-    assert(root);
-    assert(tokens);
-    assert(arr);
-    assert(tokens_pos);
+static LangNode_t *ParseStatementSequence(Language *lang_info) {
+    assert(lang_info);
 
-    DifNode_t *first_stmt = GetOp(root, tokens, arr, tokens_pos);
+    LangNode_t *first_stmt = GetOp(lang_info);
     if (!first_stmt) {
         fprintf(stderr, "SYNTAX_ERROR_WHILE: expected statements in body\n");
         return NULL;
     }
 
-    DifNode_t *last_stmt = first_stmt;
-    DifNode_t *tok = GetStackElem(tokens, *tokens_pos);
+    LangNode_t *last_stmt = first_stmt;
+    LangNode_t *tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
 
     while (IsThatOperation(tok, kOperationThen)) {
-        (*tokens_pos)++;
+        *(lang_info->tokens_pos)++;
 
-        DifNode_t *next_stmt = GetOp(root, tokens, arr, tokens_pos);
+        LangNode_t *next_stmt = GetOp(lang_info);
         if (!next_stmt) {
             fprintf(stderr, "SYNTAX_ERROR_WHILE: expected statement after ';'\n");
             return NULL;
         }
 
-        DifNode_t *then_node = GetStackElem(tokens, *tokens_pos - 1);
+        LangNode_t *then_node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos) - 1);
         then_node->left  = last_stmt;
         then_node->right = next_stmt;
         last_stmt->parent = then_node;
         next_stmt->parent = then_node;
 
         last_stmt = then_node;
-        tok = GetStackElem(tokens, *tokens_pos);
+        tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     }
 
     return last_stmt;
 }
 
-static bool IsThatOperation(DifNode_t *node, OperationTypes type) {
+static bool IsThatOperation(LangNode_t *node, OperationTypes type) {
     if (node && node->type == kOperation && node->value.operation == type) {
         return true;
     }

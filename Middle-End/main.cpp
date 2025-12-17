@@ -1,13 +1,13 @@
-#include "Rules.h"
+#include "Front-End/Rules.h"
 #include "Structs.h"
 #include "Enums.h"
-#include "LanguageFunctions.h"
-#include "DoTex.h"
+#include "Front-End/LanguageFunctions.h"
+#include "TreeToCode.h"
 #include "DoGraph.h"
 
 int main(void) {
-    DifRoot root = {};
-    DifRootCtor(&root);
+    LangRoot root = {};
+    LangRootCtor(&root);
 
     VariableArr Variable_Array = {};
     DifErrors err = kSuccess;
@@ -20,15 +20,15 @@ int main(void) {
     FILE_OPEN_AND_CHECK(ast_file_read, "ast.txt", "r");
     FileInfo info = {};
     DoBufRead(ast_file_read, "ast.txt", &info);
-    DifRoot root1 = {};
-    DifRootCtor(&root1);
-    DifNode_t new_node = {};
-    DifNode_t *new_node_adr = &new_node;
+    LangRoot root1 = {};
+    LangRootCtor(&root1);
+    LangNode_t new_node = {};
+    LangNode_t *new_node_adr = &new_node;
     size_t pos = 0;
     ParseNodeFromString(info.buf_ptr, &pos, root.root, &new_node_adr, &Variable_Array);
     root1.root = new_node_adr;
     dump_info.tree = &root1;
-    DoTreeInGraphviz(root1.root, &dump_info, new_node_adr);
+    DoTreeInGraphviz(root1.root, &dump_info, &Variable_Array);
     
     DtorVariableArray(&Variable_Array);
     fclose(out);

@@ -10,12 +10,12 @@
 #define FILE_OUT "output.txt"
 #define MAX_COMMAND_SIZE 50
 
-static const char *PrintOperationType(const DifNode_t *node);
-static GraphOperation PrintExpressionType(const DifNode_t *node);
+static const char *PrintOperationType(const LangNode_t *node);
+static GraphOperation PrintExpressionType(const LangNode_t *node);
 static void DoSnprintf(DumpInfo *Info);
-static void PrintDotNode(FILE *file, const DifNode_t *node, bool flag, VariableArr *arr);
+static void PrintDotNode(FILE *file, const LangNode_t *node, bool flag, VariableArr *arr);
 
-void DoTreeInGraphviz(const DifNode_t *node, DumpInfo *Info, VariableArr *arr) {
+void DoTreeInGraphviz(const LangNode_t *node, DumpInfo *Info, VariableArr *arr) {
     assert(node);
     assert(Info);
     assert(arr);
@@ -49,7 +49,7 @@ void DoTreeInGraphviz(const DifNode_t *node, DumpInfo *Info, VariableArr *arr) {
     DoSnprintf(Info);
 }
 
-static void PrintDotNode(FILE *file, const DifNode_t *node, bool flag, VariableArr *arr) {
+static void PrintDotNode(FILE *file, const LangNode_t *node, bool flag, VariableArr *arr) {
     assert(file);
     assert(node);
     assert(arr);
@@ -98,7 +98,7 @@ static void DoSnprintf(DumpInfo *Info) {
     system(cmd);
 }
 
-static const char *PrintOperationType(const DifNode_t *node) {
+static const char *PrintOperationType(const LangNode_t *node) {
     assert(node);
 
     switch(node->type) {
@@ -113,7 +113,7 @@ static const char *PrintOperationType(const DifNode_t *node) {
     }
 }
 
-static GraphOperation PrintExpressionType(const DifNode_t *node) {
+static GraphOperation PrintExpressionType(const LangNode_t *node) {
     assert(node);
 
     switch (node->value.operation) {

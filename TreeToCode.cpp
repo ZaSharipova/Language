@@ -7,12 +7,12 @@
 
 #include "Enums.h"
 #include "Structs.h"
-#include "Rules.h"
-#include "LanguageFunctions.h"
+#include "Front-End/Rules.h"
+#include "Front-End/LanguageFunctions.h"
 
-static DifErrors CheckType(Dif_t title, DifNode_t *node, VariableArr *arr);
+static DifErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *arr);
 static DifErrors ParseTitle(const char *buffer, size_t *pos, char **out_title);
-static DifErrors ParseMaybeNil(const char *buffer, size_t *pos, DifNode_t **out);
+static DifErrors ParseMaybeNil(const char *buffer, size_t *pos, LangNode_t **out);
 static DifErrors ExpectClosingParen(const char *buffer, size_t *pos);
 
 static void SkipSpaces(const char *buf, size_t *pos);
@@ -74,7 +74,7 @@ static const OpEntry OP_TABLE[] = {
 };
 static const size_t OP_TABLE_SIZE = sizeof(OP_TABLE) / sizeof(OP_TABLE[0]);
 
-DifErrors ParseNodeFromString(const char *buffer, size_t *pos, DifNode_t *parent, DifNode_t **node_to_add, VariableArr *arr) {
+DifErrors ParseNodeFromString(const char *buffer, size_t *pos, LangNode_t *parent, LangNode_t **node_to_add, VariableArr *arr) {
     assert(buffer);
     assert(pos);
     assert(node_to_add);
@@ -90,7 +90,7 @@ DifErrors ParseNodeFromString(const char *buffer, size_t *pos, DifNode_t *parent
     if (err != kSuccess)
         return err;
 
-    DifNode_t *node = NULL;
+    LangNode_t *node = NULL;
     NodeCtor(&node, NULL);
     node->parent = parent;
 
@@ -99,11 +99,11 @@ DifErrors ParseNodeFromString(const char *buffer, size_t *pos, DifNode_t *parent
     if (err != kSuccess)
         return err;
 
-    DifNode_t *left = NULL;
+    LangNode_t *left = NULL;
     CHECK_ERROR_RETURN(ParseNodeFromString(buffer, pos, node, &left, arr));
     node->left = left;
 
-    DifNode_t *right = NULL;
+    LangNode_t *right = NULL;
     CHECK_ERROR_RETURN(ParseNodeFromString(buffer, pos, node, &right, arr));
     node->right = right;
 
@@ -113,7 +113,7 @@ DifErrors ParseNodeFromString(const char *buffer, size_t *pos, DifNode_t *parent
     return kSuccess;
 }
 
-static DifErrors CheckType(Dif_t title, DifNode_t *node, VariableArr *arr) {
+static DifErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *arr) {
     assert(node);
     assert(arr);
     
@@ -165,14 +165,14 @@ static void PrintIndent(FILE *out, int indent) {
         fputc('\t', out);
 }
 
-static void GenExpr(DifNode_t *node, FILE *out, VariableArr *arr);
+static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr);
 
-static void GenThenChain(DifNode_t *node, FILE *out, VariableArr *arr, int indent) {
+static void GenThenChain(LangNode_t *node, FILE *out, VariableArr *arr, int indent) {
     assert(node);
     assert(out);
     assert(arr);
 
-    DifNode_t *stmt = node;
+    LangNode_t *stmt = node;
     while (stmt && stmt->type == kOperation && stmt->value.operation == kOperationThen) {
         PrintIndent(out, indent);
         GenExpr(stmt->left, out, arr);
@@ -186,7 +186,7 @@ static void GenThenChain(DifNode_t *node, FILE *out, VariableArr *arr, int inden
     }
 }
 
-static void GenIf(DifNode_t *node, FILE *out, VariableArr *arr, int indent) {
+static void GenIf(LangNode_t *node, FILE *out, VariableArr *arr, int indent) {
     assert(node);
     assert(out);
     assert(arr);
@@ -201,7 +201,7 @@ static void GenIf(DifNode_t *node, FILE *out, VariableArr *arr, int indent) {
     fprintf(out, "}");
 }
 
-static void GenWhile(DifNode_t *node, FILE *out, VariableArr *arr, int indent) {
+static void GenWhile(LangNode_t *node, FILE *out, VariableArr *arr, int indent) {
     PrintIndent(out, indent);
     fprintf(out, "while (");
     GenExpr(node->left, out, arr);
@@ -212,11 +212,11 @@ static void GenWhile(DifNode_t *node, FILE *out, VariableArr *arr, int indent) {
     fprintf(out, "}");
 }
 
-static void GenFunction(DifNode_t *node, FILE *out, VariableArr *arr, int indent) {
-    DifNode_t *name = node->left;
-    DifNode_t *pair = node->right;
-    DifNode_t *args = NULL;
-    DifNode_t *body = NULL;
+static void GenFunction(LangNode_t *node, FILE *out, VariableArr *arr, int indent) {
+    LangNode_t *name = node->left;
+    LangNode_t *pair = node->right;
+    LangNode_t *args = NULL;
+    LangNode_t *body = NULL;
 
     if (pair &&
         pair->type == kOperation &&
@@ -241,7 +241,7 @@ static void GenFunction(DifNode_t *node, FILE *out, VariableArr *arr, int indent
     fprintf(out, "}");
 }
 
-static void GenExpr(DifNode_t *node, FILE *out, VariableArr *arr) {
+static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr) {
     if (!node) return;
 
     switch (node->type) {
@@ -311,7 +311,7 @@ static void GenExpr(DifNode_t *node, FILE *out, VariableArr *arr) {
     }
 }
 
-void GenerateCodeFromAST(DifNode_t *node, FILE *out, VariableArr *arr, int indent) {
+void GenerateCodeFromAST(LangNode_t *node, FILE *out, VariableArr *arr, int indent) {
     assert(out);
     assert(arr);
     if (!node) return;
@@ -340,7 +340,7 @@ void GenerateCodeFromAST(DifNode_t *node, FILE *out, VariableArr *arr, int inden
     fprintf(out, ";\n");
 }
 
-static DifErrors ParseMaybeNil(const char *buffer, size_t *pos, DifNode_t **out) {
+static DifErrors ParseMaybeNil(const char *buffer, size_t *pos, LangNode_t **out) {
     assert(buffer);
     assert(pos);
     assert(out);

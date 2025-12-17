@@ -4,6 +4,6 @@
 #include "Enums.h"
 #include "Structs.h"
 
-size_t CheckAndReturn(DifRoot *root, const char **string, Stack_Info *tokens, VariableArr *Variable_Array);
+size_t CheckAndReturn(LangRoot *root, const char **string, Stack_Info *tokens, VariableArr *Variable_Array);
 
 #endif // LEXICAL_ANALYSIS_H_

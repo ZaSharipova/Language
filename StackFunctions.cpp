@@ -18,14 +18,14 @@ DifErrors StackCtor(Stack_Info *stk, ssize_t capacity, FILE *open_log_file) {
     stk->size = 0;
     stk->capacity = capacity;
 
-    stk->data = (DifNode_t **) calloc ((size_t)capacity, sizeof(DifNode_t *));
+    stk->data = (LangNode_t **) calloc ((size_t)capacity, sizeof(LangNode_t *));
     if (!stk->data)
         return kNoMemory;
 
     return kSuccess;
 }
 
-DifErrors StackPush(Stack_Info *stk, DifNode_t *value, FILE *open_log_file) {
+DifErrors StackPush(Stack_Info *stk, LangNode_t *value, FILE *open_log_file) {
     assert(stk);
     assert(open_log_file);
 
@@ -37,7 +37,7 @@ DifErrors StackPush(Stack_Info *stk, DifNode_t *value, FILE *open_log_file) {
     return kSuccess;
 }
 
-DifErrors StackPop(Stack_Info *stk, DifNode_t **value, FILE *open_log_file) {
+DifErrors StackPop(Stack_Info *stk, LangNode_t **value, FILE *open_log_file) {
     assert(stk);
     assert(value);
     assert(open_log_file);
@@ -76,7 +76,7 @@ DifErrors StackRealloc(Stack_Info *stk, FILE *open_log_file, Realloc_Mode reallo
     else if (realloc_type == kIncreaseZero)
         stk->capacity = 1;
 
-    DifNode_t **new_data = (DifNode_t **) realloc (stk->data, (size_t)stk->capacity * sizeof(DifNode_t*));
+    LangNode_t **new_data = (LangNode_t **) realloc (stk->data, (size_t)stk->capacity * sizeof(LangNode_t*));
     if (!new_data)
         return kNoMemory;
 
@@ -96,7 +96,7 @@ DifErrors StackDtor(Stack_Info *stk, FILE *open_log_file) {
     return kSuccess;
 }
 
-DifNode_t *GetStackElem(Stack_Info *stk, size_t pos) {
+LangNode_t *GetStackElem(Stack_Info *stk, size_t pos) {
     assert(stk);
 
     if (pos >= (size_t)stk->size) {

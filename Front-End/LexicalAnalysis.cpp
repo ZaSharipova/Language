@@ -1,4 +1,4 @@
-#include "LexicalAnalysis.h"
+#include "Front-End/LexicalAnalysis.h"
 
 #include <stdio.h>
 #include <assert.h>
@@ -8,7 +8,7 @@
 #include "Enums.h"
 #include "Structs.h"
 #include "StackFunctions.h"
-#include "LanguageFunctions.h"
+#include "Front-End/LanguageFunctions.h"
 
 #define IF "if"
 #define ELSE "else"
@@ -21,8 +21,8 @@
 static bool SkipComment(const char **string);
 static void SkipSpaces(const char **string);
 static void SkipEmptyLines(const char **string);
-static bool ParseNumberToken(DifRoot *root, const char **string, Stack_Info *tokens, size_t *cnt);
-static bool ParseStringToken(DifRoot *root, const char **string, Stack_Info *tokens, size_t *cnt, VariableArr *Variable_Array);
+static bool ParseNumberToken(LangRoot *root, const char **string, Stack_Info *tokens, size_t *cnt);
+static bool ParseStringToken(LangRoot *root, const char **string, Stack_Info *tokens, size_t *cnt, VariableArr *Variable_Array);
 
 #define NEWN(num) NewNode(root, kNumber, ((Value){ .number = (num)}), NULL, NULL)
 #define NEWV(name) NewVariable(root, name, Variable_Array)
@@ -44,7 +44,7 @@ static bool ParseStringToken(DifRoot *root, const char **string, Stack_Info *tok
         continue;                                                         \
     }
 
-size_t CheckAndReturn(DifRoot *root, const char **string, Stack_Info *tokens, VariableArr *Variable_Array) {
+size_t CheckAndReturn(LangRoot *root, const char **string, Stack_Info *tokens, VariableArr *Variable_Array) {
     assert(root);
     assert(string);
     assert(tokens);
@@ -168,7 +168,7 @@ static void SkipEmptyLines(const char **string) {
 }
 
 
-static bool ParseNumberToken(DifRoot *root, const char **string, Stack_Info *tokens, size_t *cnt) {
+static bool ParseNumberToken(LangRoot *root, const char **string, Stack_Info *tokens, size_t *cnt) {
     assert(root);
     assert(string);
     assert(tokens);
@@ -202,7 +202,7 @@ static bool ParseNumberToken(DifRoot *root, const char **string, Stack_Info *tok
     return true;
 }
 
-static bool ParseStringToken(DifRoot *root, const char **string, Stack_Info *tokens, size_t *cnt, VariableArr *Variable_Array) {
+static bool ParseStringToken(LangRoot *root, const char **string, Stack_Info *tokens, size_t *cnt, VariableArr *Variable_Array) {
     assert(root);
     assert(string);
     assert(tokens);

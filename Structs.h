@@ -9,7 +9,7 @@
 #define MAX_TEXT_SIZE 120
 #define POISON -666
 
-typedef char * Dif_t;
+typedef char * Lang_t;
 
 struct VariableInfo {
     VariableModes type;
@@ -30,21 +30,21 @@ struct FileInfo {
     size_t filesize;
 };
 
-struct DifNode_t {
+struct LangNode_t {
     DifTypes type;
     union Value value;
-    DifNode_t *parent;
-    DifNode_t *left;
-    DifNode_t *right;
+    LangNode_t *parent;
+    LangNode_t *left;
+    LangNode_t *right;
 };
 
-struct DifRoot {
-    DifNode_t *root;
+struct LangRoot {
+    LangNode_t *root;
     size_t size;
 };
 
 typedef struct DumpInfo {
-    DifRoot *tree;
+    LangRoot *tree;
     const char *filename_to_write_dump;
     FILE *file;
     const char *filename_to_write_graphviz;
@@ -75,23 +75,18 @@ struct GraphOperation {
     const char *color;
 };
 
-struct Forest {
-    size_t size;
-    DifRoot *trees;
-};
-
 struct Stack_Info {
-    DifNode_t **data;
+    LangNode_t **data;
     ssize_t size;
     ssize_t capacity;
 };
 
-struct FuncInfo {
-    char name[32];
-    int ram_base;
-    int param_count;
-    DifNode_t *args;
-    DifNode_t *body;
+
+struct Language {
+    LangRoot *root;
+    Stack_Info *tokens;
+    size_t *tokens_pos;
+    VariableArr *arr;
 };
 
 
