@@ -589,7 +589,6 @@ LangNode_t *GetAssignment(Language *lang_info, LangNode_t *func) {
         value = GetFunctionCall(lang_info);
     }
     else {
-        printf("AAA");
         value = GetExpression(lang_info);
     }
     

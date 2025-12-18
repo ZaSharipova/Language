@@ -98,8 +98,8 @@ void PushParamsToRam(FILE *file, LangNode_t *args_node, VariableArr *arr, int ra
         return;
     }
 
-    if (args_node->left) PushParamsToStack(file, args_node->left, arr, ram_base, param_count);
-    if (args_node->right) PushParamsToStack(file, args_node->right, arr, ram_base, param_count);
+    if (args_node->left) PushParamsToRam(file, args_node->left, arr, ram_base, param_count);
+    if (args_node->right) PushParamsToRam(file, args_node->right, arr, ram_base, param_count);
 }
 
 void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, IntStack_Info *params) {
