@@ -293,7 +293,7 @@ void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, int *ram
 
         printf("\n\n");
         for (size_t i = 0; i < arr->size; i++) {
-            printf("%s %d\n", arr->var_array[i].variable_name, arr->var_array[i].pos_in_code);
+            printf("%s %d %d\n", arr->var_array[i].variable_name, arr->var_array[i].variable_value, arr->var_array[i].pos_in_code);
         }
     if (strcmp(MAIN, arr->var_array[func_node->left->value.pos].variable_name) == 0)
         PRINT(file, "HLT\n");

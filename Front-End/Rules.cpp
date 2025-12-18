@@ -569,17 +569,18 @@ LangNode_t *GetAssignment(Language *lang_info, LangNode_t *func) {
 
  printf("[DEBUG GetAssignment] maybe_var: %s\n", 
            lang_info->arr->var_array[maybe_var->value.pos].variable_name);
-    if (!lang_info->arr->var_array[maybe_var->value.pos].func_made || strcmp(lang_info->arr->var_array[maybe_var->value.pos].func_made, lang_info->arr->var_array[func->value.pos].variable_name) != 0) {
-        lang_info->arr->var_array[maybe_var->value.pos].func_made = strdup(lang_info->arr->var_array[func->value.pos].variable_name);
-        lang_info->arr->var_array[func->value.pos].variable_value ++;
-    }
-
+           
     LangNode_t *assign_op = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (!assign_op || assign_op->type != kOperation || assign_op->value.operation != kOperationIs) {
         (*lang_info->tokens_pos) = save_pos;
         return NULL;
     }
     (*lang_info->tokens_pos)++;
+
+    if (!lang_info->arr->var_array[maybe_var->value.pos].func_made || strcmp(lang_info->arr->var_array[maybe_var->value.pos].func_made, lang_info->arr->var_array[func->value.pos].variable_name) != 0) {
+        lang_info->arr->var_array[maybe_var->value.pos].func_made = strdup(lang_info->arr->var_array[func->value.pos].variable_name);
+        lang_info->arr->var_array[func->value.pos].variable_value ++;
+    }
     LangNode_t *value = NULL;
     
     LangNode_t *tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
