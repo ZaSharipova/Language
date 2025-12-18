@@ -32,18 +32,19 @@ static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int 
         if (strncmp(arr->var_array[i].variable_name, arr->var_array[node->value.pos].variable_name, strlen(arr->var_array[i].variable_name)) == 0) {
             if (arr->var_array[i].pos_in_code == -1) {
                 var_idx = arr->var_array[i].pos_in_code = counter++;
+                printf("AAAAA%d", arr->var_array[i].pos_in_code);
                 PRINT(file, "PUSHR RAX");
                 PRINT(file, "PUSH %d", (-1) * param_count + arr->var_array[node->value.pos].pos_in_code);
                 PRINT(file, "ADD");
                 PRINT(file, "POPR RCX");
-                PRINT(file, "POPM [RCX]");
+                PRINT(file, "POPM [RCX]\n");
             } else {
                 var_idx = arr->var_array[i].pos_in_code;
                 PRINT(file, "PUSHR RAX");
                 PRINT(file, "PUSH %d", (-1) * param_count + var_idx);
                 PRINT(file, "ADD");
                 PRINT(file, "POPR RCX");
-                PRINT(file, "POPM [RCX]");
+                PRINT(file, "POPM [RCX]\n");
             }
             break;
         }
@@ -58,6 +59,7 @@ int FindVarPos(VariableArr *arr, LangNode_t *node, int ram_base, int param_count
     assert(arr);
     assert(node);
 
+    printf("%d", counter);
     int var_idx = -1;
     for (size_t i = 0; i < arr->size; i++) {
         if (strncmp(arr->var_array[i].variable_name, arr->var_array[node->value.pos].variable_name,
@@ -86,6 +88,20 @@ void PushParamsToStack(FILE *file, LangNode_t *args_node, VariableArr *arr, int 
     
 }
 
+void PushParamsToRam(FILE *file, LangNode_t *args_node, VariableArr *arr, int ram_base, int param_count) {
+    assert(file);
+    assert(arr);
+    if (!args_node) return;
+
+    if (!(args_node->type == kOperation && args_node->value.operation == kOperationComma)) {
+        FindVarPosPopMN(file, arr, args_node, ram_base, param_count);
+        return;
+    }
+
+    if (args_node->left) PushParamsToStack(file, args_node->left, arr, ram_base, param_count);
+    if (args_node->right) PushParamsToStack(file, args_node->right, arr, ram_base, param_count);
+}
+
 void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, IntStack_Info *params) {
     if (!stmt) return;
 
@@ -93,12 +109,12 @@ void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base
         case kOperation:
             switch (stmt->value.operation) {
                 case kOperationHLT:
-                    PRINT(file, "HLT");
+                    PRINT(file, "HLT\n");
                     break;
 
                 case kOperationCall:
                     PushParamsToStack(file, stmt->right, arr, ram_base, param_count);
-                    PRINT(file, "CALL :%s", arr->var_array[stmt->left->value.pos].variable_name);
+                    PRINT(file, "CALL :%s\n", arr->var_array[stmt->left->value.pos].variable_name);
                     break;
 
                 case kOperationIs:
@@ -112,16 +128,16 @@ void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base
                     PRINT(file, "PUSH %d", param_count);
                     PRINT(file, "SUB");
                     PRINT(file, "POPR RAX");
-                    PRINT(file, "RET");
+                    PRINT(file, "RET\n");
                     break;
 
                 case kOperationWrite:
                     PrintExpr(file, stmt->left, arr, ram_base, param_count);
-                    PRINT(file, "OUT");
+                    PRINT(file, "OUT\n");
                     break;
 
                 case kOperationRead:
-                    PRINT(file, "IN");
+                    PRINT(file, "IN\n");
                     FindVarPosPopMN(file, arr, stmt->left, ram_base, param_count);
                     break;
 
@@ -208,37 +224,37 @@ void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int
             PRINT(file, "PUSH %d", (-1) * param_count + var_idx);
             PRINT(file, "ADD");
             PRINT(file, "POPR RCX");
-            PRINT(file, "PUSHM [RCX]");
+            PRINT(file, "PUSHM [RCX]\n");
         } break;
         case kOperation:
             switch (expr->value.operation) {
                 case kOperationSQRT:
                     PrintExpr(file, expr->left, arr, ram_base, param_count);
-                    PRINT(file, "SQRT");
+                    PRINT(file, "SQRT\n");
                     break;
                 case kOperationAdd:
                     PrintExpr(file, expr->left, arr, ram_base, param_count);
                     PrintExpr(file, expr->right, arr, ram_base, param_count);
-                    PRINT(file, "ADD");
+                    PRINT(file, "ADD\n");
                     break;
                 case kOperationSub:
                     PrintExpr(file, expr->left, arr, ram_base, param_count);
                     PrintExpr(file, expr->right, arr, ram_base, param_count);
-                    PRINT(file, "SUB");
+                    PRINT(file, "SUB\n");
                     break;
                 case kOperationMul:
                     PrintExpr(file, expr->left, arr, ram_base, param_count);
                     PrintExpr(file, expr->right, arr, ram_base, param_count);
-                    PRINT(file, "MUL");
+                    PRINT(file, "MUL\n");
                     break;
                 case kOperationDiv:
                     PrintExpr(file, expr->left, arr, ram_base, param_count);
                     PrintExpr(file, expr->right, arr, ram_base, param_count);
-                    PRINT(file, "DIV");
+                    PRINT(file, "DIV\n");
                     break;
                 case kOperationCall:
                     PushParamsToStack(file, expr->right, arr, ram_base, param_count);
-                    PRINT(file, "CALL :%s", arr->var_array[expr->left->value.pos].variable_name);
+                    PRINT(file, "CALL :%s\n", arr->var_array[expr->left->value.pos].variable_name);
                     break;
             }
             break;
@@ -262,29 +278,27 @@ void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, int *ram
     PRINT(file, "PUSHR RAX");
     PRINT(file, "PUSH %d", param_count);
     PRINT(file, "ADD");
-    PRINT(file, "POPR RAX");
+    PRINT(file, "POPR RAX\n");
 
-    for (LangNode_t *arg = args; arg != NULL; arg = arg->left)
-        if (arg && arg->type == kVariable)
-            FindVarPosPopMN(file, arr, arg, *ram_base, param_count);
-    if (args && args->right) {
-    for (LangNode_t *arg = args->right; arg != NULL; arg = arg->right)
-        if (arg && arg->type == kVariable)
-            FindVarPosPopMN(file, arr, arg, *ram_base, param_count);
-    }
+    PushParamsToRam(file, args, arr, *ram_base, param_count);
+
     (*ram_base) += param_count;
     PrintStatement(file, func_node->right->right, arr, *ram_base, param_count, params);
 
     PRINT(file, "PUSHR RAX");
     PRINT(file, "PUSH %d", param_count);
     PRINT(file, "SUB");
-    PRINT(file, "POPR RAX");
+    PRINT(file, "POPR RAX\n");
     (*ram_base) -= param_count;
 
+        printf("\n\n");
+        for (size_t i = 0; i < arr->size; i++) {
+            printf("%s %d\n", arr->var_array[i].variable_name, arr->var_array[i].pos_in_code);
+        }
     if (strcmp(MAIN, arr->var_array[func_node->left->value.pos].variable_name) == 0)
-        PRINT(file, "HLT");
+        PRINT(file, "HLT\n");
     else
-        PRINT(file, "RET");
+        PRINT(file, "RET\n");
 }
 
 static void CleanPositions(VariableArr *arr) {
@@ -295,7 +309,6 @@ static void CleanPositions(VariableArr *arr) {
 void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base, IntStack_Info *params) {
     if (!root) return;
 
-    CleanPositions(arr);
     counter = 0;
 
     if (root->type == kOperation && root->value.operation == kOperationFunction)
