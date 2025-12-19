@@ -208,16 +208,13 @@ void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base
     }
 }
 
-
-// Убрать функцию PrintElse, так как вся логика теперь в PrintStatementльше не нужна
-
 void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count) {
     if (!expr) return;
 
     switch (expr->type) {
         case kNumber:
-            PRINT(file, "PUSH %.0f", expr->value.number);
-            break;
+        PRINT(file, "PUSH %.0f", expr->value.number);
+        break;
         case kVariable: {
             int var_idx = FindVarPos(arr, expr, ram_base, param_count);
             PRINT(file, "PUSHR RAX");
