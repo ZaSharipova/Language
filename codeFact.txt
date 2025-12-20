@@ -1,0 +1,15 @@
+incantatio adepio_maximus() |>
+    n magica 0 ~~
+    augurio (n) ~~
+    result magica countfact (n) ~~
+    revelatio (result) ~~
+<|
+
+incantatio countfact (n) |>
+    si (n minuo 1 infernum_par 0) |>
+        reporto 1 ~~
+    <| altius |>
+        reporto n multiplico countfact (n minuo 1) ~~
+    <|
+<|
+

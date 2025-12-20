@@ -1,0 +1,78 @@
+incantatio adepio_maximus() |> 
+    a magica 0 ~~ 
+    b magica 0 ~~ 
+    c magica 0 ~~ 
+
+    augurio(a)~~
+    augurio(b)~~
+    augurio(c)~~
+
+    nulla(a, b, c)~~
+    d magica discriminant(a, b, c)~~
+    findroot1(a, b, d)~~
+
+    si (d != 0) |> 
+        findroot2(a, b, d)~~
+    <|
+<|
+
+incantatio nulla(a, b, c) |>
+    si(a aequalis 0)|> 
+        dolinear(b, c)~~
+    <|
+<|
+
+incantatio discriminant(a, b, c) |> 
+    d magica b multiplico b minuo 4 multiplico a multiplico c~~
+    checkdis(d)~~
+    d magica sqrt(d)~~
+    reporto d~~
+<|
+
+incantatio findroot1(a, b, d) |> 
+    root1 magica ((-1) multiplico b augeo d) divido (2 multiplico a)~~
+    revelatio(root1)~~
+<|
+
+incantatio findroot2(a, b, d) |> 
+    root2 magica ((-1) multiplico b minuo d) divido (2 multiplico a)~~
+    revelatio(root2)~~
+<|
+
+incantatio checkdis(d) |> 
+    si(d inferior 0)|> 
+        revelatio(0)~~
+        doout()~~
+    <| altius |> 
+        si(d aequalis 0)|> 
+            revelatio(1)~~
+        <| altius |> 
+            revelatio(2)~~
+        <|
+    <|
+<|
+
+incantatio dolinear(b, c) |> 
+    si(b aequalis 0)|> 
+        checkc(c)~~
+    <| altius |> 
+        revelatio(1)~~
+        x magica ((-1) multiplico c) divido b~~
+        revelatio(x)~~
+        doout()~~
+    <|
+<|
+
+incantatio checkc(c) |> 
+    si(c aequalis 0)|> 
+        revelatio(12345678)~~
+        doout()~~
+    <| altius |> 
+        revelatio(0)~~
+        doout()~~
+    <|
+<|
+
+incantatio doout() |> 
+    exit~~
+<|
