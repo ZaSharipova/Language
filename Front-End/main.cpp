@@ -12,14 +12,16 @@
 #include <assert.h>
 
 int main(int argc, char *argv[]) {
+ // TODO square to asm segfault
+ // TODO tree to code problems with writing
 
     if (argc < 4) {
         fprintf(stderr,
                 "Usage: %s <mode> <input_file> <output_file>\n"
                 "Modes:\n"
-                "  tree->asm\n"
-                "  code->asm\n"
-                "  code->tree\n",
+                "  tree-asm\n"
+                "  code-asm\n"
+                "  code-tree\n",
                 argv[0]);
         return 1;
     }
@@ -61,6 +63,11 @@ int main(int argc, char *argv[]) {
 
         CHECK_ERROR_RETURN(ParseNodeFromString(info.buf_ptr, &pos, NULL, &tree, &variable_array));
 
+        // fprintf(stderr, "%zu\n\n", variable_array.size);
+        // for (size_t i = 0; i < variable_array.size; i++) {
+        //     fprintf(stderr, "%s %d\n\n", variable_array.var_array[i].variable_name, variable_array.var_array[i].variable_value);
+        // }
+
         parsed_root.root = tree;
         dump_info.tree = &parsed_root;
 
@@ -69,12 +76,8 @@ int main(int argc, char *argv[]) {
         FILE_OPEN_AND_CHECK(asm_file, filename_out, "w");
 
         int ram_base = 0;
-        IntStack_Info params = {};
-        IntStackCtor(&params, 8, stderr);
+        PrintProgram(asm_file, parsed_root.root, &variable_array, &ram_base);
 
-        PrintProgram(asm_file, parsed_root.root, &variable_array, &ram_base, &params);
-
-        IntStackDtor(&params, stderr);
         fclose(asm_file);
     }
 
@@ -85,12 +88,8 @@ int main(int argc, char *argv[]) {
         FILE_OPEN_AND_CHECK(asm_file, filename_out, "w");
 
         int ram_base = 0;
-        IntStack_Info params = {};
-        IntStackCtor(&params, 8, stderr);
-
-        PrintProgram(asm_file, root.root, &variable_array, &ram_base, &params);
-
-        IntStackDtor(&params, stderr);
+        PrintProgram(asm_file, root.root, &variable_array, &ram_base);
+        
         fclose(asm_file);
     }
 

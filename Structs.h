@@ -82,13 +82,6 @@ struct Stack_Info {
     ssize_t capacity;
 };
 
-struct IntStack_Info {
-    int *data;
-    ssize_t size;
-    ssize_t capacity;
-};
-
-
 struct Language {
     LangRoot *root;
     Stack_Info *tokens;

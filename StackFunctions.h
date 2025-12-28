@@ -13,10 +13,4 @@ DifErrors StackRealloc(Stack_Info *stk, FILE *open_log_file, Realloc_Mode reallo
 DifErrors StackDtor(Stack_Info *stk, FILE *open_log_file);
 LangNode_t *GetStackElem(Stack_Info *stk, size_t pos);
 
-DifErrors IntStackCtor(IntStack_Info *stk, ssize_t capacity, FILE *open_log_file);
-DifErrors IntStackPush(IntStack_Info *stk, int value, FILE *open_log_file);
-DifErrors IntStackPop(IntStack_Info *stk, int *value, FILE *open_log_file);
-DifErrors IntStackRealloc(IntStack_Info *stk, FILE *open_log_file, Realloc_Mode realloc_type);
-DifErrors IntStackDtor(IntStack_Info *stk, FILE *open_log_file);
-
 #endif //STACK_FUNCTIONS_H_

@@ -23,7 +23,6 @@ int NewLabel() {
 }
 
 static const char *ChooseCompareMode(LangNode_t *node);
-void PrintElse(FILE *file, LangNode_t *node, VariableArr *arr, int ram_base, IntStack_Info *params, int param_count, int this_if, int this_else);
 void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count);
 
 static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int ram_base, int param_count) {
@@ -32,7 +31,7 @@ static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int 
         if (strncmp(arr->var_array[i].variable_name, arr->var_array[node->value.pos].variable_name, strlen(arr->var_array[i].variable_name)) == 0) {
             if (arr->var_array[i].pos_in_code == -1) {
                 var_idx = arr->var_array[i].pos_in_code = counter++;
-                printf("AAAAA%d", arr->var_array[i].pos_in_code);
+                //printf("AAAAA%d", arr->var_array[i].pos_in_code);
                 PRINT(file, "PUSHR RAX");
                 PRINT(file, "PUSH %d", (-1) * param_count + arr->var_array[node->value.pos].pos_in_code);
                 PRINT(file, "ADD");
@@ -59,7 +58,7 @@ int FindVarPos(VariableArr *arr, LangNode_t *node, int ram_base, int param_count
     assert(arr);
     assert(node);
 
-    printf("%d", counter);
+    //printf("%d", counter);
     int var_idx = -1;
     for (size_t i = 0; i < arr->size; i++) {
         if (strncmp(arr->var_array[i].variable_name, arr->var_array[node->value.pos].variable_name,
@@ -102,7 +101,7 @@ void PushParamsToRam(FILE *file, LangNode_t *args_node, VariableArr *arr, int ra
     if (args_node->right) PushParamsToRam(file, args_node->right, arr, ram_base, param_count);
 }
 
-void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, IntStack_Info *params) {
+void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count) {
     if (!stmt) return;
 
     switch (stmt->type) {
@@ -115,11 +114,12 @@ void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base
                 case kOperationCall:
                     PushParamsToStack(file, stmt->right, arr, ram_base, param_count);
                     PRINT(file, "CALL :%s\n", arr->var_array[stmt->left->value.pos].variable_name);
+                    
                     break;
 
                 case kOperationIs:
                     PrintExpr(file, stmt->right, arr, ram_base, param_count);
-                    PrintStatement(file, stmt->left, arr, ram_base, param_count, params);
+                    PrintStatement(file, stmt->left, arr, ram_base, param_count);
                     break;
 
                 case kOperationReturn:
@@ -142,8 +142,8 @@ void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base
                     break;
 
                 case kOperationThen:
-                    PrintStatement(file, stmt->left, arr, ram_base, param_count, params);
-                    PrintStatement(file, stmt->right, arr, ram_base, param_count, params);
+                    PrintStatement(file, stmt->left, arr, ram_base, param_count);
+                    PrintStatement(file, stmt->right, arr, ram_base, param_count);
                     break;
 
                 case kOperationIf: {
@@ -159,17 +159,17 @@ void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base
 
                     if (stmt->right && stmt->right->type == kOperation &&
                         stmt->right->value.operation == kOperationElse) {
-                        PrintStatement(file, stmt->right->left, arr, ram_base, param_count, params);
+                        PrintStatement(file, stmt->right->left, arr, ram_base, param_count);
                         PRINT(file, "JMP :end_if_%d", this_if);
                     } else {
-                        PrintStatement(file, stmt->right, arr, ram_base, param_count, params);
+                        PrintStatement(file, stmt->right, arr, ram_base, param_count);
                         PRINT(file, "JMP :end_if_%d", this_if);
                     }
 
                     PRINT(file, ":else_%d", this_else);
                     if (stmt->right && stmt->right->type == kOperation &&
                         stmt->right->value.operation == kOperationElse) {
-                        PrintStatement(file, stmt->right->right, arr, ram_base, param_count, params);
+                        PrintStatement(file, stmt->right->right, arr, ram_base, param_count);
                     }
 
                     PRINT(file, ":end_if_%d", this_if);
@@ -186,7 +186,7 @@ void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base
 
                     PRINT(file, "%s :while_end_%d", ChooseCompareMode(stmt->left), end_label);
 
-                    PrintStatement(file, stmt->right, arr, ram_base, param_count, params);
+                    PrintStatement(file, stmt->right, arr, ram_base, param_count);
 
                     PRINT(file, "JMP :while_start_%d", start_label);
                     PRINT(file, ":while_end_%d", end_label);
@@ -259,7 +259,7 @@ void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int
 }
 
 
-void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, int *ram_base, IntStack_Info *params) {
+void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, int *ram_base) {
     if (!func_node) return;
 
     int param_count = 0;
@@ -280,7 +280,7 @@ void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, int *ram
     PushParamsToRam(file, args, arr, *ram_base, param_count);
 
     (*ram_base) += param_count;
-    PrintStatement(file, func_node->right->right, arr, *ram_base, param_count, params);
+    PrintStatement(file, func_node->right->right, arr, *ram_base, param_count);
 
     PRINT(file, "PUSHR RAX");
     PRINT(file, "PUSH %d", param_count);
@@ -288,10 +288,10 @@ void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, int *ram
     PRINT(file, "POPR RAX\n");
     (*ram_base) -= param_count;
 
-        printf("\n\n");
-        for (size_t i = 0; i < arr->size; i++) {
-            printf("%s %d %d\n", arr->var_array[i].variable_name, arr->var_array[i].variable_value, arr->var_array[i].pos_in_code);
-        }
+    // printf("\n\n");
+    // for (size_t i = 0; i < arr->size; i++) {
+    //     printf("%s %d %d\n", arr->var_array[i].variable_name, arr->var_array[i].variable_value, arr->var_array[i].pos_in_code);
+    // }
     if (strcmp(MAIN, arr->var_array[func_node->left->value.pos].variable_name) == 0)
         PRINT(file, "HLT\n");
     else
@@ -303,18 +303,18 @@ static void CleanPositions(VariableArr *arr) {
         arr->var_array[i].pos_in_code = -1;
 }
 
-void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base, IntStack_Info *params) {
+void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base) {
     if (!root) return;
 
     counter = 0;
 
     if (root->type == kOperation && root->value.operation == kOperationFunction)
-        PrintFunction(file, root, arr, ram_base, params);
+        PrintFunction(file, root, arr, ram_base);
 
     if (root->left)
-        PrintProgram(file, root->left, arr, ram_base, params);
+        PrintProgram(file, root->left, arr, ram_base);
     if (root->right)
-        PrintProgram(file, root->right, arr, ram_base, params);
+        PrintProgram(file, root->right, arr, ram_base);
 }
 
 static const char *ChooseCompareMode(LangNode_t *node) {

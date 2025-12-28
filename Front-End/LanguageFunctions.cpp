@@ -210,8 +210,9 @@ LangNode_t *NewVariable(LangRoot *root, const char *variable, VariableArr *Varia
 }
 
 static void PrintIndent(FILE *file, int indent) {
-    for (int i = 0; i < indent; ++i)
+    for (int i = 0; i < indent; i++) {
         fputc('\t', file);
+    }
 }
 
 DifErrors PrintAST(LangNode_t *node, FILE *file, VariableArr *arr, int indent) {
@@ -262,10 +263,10 @@ static const char *ConvertEnumToOperation(LangNode_t *node, VariableArr *arr) {
     assert(arr);
 
     switch (node->value.operation) {
-        case kOperationAdd:       return ADD;
-        case kOperationSub:       return SUB;
-        case kOperationMul:       return MUL;
-        case kOperationDiv:       return DIV;
+        case kOperationAdd:       return "+";
+        case kOperationSub:       return "-";
+        case kOperationMul:       return "*";
+        case kOperationDiv:       return "/";
         case kOperationPow:       return "^";
         case kOperationSin:       return "sin";
         case kOperationSQRT:      return "sqrt";
@@ -277,27 +278,27 @@ static const char *ConvertEnumToOperation(LangNode_t *node, VariableArr *arr) {
         case kOperationCosh:      return "ch";
         case kOperationTgh:       return "th";
         case kOperationIs:        return "=";
-        case kOperationIf:        return IF;
-        case kOperationElse:      return ELSE;
-        case kOperationWhile:     return WHILE;
+        case kOperationIf:        return "if";
+        case kOperationElse:      return "else";
+        case kOperationWhile:     return "while";
         case kOperationThen:      return ";";
         case kOperationParOpen:   return "(";
         case kOperationParClose:  return ")";
         case kOperationBraceOpen: return "{";
         case kOperationBraceClose:return "}";
-        case kOperationWrite:     return PRINT;
-        case kOperationRead:      return SCANF;
+        case kOperationWrite:     return "print";
+        case kOperationRead:      return "scanf";
         case kOperationComma:     return ",";
         case kOperationCall:      return "call";
-        case kOperationFunction:  return DECLARE;
-        case kOperationReturn:    return RETURN;
-        case kOperationHLT:       return GOODBYE;
-        case kOperationWriteChar: return PRINTC;
-        case kOperationB:         return B;
-        case kOperationBE:        return BEQ;
-        case kOperationA:         return A;
-        case kOperationAE:        return AE;
-        case kOperationE:         return EQUAL;
+        case kOperationFunction:  return "func";
+        case kOperationReturn:    return "return";
+        case kOperationHLT:       return "exit";
+        case kOperationWriteChar: return "getc";
+        case kOperationB:         return "<";
+        case kOperationBE:        return "<=";
+        case kOperationA:         return ">";
+        case kOperationAE:        return ">=";
+        case kOperationE:         return "==";
         case kOperationNE:        return "!=";
 
         case kOperationNone:      return "none";

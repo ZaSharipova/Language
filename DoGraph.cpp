@@ -167,7 +167,7 @@ static GraphOperation PrintExpressionType(const LangNode_t *node) {
         case (kOperationWrite):
             return {"write", "	tan"};
         case (kOperationRead):
-            return {"read", "tan"};
+            return {"read", " tan"};
         case (kOperationReturn):
             return {"return", "tan"};
         case (kOperationB):

@@ -15,6 +15,11 @@ static DifErrors ParseTitle(const char *buffer, size_t *pos, char **out_title);
 static DifErrors ParseMaybeNil(const char *buffer, size_t *pos, LangNode_t **out);
 static DifErrors ExpectClosingParen(const char *buffer, size_t *pos);
 
+static int CountArgs(LangNode_t *args_root);
+static void RegisterInit(LangNode_t *func_name_node, LangNode_t *var_node, VariableArr *arr);
+static void ScanInitsInSubtree(LangNode_t *func_name_node, LangNode_t *root, VariableArr *arr);
+static void ComputeFuncSizes(LangNode_t *node, VariableArr *arr);
+
 static void SkipSpaces(const char *buf, size_t *pos);
 static DifErrors SyntaxErrorNode(size_t pos, char c);
 
@@ -51,20 +56,21 @@ static const OpEntry OP_TABLE[] = {
     { "tgh",    kOperationTgh },
 
     { "=",      kOperationIs },
-    { "if",       kOperationIf },           // "if" → "si"
-    { "else",     kOperationElse },         // "else" → "altius"
-    { "while",    kOperationWhile },        // "while" → "perpetuum"
-    { "func",  kOperationFunction },     // "func" → "incantatio"
-    { "return",   kOperationReturn },       // "return" → "reporto"
+    { "if",     kOperationIf },           // "if" → "si"
+    { "else",   kOperationElse },         // "else" → "altius"
+    { "while",  kOperationWhile },        // "while" → "perpetuum"
+    { "func",   kOperationFunction },     // "func" → "incantatio"
+    { "return", kOperationReturn },       // "return" → "reporto"
     { "call",   kOperationCall },
-    { "print",    kOperationWrite },        // "print" → "revelatio"
-    { "scanf",    kOperationRead },         // "scanf" → "augurio"
+    { "print",  kOperationWrite },        // "print" → "revelatio"
+    { "scanf",  kOperationRead },         // "scanf" → "augurio"
+    { "exit",  kOperationHLT},
 
     { "<",      kOperationB },
     { "<=",     kOperationBE },
     { ">",      kOperationA },
     { ">=",     kOperationAE },
-    { "==",    kOperationE },            // "==" → "aequalis"
+    { "==",     kOperationE },            // "==" → "aequalis"
     { "!=",     kOperationNE },
 
     { ";",      kOperationThen },
@@ -88,8 +94,9 @@ DifErrors ParseNodeFromString(const char *buffer, size_t *pos, LangNode_t *paren
 
     char *title = NULL;
     err = ParseTitle(buffer, pos, &title);
-    if (err != kSuccess)
+    if (err != kSuccess) {
         return err;
+    }
 
     LangNode_t *node = NULL;
     NodeCtor(&node, NULL);
@@ -97,8 +104,9 @@ DifErrors ParseNodeFromString(const char *buffer, size_t *pos, LangNode_t *paren
 
     err = CheckType(title, node, arr);
     free(title);
-    if (err != kSuccess)
+    if (err != kSuccess) {
         return err;
+    }
 
     LangNode_t *left = NULL;
     CHECK_ERROR_RETURN(ParseNodeFromString(buffer, pos, node, &left, arr));
@@ -108,11 +116,39 @@ DifErrors ParseNodeFromString(const char *buffer, size_t *pos, LangNode_t *paren
     CHECK_ERROR_RETURN(ParseNodeFromString(buffer, pos, node, &right, arr));
     node->right = right;
 
+    if (node->type == kOperation && node->value.operation == kOperationFunction) {
+        ComputeFuncSizes(node, arr);
+    }
+
     CHECK_ERROR_RETURN(ExpectClosingParen(buffer, pos));
+
 
     *node_to_add = node;
     return kSuccess;
 }
+
+static void ComputeFuncSizes(LangNode_t *node, VariableArr *arr) {
+    assert(arr);
+    if (!node) return;
+
+    ComputeFuncSizes(node->left, arr);
+    ComputeFuncSizes(node->right, arr);
+
+    if (node->type == kOperation &&
+        node->value.operation == kOperationFunction) {
+
+        LangNode_t *func_name = node->left;
+        LangNode_t *args_root = node->right ? node->right->left  : NULL;
+        LangNode_t *body_root = node->right ? node->right->right : NULL;
+
+        int argc = CountArgs(args_root);
+
+        arr->var_array[func_name->value.pos].variable_value = argc;
+
+        ScanInitsInSubtree(func_name, body_root, arr);
+    }
+}
+
 
 static DifErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *arr) {
     assert(node);
@@ -125,6 +161,7 @@ static DifErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *arr) {
             return kSuccess;
         }
     }
+    //printf("%s\n\n", title);
 
     bool is_num = true;
     for (size_t k = 0; title[k]; k++) {
@@ -162,11 +199,52 @@ static DifErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *arr) {
     return kSuccess;
 }
 
+static int CountArgs(LangNode_t *args_root) {
+    if (!args_root) return 0;
+
+    if (args_root->type == kOperation &&
+        args_root->value.operation == kOperationComma) {
+        return CountArgs(args_root->left) + CountArgs(args_root->right);
+    }
+
+    return 1;
+}
+
+static void RegisterInit(LangNode_t *func_name_node, LangNode_t *var_node, VariableArr *arr) {
+    assert(func_name_node);
+    assert(var_node);
+    assert(arr);
+
+    VariableInfo *func_vi = &arr->var_array[func_name_node->value.pos];
+    VariableInfo *var_vi  = &arr->var_array[var_node->value.pos];
+
+    if (!var_vi->func_made || strcmp(var_vi->func_made, func_vi->variable_name) != 0) {
+        var_vi->func_made = strdup(func_vi->variable_name);
+        func_vi->variable_value++;
+    }
+}
+
+static void ScanInitsInSubtree(LangNode_t *func_name_node, LangNode_t *root, VariableArr *arr) {
+    assert(func_name_node);
+    assert(arr);
+    if (!root) return;
+
+    if (root->type == kOperation && root->value.operation == kOperationIs &&
+        root->left && root->left->type == kVariable) {
+        
+        RegisterInit(func_name_node, root->left, arr);
+    }
+
+    ScanInitsInSubtree(func_name_node, root->left, arr);
+    ScanInitsInSubtree(func_name_node, root->right, arr);
+}
+
 static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr);
 static void GenThenChain(LangNode_t *node, FILE *out, VariableArr *arr, int indent);
 static void GenIf(LangNode_t *node, FILE *out, VariableArr *arr, int indent);
 static void GenWhile(LangNode_t *node, FILE *out, VariableArr *arr, int indent);
 static void GenFunction(LangNode_t *node, FILE *out, VariableArr *arr, int indent);
+
 static void PrintIndent(FILE *out, int indent) {
     for (int i = 0; i < indent; ++i)
         fputc('\t', out);
@@ -234,6 +312,7 @@ void GenerateCodeFromAST(LangNode_t *node, FILE *out, VariableArr *arr, int inde
 static void GenThenChain(LangNode_t *node, FILE *out, VariableArr *arr, int indent) {
     assert(out);
     assert(arr);
+
     LangNode_t *stmt = node;
 
     while (stmt &&
@@ -314,6 +393,7 @@ static void GenFunction(LangNode_t *node, FILE *out, VariableArr *arr, int inden
 
     LangNode_t *args = NULL;
     LangNode_t *body = NULL;
+    fprintf(stderr, "A\n");
 
     if (pair &&
         pair->type == kOperation &&
@@ -486,6 +566,7 @@ static DifErrors ParseMaybeNil(const char *buffer, size_t *pos, LangNode_t **out
     assert(out);
 
     SkipSpaces(buffer, pos);
+    //printf("DEBUG: nil node\n");
 
     if (strncmp(buffer + *pos, "nil", 3) == 0) {
         *pos += 3;
@@ -542,3 +623,4 @@ static DifErrors ExpectClosingParen(const char *buffer, size_t *pos) {
 
     return kSuccess;
 }
+
