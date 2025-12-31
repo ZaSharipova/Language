@@ -142,4 +142,11 @@ static const LangTable NAME_TYPES_TABLE [] = {
 };
 static const size_t OP_TABLE_SIZE = sizeof(NAME_TYPES_TABLE) / sizeof(NAME_TYPES_TABLE[0]);
 
+typedef struct {
+    int label_counter;
+    int counter;
+    int label_if;
+    int label_else;
+} AsmInfo;
+
 #endif //STRUCTS_H_

@@ -9,41 +9,104 @@
 #include "Enums.h"
 #include "StackFunctions.h"
 
-static int label_counter = 0;
-int counter = 0;
 
-int label_if = 0;
-int label_else = 0;
-
-#define PRINT(file, fmt, ...) fprintf(file, fmt "\n", ##__VA_ARGS__)
+#define FPRINTF(fmt, ...) fprintf(file, fmt "\n", ##__VA_ARGS__)
 static void CleanPositions(VariableArr *arr);
+static const char *ChooseCompareMode(LangNode_t *node);
 
-int NewLabel() {
-    return label_counter++;
+static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, int *ram_base, AsmInfo *asm_info);
+static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info);
+static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int ram_base, int param_count, AsmInfo *asm_info);
+static int  FindVarPos(VariableArr *arr, LangNode_t *node, int ram_base, int param_count, AsmInfo *asm_info);
+static void PushParamsToStack(FILE *file, LangNode_t *args_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info);
+static void PushParamsToRam(FILE *file, LangNode_t *args_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info);
+static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info);
+
+void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base, AsmInfo *asm_info) {
+    assert(file);
+    assert(arr);
+    assert(ram_base);
+    assert(asm_info);
+    if (!root) return;
+
+    asm_info->counter = 0;
+
+    if (root->type == kOperation && root->value.operation == kOperationFunction) {
+        PrintFunction(file, root, arr, ram_base, asm_info);
+    }
+
+    if (root->left) PrintProgram(file, root->left, arr, ram_base, asm_info);
+    if (root->right) PrintProgram(file, root->right, arr, ram_base, asm_info);
 }
 
-static const char *ChooseCompareMode(LangNode_t *node);
-void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count);
+static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, int *ram_base, AsmInfo *asm_info) {
+    assert(file);
+    assert(arr);
+    assert(ram_base);
+    assert(asm_info);
+    if (!func_node) return;
 
-static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int ram_base, int param_count) {
+    int param_count = 0;
+    CleanPositions(arr);
+    asm_info->counter = 0;
+
+    LangNode_t *args = func_node->right->left;
+
+    if (strcmp(MAIN, arr->var_array[func_node->left->value.pos].variable_name) != 0)
+        FPRINTF("\n:%s", arr->var_array[func_node->left->value.pos].variable_name);
+    param_count = arr->var_array[func_node->left->value.pos].variable_value;
+
+    FPRINTF("PUSHR RAX");
+    FPRINTF("PUSH %d", param_count);
+    FPRINTF("ADD");
+    FPRINTF("POPR RAX\n");
+
+    PushParamsToRam(file, args, arr, *ram_base, param_count, asm_info);
+
+    (*ram_base) += param_count;
+    PrintStatement(file, func_node->right->right, arr, *ram_base, param_count, asm_info);
+
+    FPRINTF("PUSHR RAX");
+    FPRINTF("PUSH %d", param_count);
+    FPRINTF("SUB");
+    FPRINTF("POPR RAX\n");
+    (*ram_base) -= param_count;
+
+    // FPRINTFf("\n\n");
+    // for (size_t i = 0; i < arr->size; i++) {
+    //     FPRINTFf("%s %d %d\n", arr->var_array[i].variable_name, arr->var_array[i].variable_value, arr->var_array[i].pos_in_code);
+    // }
+    if (strcmp(MAIN, arr->var_array[func_node->left->value.pos].variable_name) == 0) {
+        FPRINTF( "HLT\n");
+    } else {
+        FPRINTF("RET\n");
+    }
+}
+
+static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int ram_base, int param_count, AsmInfo *asm_info) {
+    assert(file);
+    assert(arr);
+    assert(node);
+    assert(asm_info);
+
     int var_idx = -1;
     for (size_t i = 0; i < arr->size; i++) {
         if (strncmp(arr->var_array[i].variable_name, arr->var_array[node->value.pos].variable_name, strlen(arr->var_array[i].variable_name)) == 0) {
             if (arr->var_array[i].pos_in_code == -1) {
-                var_idx = arr->var_array[i].pos_in_code = counter++;
-                //printf("AAAAA%d", arr->var_array[i].pos_in_code);
-                PRINT(file, "PUSHR RAX");
-                PRINT(file, "PUSH %d", (-1) * param_count + arr->var_array[node->value.pos].pos_in_code);
-                PRINT(file, "ADD");
-                PRINT(file, "POPR RCX");
-                PRINT(file, "POPM [RCX]\n");
+                var_idx = arr->var_array[i].pos_in_code = asm_info->counter++;
+                //FPRINTFf("AAAAA%d", arr->var_array[i].pos_in_code);
+                FPRINTF("PUSHR RAX");
+                FPRINTF("PUSH %d", (-1) * param_count + arr->var_array[node->value.pos].pos_in_code);
+                FPRINTF("ADD");
+                FPRINTF("POPR RCX");
+                FPRINTF("POPM [RCX]\n");
             } else {
                 var_idx = arr->var_array[i].pos_in_code;
-                PRINT(file, "PUSHR RAX");
-                PRINT(file, "PUSH %d", (-1) * param_count + var_idx);
-                PRINT(file, "ADD");
-                PRINT(file, "POPR RCX");
-                PRINT(file, "POPM [RCX]\n");
+                FPRINTF("PUSHR RAX");
+                FPRINTF("PUSH %d", (-1) * param_count + var_idx);
+                FPRINTF( "ADD");
+                FPRINTF("POPR RCX");
+                FPRINTF("POPM [RCX]\n");
             }
             break;
         }
@@ -54,17 +117,17 @@ static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int 
     }
 }
 
-int FindVarPos(VariableArr *arr, LangNode_t *node, int ram_base, int param_count) {
+static int FindVarPos(VariableArr *arr, LangNode_t *node, int ram_base, int param_count, AsmInfo *asm_info) {
     assert(arr);
     assert(node);
+    assert(asm_info);
 
-    //printf("%d", counter);
     int var_idx = -1;
     for (size_t i = 0; i < arr->size; i++) {
         if (strncmp(arr->var_array[i].variable_name, arr->var_array[node->value.pos].variable_name,
                     strlen(arr->var_array[i].variable_name)) == 0) {
             if (arr->var_array[i].pos_in_code == -1) {
-                var_idx = arr->var_array[i].pos_in_code = counter++;
+                var_idx = arr->var_array[i].pos_in_code = asm_info->counter++;
             } else {
                 var_idx = arr->var_array[i].pos_in_code;
             }
@@ -74,247 +137,205 @@ int FindVarPos(VariableArr *arr, LangNode_t *node, int ram_base, int param_count
     return var_idx;
 }
 
-void PushParamsToStack(FILE *file, LangNode_t *args_node, VariableArr *arr, int ram_base, int param_count) {
+static void PushParamsToStack(FILE *file, LangNode_t *args_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info) {
+    assert(file);
+    assert(arr);
+    assert(asm_info);
     if (!args_node) return;
 
     if (!(args_node->type == kOperation && args_node->value.operation == kOperationComma)) {
-        PrintExpr(file, args_node, arr, ram_base, param_count);
+        PrintExpr(file, args_node, arr, ram_base, param_count, asm_info);
         return;
     }
 
-    if (args_node->left) PushParamsToStack(file, args_node->right, arr, ram_base, param_count);
-    if (args_node->right) PushParamsToStack(file, args_node->left, arr, ram_base, param_count);
+    if (args_node->left) PushParamsToStack(file, args_node->right, arr, ram_base, param_count, asm_info);
+    if (args_node->right) PushParamsToStack(file, args_node->left, arr, ram_base, param_count, asm_info);
     
 }
 
-void PushParamsToRam(FILE *file, LangNode_t *args_node, VariableArr *arr, int ram_base, int param_count) {
+void PushParamsToRam(FILE *file, LangNode_t *args_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info) {
     assert(file);
     assert(arr);
+    assert(asm_info);
     if (!args_node) return;
 
     if (!(args_node->type == kOperation && args_node->value.operation == kOperationComma)) {
-        FindVarPosPopMN(file, arr, args_node, ram_base, param_count);
+        FindVarPosPopMN(file, arr, args_node, ram_base, param_count, asm_info);
         return;
     }
 
-    if (args_node->left) PushParamsToRam(file, args_node->left, arr, ram_base, param_count);
-    if (args_node->right) PushParamsToRam(file, args_node->right, arr, ram_base, param_count);
+    if (args_node->left) PushParamsToRam(file, args_node->left, arr, ram_base, param_count, asm_info);
+    if (args_node->right) PushParamsToRam(file, args_node->right, arr, ram_base, param_count, asm_info);
 }
 
-void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count) {
+static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info) {
+    assert(file);
+    assert(arr);
+    assert(asm_info);
     if (!stmt) return;
 
     switch (stmt->type) {
         case kOperation:
             switch (stmt->value.operation) {
                 case kOperationHLT:
-                    PRINT(file, "HLT\n");
+                    FPRINTF("HLT\n");
                     break;
 
                 case kOperationCall:
-                    PushParamsToStack(file, stmt->right, arr, ram_base, param_count);
-                    PRINT(file, "CALL :%s\n", arr->var_array[stmt->left->value.pos].variable_name);
+                    PushParamsToStack(file, stmt->right, arr, ram_base, param_count, asm_info);
+                    FPRINTF("CALL :%s\n", arr->var_array[stmt->left->value.pos].variable_name);
                     
                     break;
 
                 case kOperationIs:
-                    PrintExpr(file, stmt->right, arr, ram_base, param_count);
-                    PrintStatement(file, stmt->left, arr, ram_base, param_count);
+                    PrintExpr(file, stmt->right, arr, ram_base, param_count, asm_info);
+                    PrintStatement(file, stmt->left, arr, ram_base, param_count, asm_info);
                     break;
 
                 case kOperationReturn:
-                    PrintExpr(file, stmt->left, arr, ram_base, param_count);
-                    PRINT(file, "PUSHR RAX");
-                    PRINT(file, "PUSH %d", param_count);
-                    PRINT(file, "SUB");
-                    PRINT(file, "POPR RAX");
-                    PRINT(file, "RET\n");
+                    PrintExpr(file, stmt->left, arr, ram_base, param_count, asm_info);
+                    FPRINTF("PUSHR RAX");
+                    FPRINTF("PUSH %d", param_count);
+                    FPRINTF("SUB");
+                    FPRINTF("POPR RAX");
+                    FPRINTF("RET\n");
                     break;
 
                 case kOperationWrite:
-                    PrintExpr(file, stmt->left, arr, ram_base, param_count);
-                    PRINT(file, "OUT\n");
+                    PrintExpr(file, stmt->left, arr, ram_base, param_count, asm_info);
+                    FPRINTF("OUT\n");
                     break;
 
                 case kOperationRead:
-                    PRINT(file, "IN\n");
-                    FindVarPosPopMN(file, arr, stmt->left, ram_base, param_count);
+                    FPRINTF( "IN\n");
+                    FindVarPosPopMN(file, arr, stmt->left, ram_base, param_count, asm_info);
                     break;
 
                 case kOperationThen:
-                    PrintStatement(file, stmt->left, arr, ram_base, param_count);
-                    PrintStatement(file, stmt->right, arr, ram_base, param_count);
+                    PrintStatement(file, stmt->left, arr, ram_base, param_count, asm_info);
+                    PrintStatement(file, stmt->right, arr, ram_base, param_count, asm_info);
                     break;
 
                 case kOperationIf: {
                     LangNode_t *condition = stmt->left;
 
-                    PrintExpr(file, condition->left, arr, ram_base, param_count);
-                    PrintExpr(file, condition->right, arr, ram_base, param_count);
+                    PrintExpr(file, condition->left, arr, ram_base, param_count, asm_info);
+                    PrintExpr(file, condition->right, arr, ram_base, param_count, asm_info);
 
-                    int this_if = label_if++;
-                    int this_else = label_else++;
+                    int this_if = asm_info->label_if++;
+                    int this_else = asm_info->label_else++;
 
-                    PRINT(file, "%s :else_%d", ChooseCompareMode(condition), this_else);
+                    FPRINTF("%s :else_%d", ChooseCompareMode(condition), this_else);
 
                     if (stmt->right && stmt->right->type == kOperation &&
                         stmt->right->value.operation == kOperationElse) {
-                        PrintStatement(file, stmt->right->left, arr, ram_base, param_count);
-                        PRINT(file, "JMP :end_if_%d", this_if);
+                        PrintStatement(file, stmt->right->left, arr, ram_base, param_count, asm_info);
+                        FPRINTF( "JMP :end_if_%d", this_if);
                     } else {
-                        PrintStatement(file, stmt->right, arr, ram_base, param_count);
-                        PRINT(file, "JMP :end_if_%d", this_if);
+                        PrintStatement(file, stmt->right, arr, ram_base, param_count, asm_info);
+                        FPRINTF("JMP :end_if_%d", this_if);
                     }
 
-                    PRINT(file, ":else_%d", this_else);
+                    FPRINTF(":else_%d", this_else);
                     if (stmt->right && stmt->right->type == kOperation &&
                         stmt->right->value.operation == kOperationElse) {
-                        PrintStatement(file, stmt->right->right, arr, ram_base, param_count);
+                        PrintStatement(file, stmt->right->right, arr, ram_base, param_count, asm_info);
                     }
 
-                    PRINT(file, ":end_if_%d", this_if);
+                    FPRINTF(":end_if_%d", this_if);
                 } break;
 
                 case kOperationWhile: {
-                    int start_label = NewLabel();
-                    int end_label = NewLabel();
+                    int start_label = asm_info->label_counter++;
+                    int end_label = asm_info->label_counter++;
 
-                    PRINT(file, ":while_start_%d", start_label);
+                    FPRINTF(":while_start_%d", start_label);
 
-                    PrintExpr(file, stmt->left->left, arr, ram_base, param_count);
-                    PrintExpr(file, stmt->left->right, arr, ram_base, param_count);
+                    PrintExpr(file, stmt->left->left, arr, ram_base, param_count, asm_info);
+                    PrintExpr(file, stmt->left->right, arr, ram_base, param_count, asm_info);
 
-                    PRINT(file, "%s :while_end_%d", ChooseCompareMode(stmt->left), end_label);
+                    FPRINTF("%s :while_end_%d", ChooseCompareMode(stmt->left), end_label);
 
-                    PrintStatement(file, stmt->right, arr, ram_base, param_count);
+                    PrintStatement(file, stmt->right, arr, ram_base, param_count, asm_info);
 
-                    PRINT(file, "JMP :while_start_%d", start_label);
-                    PRINT(file, ":while_end_%d", end_label);
+                    FPRINTF("JMP :while_start_%d", start_label);
+                    FPRINTF(":while_end_%d", end_label);
                 } break;
 
                 default:
-                    PrintExpr(file, stmt, arr, ram_base, param_count);
+                    PrintExpr(file, stmt, arr, ram_base, param_count, asm_info);
                     break;
             }
             break;
 
         case kVariable:
-            FindVarPosPopMN(file, arr, stmt, ram_base, param_count);
+            FindVarPosPopMN(file, arr, stmt, ram_base, param_count, asm_info);
             break;
 
         case kNumber:
-            PRINT(file, "PUSH %.0f", stmt->value.number);
+            FPRINTF("PUSH %.0f", stmt->value.number);
             break;
     }
 }
 
-void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count) {
+static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info) {
+    assert(file);
+    assert(arr);
+    assert(asm_info);
     if (!expr) return;
 
     switch (expr->type) {
         case kNumber:
-        PRINT(file, "PUSH %.0f", expr->value.number);
+        FPRINTF("PUSH %.0f", expr->value.number);
         break;
         case kVariable: {
-            int var_idx = FindVarPos(arr, expr, ram_base, param_count);
-            PRINT(file, "PUSHR RAX");
-            PRINT(file, "PUSH %d", (-1) * param_count + var_idx);
-            PRINT(file, "ADD");
-            PRINT(file, "POPR RCX");
-            PRINT(file, "PUSHM [RCX]\n");
+            int var_idx = FindVarPos(arr, expr, ram_base, param_count, asm_info);
+            FPRINTF("PUSHR RAX");
+            FPRINTF("PUSH %d", (-1) * param_count + var_idx);
+            FPRINTF("ADD");
+            FPRINTF("POPR RCX");
+            FPRINTF("PUSHM [RCX]\n");
         } break;
         case kOperation:
             switch (expr->value.operation) {
                 case kOperationSQRT:
-                    PrintExpr(file, expr->left, arr, ram_base, param_count);
-                    PRINT(file, "SQRT\n");
+                    PrintExpr(file, expr->left, arr, ram_base, param_count, asm_info);
+                    FPRINTF( "SQRT\n");
                     break;
                 case kOperationAdd:
-                    PrintExpr(file, expr->left, arr, ram_base, param_count);
-                    PrintExpr(file, expr->right, arr, ram_base, param_count);
-                    PRINT(file, "ADD\n");
+                    PrintExpr(file, expr->left, arr, ram_base, param_count, asm_info);
+                    PrintExpr(file, expr->right, arr, ram_base, param_count, asm_info);
+                    FPRINTF("ADD\n");
                     break;
                 case kOperationSub:
-                    PrintExpr(file, expr->left, arr, ram_base, param_count);
-                    PrintExpr(file, expr->right, arr, ram_base, param_count);
-                    PRINT(file, "SUB\n");
+                    PrintExpr(file, expr->left, arr, ram_base, param_count, asm_info);
+                    PrintExpr(file, expr->right, arr, ram_base, param_count, asm_info);
+                    FPRINTF("SUB\n");
                     break;
                 case kOperationMul:
-                    PrintExpr(file, expr->left, arr, ram_base, param_count);
-                    PrintExpr(file, expr->right, arr, ram_base, param_count);
-                    PRINT(file, "MUL\n");
+                    PrintExpr(file, expr->left, arr, ram_base, param_count, asm_info);
+                    PrintExpr(file, expr->right, arr, ram_base, param_count, asm_info);
+                    FPRINTF("MUL\n");
                     break;
                 case kOperationDiv:
-                    PrintExpr(file, expr->left, arr, ram_base, param_count);
-                    PrintExpr(file, expr->right, arr, ram_base, param_count);
-                    PRINT(file, "DIV\n");
+                    PrintExpr(file, expr->left, arr, ram_base, param_count, asm_info);
+                    PrintExpr(file, expr->right, arr, ram_base, param_count, asm_info);
+                    FPRINTF("DIV\n");
                     break;
                 case kOperationCall:
-                    PushParamsToStack(file, expr->right, arr, ram_base, param_count);
-                    PRINT(file, "CALL :%s\n", arr->var_array[expr->left->value.pos].variable_name);
+                    PushParamsToStack(file, expr->right, arr, ram_base, param_count, asm_info);
+                    FPRINTF("CALL :%s\n", arr->var_array[expr->left->value.pos].variable_name);
                     break;
             }
             break;
     }
 }
 
-
-void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, int *ram_base) {
-    if (!func_node) return;
-
-    int param_count = 0;
-    CleanPositions(arr);
-    counter = 0;
-
-    LangNode_t *args = func_node->right->left;
-
-    if (strcmp(MAIN, arr->var_array[func_node->left->value.pos].variable_name) != 0)
-        PRINT(file, "\n:%s", arr->var_array[func_node->left->value.pos].variable_name);
-    param_count = arr->var_array[func_node->left->value.pos].variable_value;
-
-    PRINT(file, "PUSHR RAX");
-    PRINT(file, "PUSH %d", param_count);
-    PRINT(file, "ADD");
-    PRINT(file, "POPR RAX\n");
-
-    PushParamsToRam(file, args, arr, *ram_base, param_count);
-
-    (*ram_base) += param_count;
-    PrintStatement(file, func_node->right->right, arr, *ram_base, param_count);
-
-    PRINT(file, "PUSHR RAX");
-    PRINT(file, "PUSH %d", param_count);
-    PRINT(file, "SUB");
-    PRINT(file, "POPR RAX\n");
-    (*ram_base) -= param_count;
-
-    // printf("\n\n");
-    // for (size_t i = 0; i < arr->size; i++) {
-    //     printf("%s %d %d\n", arr->var_array[i].variable_name, arr->var_array[i].variable_value, arr->var_array[i].pos_in_code);
-    // }
-    if (strcmp(MAIN, arr->var_array[func_node->left->value.pos].variable_name) == 0)
-        PRINT(file, "HLT\n");
-    else
-        PRINT(file, "RET\n");
-}
-
 static void CleanPositions(VariableArr *arr) {
+    assert(arr);
+
     for (size_t i = 0; i < arr->size; i++)
         arr->var_array[i].pos_in_code = -1;
-}
-
-void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base) {
-    if (!root) return;
-
-    counter = 0;
-
-    if (root->type == kOperation && root->value.operation == kOperationFunction)
-        PrintFunction(file, root, arr, ram_base);
-
-    if (root->left)
-        PrintProgram(file, root->left, arr, ram_base);
-    if (root->right)
-        PrintProgram(file, root->right, arr, ram_base);
 }
 
 static const char *ChooseCompareMode(LangNode_t *node) {

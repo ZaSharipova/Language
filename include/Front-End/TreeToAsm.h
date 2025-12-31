@@ -4,6 +4,6 @@
 #include "Enums.h"
 #include "Structs.h"
 
-void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base);
+void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base, AsmInfo *asm_info);
 
 #endif //TREE_TO_ASM_H_
