@@ -66,7 +66,6 @@ DifErrors ParseNodeFromString(const char *buffer, size_t *pos, LangNode_t *paren
 
     CHECK_ERROR_RETURN(ExpectClosingParen(buffer, pos));
 
-
     *node_to_add = node;
     return kSuccess;
 }
@@ -85,9 +84,7 @@ static void ComputeFuncSizes(LangNode_t *node, VariableArr *arr) {
         LangNode_t *body_root = node->right ? node->right->right : NULL;
 
         int argc = CountArgs(args_root);
-
         arr->var_array[func_name->value.pos].variable_value = argc;
-
         ScanInitsInSubtree(func_name, body_root, arr);
     }
 }
@@ -104,7 +101,6 @@ static DifErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *arr) {
             return kSuccess;
         }
     }
-    // printf("%s\n\n", title);
 
     bool is_num = true;
     for (size_t k = 0; title[k]; k++) {
@@ -211,7 +207,6 @@ static DifErrors ParseMaybeNil(const char *buffer, size_t *pos, LangNode_t **out
     assert(out);
 
     SkipSpaces(buffer, pos);
-    //printf("DEBUG: nil node\n");
 
     if (strncmp(buffer + *pos, "nil", 3) == 0) {
         *pos += 3;
@@ -238,11 +233,13 @@ static DifErrors ParseTitle(const char *buffer, size_t *pos, char **out_title) {
     (*pos)++;
     size_t start = *pos;
 
-    while (buffer[*pos] != '"' && buffer[*pos] != '\0')
+    while (buffer[*pos] != '"' && buffer[*pos] != '\0') {
         (*pos)++;
+    }
 
-    if (buffer[*pos] == '\0')
+    if (buffer[*pos] == '\0') {
         return PrintSyntaxErrorNode(*pos, buffer[*pos]);
+    }
 
     size_t len = *pos - start;
 
@@ -265,8 +262,9 @@ static DifErrors ExpectClosingParen(const char *buffer, size_t *pos) {
 
     SkipSpaces(buffer, pos);
 
-    if (buffer[*pos] != ')')
+    if (buffer[*pos] != ')') {
         return PrintSyntaxErrorNode(*pos, buffer[*pos]);
+    }
     (*pos)++;
 
     return kSuccess;

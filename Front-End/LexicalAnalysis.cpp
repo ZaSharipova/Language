@@ -20,6 +20,8 @@ static bool ParseStringToken(LangRoot *root, const char **string, Stack_Info *to
 #define NEWV(name) NewVariable(root, name, Variable_Array)
 #define NEWOP(op, left, right) NewNode(root, kOperation, (Value){ .operation = (op)}, left, right) 
 
+#define CodeNameFromTable(type) NAME_TYPES_TABLE[type].name_in_lang
+
 #define CHECK_SYMBOL_AND_PUSH(symbol_to_check, op_type)                \
     if (**string == symbol_to_check) {                                 \
         StackPush(tokens, NEWOP(op_type, NULL, NULL), stderr);         \
@@ -56,38 +58,39 @@ size_t CheckAndReturn(LangRoot *root, const char **string, Stack_Info *tokens, V
             continue;
         }
 
-        CHECK_STROKE_AND_PUSH(BRACEOP, kOperationBraceOpen);
-        CHECK_STROKE_AND_PUSH(BRACECL, kOperationBraceClose);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationBraceOpen),  kOperationBraceOpen);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationBraceClose), kOperationBraceClose);
         CHECK_SYMBOL_AND_PUSH('(', kOperationParOpen);
         CHECK_SYMBOL_AND_PUSH(')', kOperationParClose);
-        
-        CHECK_STROKE_AND_PUSH(BEQ, kOperationBE);
-        CHECK_STROKE_AND_PUSH(AE, kOperationAE);
-        CHECK_STROKE_AND_PUSH(EQUAL, kOperationE);
-        CHECK_STROKE_AND_PUSH("!=", kOperationNE);
 
-        CHECK_STROKE_AND_PUSH(B, kOperationB);
-        CHECK_STROKE_AND_PUSH(A, kOperationA);
-        CHECK_STROKE_AND_PUSH(IS, kOperationIs);
-        CHECK_STROKE_AND_PUSH(THEN, kOperationThen);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationBE), kOperationBE);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationAE), kOperationAE);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationE),  kOperationE);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationNE), kOperationNE);
+
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationB),  kOperationB);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationA),  kOperationA);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationIs), kOperationIs);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationThen), kOperationThen);
         CHECK_SYMBOL_AND_PUSH(',', kOperationComma);
-        CHECK_STROKE_AND_PUSH(ADD, kOperationAdd);
-        CHECK_STROKE_AND_PUSH(MUL, kOperationMul);
-        CHECK_STROKE_AND_PUSH(DIV, kOperationDiv);
-        CHECK_STROKE_AND_PUSH(SUB, kOperationSub);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationAdd), kOperationAdd);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationMul), kOperationMul);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationDiv), kOperationDiv);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationSub), kOperationSub);
         CHECK_SYMBOL_AND_PUSH('^', kOperationPow);
 
-        CHECK_STROKE_AND_PUSH("sin", kOperationSin);
-        CHECK_STROKE_AND_PUSH("sqrt", kOperationSQRT);
-        CHECK_STROKE_AND_PUSH(IF, kOperationIf);
-        CHECK_STROKE_AND_PUSH(ELSE, kOperationElse);
-        CHECK_STROKE_AND_PUSH(WHILE, kOperationWhile);
-        CHECK_STROKE_AND_PUSH(PRINTC, kOperationWriteChar);
-        CHECK_STROKE_AND_PUSH(PRINT, kOperationWrite);
-        CHECK_STROKE_AND_PUSH(SCANF, kOperationRead);
-        CHECK_STROKE_AND_PUSH(DECLARE, kOperationFunction);
-        CHECK_STROKE_AND_PUSH(RETURN, kOperationReturn);
-        CHECK_STROKE_AND_PUSH(GOODBYE, kOperationHLT);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationSin),    kOperationSin);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationSQRT),   kOperationSQRT);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationIf),     kOperationIf);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationElse),   kOperationElse);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationWhile),  kOperationWhile);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationWriteChar), kOperationWriteChar);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationWrite),  kOperationWrite);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationRead),   kOperationRead);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationFunction), kOperationFunction);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationReturn), kOperationReturn);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationHLT),    kOperationHLT);
+
 
         if (ParseNumberToken(root, string, tokens, &cnt)) {
             continue;
@@ -215,7 +218,7 @@ static bool ParseStringToken(LangRoot *root, const char **string, Stack_Info *to
         len++;
     }
 
-    char *name = (char *)calloc(len + 1, 1);
+    char *name = (char *) calloc (len + 1, 1);
     strncpy(name, name_start, len);
     name[len] = '\0';
 
