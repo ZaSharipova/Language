@@ -89,5 +89,57 @@ struct Language {
     VariableArr *arr;
 };
 
+struct LangTable {
+    const char *name_in_lang;
+    const char *name_in_tree;
+    OperationTypes type;
+};
+
+static const LangTable NAME_TYPES_TABLE [] = {
+    {"augeo",        "+",      kOperationAdd},
+    {"minuo",        "-",      kOperationSub},
+    {"multiplico",   "*",      kOperationMul},
+    {"divido",       "/",      kOperationDiv},
+    {"^",            "^",      kOperationPow},
+    {"sin",          "sin",    kOperationSin},
+    {"cos",          "cos",    kOperationCos},
+    {"tg",           "tg",     kOperationTg},
+    {"ln",           "ln",     kOperationLn},
+    {"arctg",        "arctg",  kOperationArctg},
+    {"sh",           "sh",     kOperationSinh},
+    {"ch",           "ch",     kOperationCosh},
+    {"th",           "th",     kOperationTgh},
+
+    {"magica",       "=",      kOperationIs},
+    {"si",           "if",     kOperationIf},
+    {"altius",       "else",   kOperationElse},
+    {"perpetuum",    "while",  kOperationWhile},
+    {"~~",           ";",      kOperationThen},
+    {",",            ",",      kOperationComma},
+    {"incantatio",   "func",   kOperationFunction},
+    {"",             "call",   kOperationCall},
+    {"reporto",      "return", kOperationReturn},
+
+    {"inferior",     "<",      kOperationB},
+    {"inferior_aut", "<=",     kOperationBE},
+    {"superior",     ">",      kOperationA},
+    {"superior_aut", ">=",     kOperationAE},
+    {"aequalis",     "==",     kOperationE},
+    {"!=",           "!=",     kOperationNE},
+
+    {"sqrt",         "sqrt",   kOperationSQRT},
+
+    {"revelatio",    "print",  kOperationWrite},
+    {"printc",       "printc", kOperationWriteChar},
+    {"augurio",      "scanf",  kOperationRead},
+
+    {"(",            "(",      kOperationParOpen},
+    {")",            ")",      kOperationParClose},
+    {"|>",           "{",      kOperationBraceOpen},
+    {"<|",           "}",      kOperationBraceClose},
+    {"exit",         "exit",   kOperationHLT},
+    {"",             "",       kOperationNone},
+};
+static const size_t OP_TABLE_SIZE = sizeof(NAME_TYPES_TABLE) / sizeof(NAME_TYPES_TABLE[0]);
 
 #endif //STRUCTS_H_

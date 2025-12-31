@@ -28,7 +28,7 @@ TARGET_REVERSE = build/bin/reverse
 SRCS_FRONT   = $(wildcard Front-End/*.cpp)
 SRCS_MIDDLE  = $(wildcard Middle-End/*.cpp)
 SRCS_BACK    = $(wildcard Back-End/*.cpp)
-SRCS_REVERSE = $(wildcard Reverse-End/*.cpp) StackFunctions.cpp DoGraph.cpp
+SRCS_REVERSE = $(wildcard Reverse-End/*.cpp)
 SRCS_COMMON  = $(wildcard *.cpp)
 
 OBJS_FRONT   = $(patsubst Front-End/%.cpp,   build/front/%.o,   $(SRCS_FRONT))
@@ -59,7 +59,7 @@ $(TARGET_BACK): $(OBJS_BACK) $(OBJS_COMMON) $(OBJS_FRONT) $(OBJS_MIDDLE)
 	@mkdir -p build/bin
 	@$(CC) $^ -o $@ $(LDFLAGS)
 
-$(TARGET_REVERSE): $(OBJS_REVERSE) $(OBJS_FRONT_NO_MAIN)
+$(TARGET_REVERSE): $(OBJS_REVERSE) $(OBJS_FRONT_NO_MAIN) $(OBJS_COMMON)
 	@mkdir -p build/bin
 	@$(CC) $^ -o $@ $(LDFLAGS)
 
