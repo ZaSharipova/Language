@@ -5,9 +5,9 @@
 #include <string.h>
 #include <ctype.h>
 
-#include "Enums.h"
-#include "Structs.h"
-#include "StackFunctions.h"
+#include "Common/Enums.h"
+#include "Common/Structs.h"
+#include "Common/StackFunctions.h"
 #include "Front-End/LanguageFunctions.h"
 
 static bool SkipComment(const char **string);

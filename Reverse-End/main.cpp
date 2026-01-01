@@ -1,11 +1,13 @@
 #include "Front-End/Rules.h"
-#include "Structs.h"
-#include "Enums.h"
+#include "Common/Structs.h"
+#include "Common/Enums.h"
 #include "Front-End/LanguageFunctions.h"
-#include "DoGraph.h"
+#include "Common/DoGraph.h"
 #include "Front-End/TreeToAsm.h"
-#include "TreeToCode.h"
-#include "StackFunctions.h"
+#include "Reverse-End/TreeToCode.h"
+#include "Common/StackFunctions.h"
+#include "Common/ReadTree.h"
+#include "Common/CommonFunctions.h"
 
 int main(int argc, char *argv[]) {
     char *tree_file = argv[1];

@@ -5,10 +5,11 @@
 #include <string.h>
 #include <ctype.h>
 
-#include "Enums.h"
-#include "Structs.h"
+#include "Common/Enums.h"
+#include "Common/Structs.h"
 #include "Front-End/Rules.h"
 #include "Front-End/LanguageFunctions.h"
+#include "Common/CommonFunctions.h"
 
 static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr);
 static void GenThenChain(LangNode_t *node, FILE *out, VariableArr *arr, int indent);
@@ -19,18 +20,12 @@ static void GenFunctionCall(LangNode_t *node, FILE *out, VariableArr *arr, int i
 
 #define PrintCodeNameFromTable(type) NAME_TYPES_TABLE[type].name_in_lang
 
-static bool IsThatOperation(LangNode_t *node, OperationTypes type) {
-    if (node && node->type == kOperation && node->value.operation == type) {
-        return true;
-    }
-    return false;
-}
-
 static void PrintIndent(FILE *out, int indent) {
     assert(out);
 
-    for (int i = 0; i < indent; ++i)
+    for (size_t i = 0; i < indent; i++) {
         fputc('\t', out);
+    }
 }
 
 void GenerateCodeFromAST(LangNode_t *node, FILE *out, VariableArr *arr, int indent) {

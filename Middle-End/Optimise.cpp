@@ -4,12 +4,10 @@
 #include <assert.h>
 #include <math.h>
 
-#include "Enums.h"
-#include "Structs.h"
+#include "Common/Enums.h"
+#include "Common/Structs.h"
 #include "Front-End/LanguageFunctions.h"
-//#include "Differentiate.h"
-
-#include "DoGraph.h"
+#include "Common/DoGraph.h"
 
 static LangNode_t *AddOptimise(LangRoot *root, LangNode_t *node, bool *has_change);
 static LangNode_t *SubOptimise(LangRoot *root, LangNode_t *node, bool *has_change);
@@ -21,8 +19,6 @@ static LangNode_t *CheckNodeAndConstOptimise(LangRoot *root, LangNode_t *node, b
 static LangNode_t *GetSubTree(LangRoot *root, LangNode_t *node, LangNode_t *delete_node, LangNode_t *to_main);
 
 static bool IsThisNumber(LangNode_t *node, double number);
-// static bool IsZero(LangNode_t *node);
-// static bool IsOne(LangNode_t *node);
 static bool IsNumber(LangNode_t *node);
 static bool IsOperation(LangNode_t *node);
 
@@ -265,14 +261,6 @@ static bool IsThisNumber(LangNode_t *node, double number) {
 
     return (node->type == kNumber && fabs(node->value.number - number) < eps);
 }
-
-// static bool IsOne(LangNode_t *node) {
-//     if (!node) {
-//         return false;
-//     }
-
-//     return (node->type == kNumber && fabs(node->value.number - 1) < eps);
-// }
 
 static bool IsNumber(LangNode_t *node) {
     if (!node) {

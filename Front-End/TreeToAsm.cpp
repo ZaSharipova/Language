@@ -5,10 +5,9 @@
 #include <string.h>
 #include <assert.h>
 
-#include "Structs.h"
-#include "Enums.h"
-#include "StackFunctions.h"
-
+#include "Common/Structs.h"
+#include "Common/Enums.h"
+#include "Common/StackFunctions.h"
 
 #define FPRINTF(fmt, ...) fprintf(file, fmt "\n", ##__VA_ARGS__)
 static void CleanPositions(VariableArr *arr);

@@ -1,11 +1,11 @@
-#include "DoGraph.h"
+#include "Common/DoGraph.h"
 
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
 
-#include "Enums.h"
-#include "Structs.h"
+#include "Common/Enums.h"
+#include "Common/Structs.h"
 
 #define FILE_OUT "output.txt"
 #define MAX_COMMAND_SIZE 50

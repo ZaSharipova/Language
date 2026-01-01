@@ -1,7 +1,7 @@
-#include "ReadTree.h"
+#include "Common/ReadTree.h"
 
-#include "Enums.h"
-#include "Structs.h"
+#include "Common/Enums.h"
+#include "Common/Structs.h"
 
 #include <stdio.h>
 #include <assert.h>
@@ -10,6 +10,7 @@
 
 #include "Front-End/Rules.h"
 #include "Front-End/LanguageFunctions.h"
+#include "Common/CommonFunctions.h"
 
 static DifErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *arr);
 static DifErrors ParseTitle(const char *buffer, size_t *pos, char **out_title);
@@ -22,7 +23,6 @@ static void ScanInitsInSubtree(LangNode_t *func_name_node, LangNode_t *root, Var
 static void ComputeFuncSizes(LangNode_t *node, VariableArr *arr);
 
 static void SkipSpaces(const char *buf, size_t *pos);
-static bool IsThatOperation(LangNode_t *node, OperationTypes type);
 static DifErrors PrintSyntaxErrorNode(size_t pos, char c);
 
 DifErrors ParseNodeFromString(const char *buffer, size_t *pos, LangNode_t *parent, LangNode_t **node_to_add, VariableArr *arr) {
@@ -186,13 +186,6 @@ static void SkipSpaces(const char *buf, size_t *pos) {
     while (buf[*pos] == ' ' || buf[*pos] == '\t' || buf[*pos] == '\n' || buf[*pos] == '\r') {
         (*pos)++;
     }
-}
-
-static bool IsThatOperation(LangNode_t *node, OperationTypes type) {
-    if (node && node->type == kOperation && node->value.operation == type) {
-        return true;
-    }
-    return false;
 }
 
 static DifErrors PrintSyntaxErrorNode(size_t pos, char c) {

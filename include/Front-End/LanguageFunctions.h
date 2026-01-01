@@ -1,8 +1,8 @@
 #ifndef LANGUAGE_FUNCTIONS_H_
 #define LANGUAGE_FUNCTIONS_H_
 
-#include "Enums.h"
-#include "Structs.h"
+#include "Common/Enums.h"
+#include "Common/Structs.h"
 
 DifErrors LangRootCtor(LangRoot *root);
 DifErrors NodeCtor(LangNode_t **node, Value *value);

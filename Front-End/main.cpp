@@ -1,20 +1,19 @@
 #include "Front-End/Rules.h"
-#include "Structs.h"
-#include "Enums.h"
+#include "Common/Structs.h"
+#include "Common/Enums.h" //TODO
 #include "Front-End/LanguageFunctions.h"
-#include "DoGraph.h"
+#include "Common/DoGraph.h"
 #include "Front-End/TreeToAsm.h"
 #include "Reverse-End/TreeToCode.h"
-#include "StackFunctions.h"
-#include "ReadTree.h"
+#include "Common/StackFunctions.h"
+#include "Common/ReadTree.h"
+#include "Common/CommonFunctions.h"
 
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
 
 int main(int argc, char *argv[]) {
- // TODO square to asm segfault
- // TODO tree to code problems with writing
 
     if (argc < 4) {
         fprintf(stderr,
@@ -41,12 +40,7 @@ int main(int argc, char *argv[]) {
     INIT_DUMP_INFO(dump_info);
     dump_info.tree = &root;
 
-    Language lang_info = {
-        .root        = &root,
-        .tokens      = NULL,
-        .tokens_pos  = NULL,
-        .arr         = &variable_array
-    };
+    Language lang_info = {&root, NULL, NULL, &variable_array};
 
     if (strcmp(mode, "tree-asm") == 0) {
 

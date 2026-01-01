@@ -1,7 +1,7 @@
 #include "Front-End/Rules.h"
 
-#include "Enums.h"
-#include "Structs.h"
+#include "Common/Enums.h"
+#include "Common/Structs.h"
 
 #include <stdio.h>
 #include <assert.h>
@@ -11,14 +11,14 @@
 #include <sys/stat.h>
 
 #include "Front-End/LanguageFunctions.h"
-#include "StackFunctions.h"
-#include "DoGraph.h"
+#include "Common/StackFunctions.h"
+#include "Common/DoGraph.h"
 #include "Front-End/LexicalAnalysis.h"
+#include "Common/CommonFunctions.h"
 
 static long long SizeOfFile(const char *filename);
 static char *ReadToBuf(const char *filename, FILE *file, size_t filesize);
 
-static bool IsThatOperation(LangNode_t *node, OperationTypes type);
 static LangNode_t *ParseFunctionArgs(Language *lang_info, size_t *cnt);
 static LangNode_t *ParseFunctionBody(Language *lang_info, LangNode_t *func);
 static LangNode_t *ParseStatementSequence(Language *lang_info, LangNode_t *func);
@@ -65,7 +65,7 @@ static LangNode_t *GetIf(Language *lang_info, LangNode_t *func);
 static LangNode_t *GetElse(Language *lang_info, LangNode_t *if_node, LangNode_t *func);
 static LangNode_t *GetFunctionDeclare(Language *lang_info);
 static LangNode_t *GetFunctionCall(Language *lang_info);
-LangNode_t *GetReturn(Language *lang_info);
+static LangNode_t *GetReturn(Language *lang_info);
 static LangNode_t *GetPrintf(Language *lang_info);
 static LangNode_t *GetUnaryFunc(Language *lang_info);
 static LangNode_t *GetHLT(Language *lang_info);
@@ -147,7 +147,7 @@ static LangNode_t *GetGoal(Language *lang_info) { // why hlt is called function
     return first;
 }
 
-LangNode_t *GetReturn(Language *lang_info) {
+static LangNode_t *GetReturn(Language *lang_info) {
     assert(lang_info);
 
     LangNode_t *return_node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
@@ -928,67 +928,4 @@ static LangNode_t *ParseStatementSequence(Language *lang_info, LangNode_t *func)
     }
 
     return last_stmt;
-}
-
-static bool IsThatOperation(LangNode_t *node, OperationTypes type) {
-    if (node && node->type == kOperation && node->value.operation == type) {
-        return true;
-    }
-    return false;
-}
-
-static long long SizeOfFile(const char *filename) {
-    assert(filename);
-
-    struct stat stbuf = {};
-
-    int err = stat(filename, &stbuf);
-    if (err != kSuccess) {
-        perror("stat() failed");
-        return kErrorStat;
-    }
-
-    return stbuf.st_size;
-}
-
-static char *ReadToBuf(const char *filename, FILE *file, size_t filesize) {
-    assert(filename);
-    assert(file);
-
-    char *buf_in = (char *) calloc (filesize + 2, sizeof(char));
-    if (!buf_in) {
-        fprintf(stderr, "ERROR while calloc.\n");
-        return NULL;
-    }
-
-    size_t bytes_read = fread(buf_in, 1, filesize, file);
-
-    char *buf_out = (char *) calloc (bytes_read + 1, 1);
-    if (!buf_out) {
-        fprintf(stderr, "ERROR while calloc buf_out.\n");
-        free(buf_in);
-        return NULL;
-    }
-
-    size_t j = 0;
-    for (size_t i = 0; i < bytes_read; i++) {
-        buf_out[j++] = buf_in[i];
-    }
-
-    buf_out[j] = '\0';
-
-    free(buf_in);
-
-    return buf_out;
-}
-
-void DoBufRead(FILE *file, const char *filename, FileInfo *Info) {
-    assert(file);
-    assert(filename);
-    assert(Info);
-
-    Info->filesize = (size_t)SizeOfFile(filename) * 4;
-
-    Info->buf_ptr = ReadToBuf(filename, file, Info->filesize);
-    assert(Info->buf_ptr != NULL);
 }

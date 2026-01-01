@@ -4,8 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "Enums.h"
-#include "Structs.h"
+#include "Common/Enums.h"
+#include "Common/Structs.h"
 
 #define CHECK_ERROR_RETURN(cond) \
     err = cond;                  \

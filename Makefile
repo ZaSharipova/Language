@@ -1,118 +1,102 @@
-CC = g++
-CFLAGS = -ggdb3 -g -std=c++17 -O0 \
-    -Iinclude -Iinclude/* -I. -Wall -Wextra -Weffc++ -Wc++14-compat -Wmissing-declarations \
-    -Wcast-align -Wcast-qual -Wchar-subscripts -Wconversion \
-    -Wctor-dtor-privacy -Wempty-body -Wfloat-equal \
-    -Wformat-nonliteral -Wformat-security -Wformat=2 \
-    -Winline -Wnon-virtual-dtor -Woverloaded-virtual \
-    -Wpacked -Wpointer-arith -Winit-self \
+CXX = g++
+
+CXXFLAGS = -ggdb3 -g -std=c++17 -O0 \
+	-Iinclude -I. -Wall -Wextra -Weffc++ -Wc++14-compat -Wmissing-declarations \
+	-Wcast-align -Wcast-qual -Wchar-subscripts -Wconversion \
+	-Wctor-dtor-privacy -Wempty-body -Wfloat-equal \
+	-Wformat-nonliteral -Wformat-security -Wformat=2 \
+  	-Winline -Wnon-virtual-dtor -Woverloaded-virtual \
+   	-Wpacked -Wpointer-arith -Winit-self \
     -Wshadow -Wsign-conversion -Wsign-promo -Wstrict-overflow=2 \
-    -Wsuggest-override -Wswitch-default -Wswitch-enum -Wundef \
-    -Wunreachable-code -Wunused -Wvariadic-macros \
-    -Wno-missing-field-initializers -Wno-narrowing -Wno-old-style-cast -Wno-varargs \
-    -Wstack-protector -fcheck-new -fsized-deallocation -fstack-protector \
-    -fstrict-overflow -fno-omit-frame-pointer -Wlarger-than=8192 \
-    -fPIE -Werror=vla \
-    -fsanitize=address,alignment,bool,bounds,enum,float-cast-overflow,float-divide-by-zero,integer-divide-by-zero,nonnull-attribute,null,return,returns-nonnull-attribute,shift,signed-integer-overflow,undefined,unreachable,vla-bound,vptr
+	-Wsuggest-override -Wswitch-default -Wswitch-enum -Wundef \
+	-Wunreachable-code -Wunused -Wvariadic-macros \
+	-Wno-missing-field-initializers -Wno-narrowing -Wno-old-style-cast -Wno-varargs \
+	-Wstack-protector -fcheck-new -fsized-deallocation -fstack-protector \
+	-fstrict-overflow -fno-omit-frame-pointer -Wlarger-than=8192 \
+	-fPIE -Werror=vla \
+	-fsanitize=address,alignment,bool,bounds,enum,float-cast-overflow,float-divide-by-zero,integer-divide-by-zero,nonnull-attribute,null,return,returns-nonnull-attribute,shift,signed-integer-overflow,undefined,unreachable,vla-bound,vptr
 
 LDFLAGS = -lm -fsanitize=address,alignment,bool,bounds,enum,float-cast-overflow,float-divide-by-zero,integer-divide-by-zero,nonnull-attribute,null,return,returns-nonnull-attribute,shift,signed-integer-overflow,undefined,unreachable,vla-bound,vptr
 
-OBJS_FRONT_NO_MAIN = $(filter-out build/front/main.o, $(OBJS_FRONT))
+BUILD      = build
+BIN        = $(BUILD)/bin
+OBJ_COMMON = $(BUILD)/common
+OBJ_FRONT  = $(BUILD)/front
+OBJ_MIDDLE = $(BUILD)/middle
+OBJ_BACK   = $(BUILD)/back
+OBJ_REVERSE= $(BUILD)/reverse
 
-TARGET_FRONT   = build/bin/front
-TARGET_MIDDLE  = build/bin/middle  
-TARGET_BACK    = build/bin/back
-TARGET_ALL     = build/bin/solver
-TARGET_REVERSE = build/bin/reverse
+COMMON_SRCS  = $(wildcard Common/*.cpp)
+FRONT_SRCS   = $(wildcard Front-End/*.cpp)
+MIDDLE_SRCS  = $(wildcard Middle-End/*.cpp)
+BACK_SRCS    = $(wildcard Back-End/*.cpp)
+REVERSE_SRCS = $(wildcard Reverse-End/*.cpp)
 
-SRCS_FRONT   = $(wildcard Front-End/*.cpp)
-SRCS_MIDDLE  = $(wildcard Middle-End/*.cpp)
-SRCS_BACK    = $(wildcard Back-End/*.cpp)
-SRCS_REVERSE = $(wildcard Reverse-End/*.cpp)
-SRCS_COMMON  = $(wildcard *.cpp)
+COMMON_OBJS  = $(COMMON_SRCS:Common/%.cpp=$(OBJ_COMMON)/%.o)
+FRONT_OBJS   = $(FRONT_SRCS:Front-End/%.cpp=$(OBJ_FRONT)/%.o)
+MIDDLE_OBJS  = $(MIDDLE_SRCS:Middle-End/%.cpp=$(OBJ_MIDDLE)/%.o)
+BACK_OBJS    = $(BACK_SRCS:Back-End/%.cpp=$(OBJ_BACK)/%.o)
+REVERSE_OBJS = $(REVERSE_SRCS:Reverse-End/%.cpp=$(OBJ_REVERSE)/%.o)
+FRONT_OBJS_NO_MAIN = $(filter-out $(OBJ_FRONT)/main.o, $(FRONT_OBJS))
 
-OBJS_FRONT   = $(patsubst Front-End/%.cpp,   build/front/%.o,   $(SRCS_FRONT))
-OBJS_MIDDLE  = $(patsubst Middle-End/%.cpp,  build/middle/%.o,  $(SRCS_MIDDLE))
-OBJS_BACK    = $(patsubst Back-End/%.cpp,    build/back/%.o,    $(SRCS_BACK))
-OBJS_REVERSE = $(patsubst Reverse-End/%.cpp, build/reverse/%.o, $(SRCS_REVERSE))
-OBJS_COMMON  = $(patsubst %.cpp,             build/common/%.o,  $(notdir $(SRCS_COMMON)))
+FRONT   = $(BIN)/front
+MIDDLE  = $(BIN)/middle
+BACK    = $(BIN)/back
+REVERSE = $(BIN)/reverse
+ALL     = $(BIN)/solver
 
-TREE_TO_CODE_OBJ = build/reverse/TreeToCode.o
-OBJS_ALL = $(OBJS_FRONT) $(OBJS_MIDDLE) $(OBJS_BACK) $(OBJS_COMMON)
+all: $(ALL)
+front: $(FRONT)
+middle: $(MIDDLE)
+back: $(BACK)
+reverse: $(REVERSE)
 
-all: $(TARGET_ALL)
-front: $(TARGET_FRONT)
-middle: $(TARGET_MIDDLE)
-back: $(TARGET_BACK)
-solver: $(TARGET_ALL)
-reverse: $(TARGET_REVERSE)
+$(FRONT): $(FRONT_OBJS) $(COMMON_OBJS)
+	@mkdir -p $(BIN)
+	@$(CXX) $^ -o $@ $(LDFLAGS)
 
-$(TARGET_FRONT): $(OBJS_FRONT) $(OBJS_COMMON) $(TREE_TO_CODE_OBJ)
-	@mkdir -p build/bin
-	@$(CC) $^ -o $@ $(LDFLAGS)
+$(MIDDLE): $(MIDDLE_OBJS) $(FRONT_OBJS_NO_MAIN) $(COMMON_OBJS)
+	@mkdir -p $(BIN)
+	@$(CXX) $^ -o $@ $(LDFLAGS)
 
-$(TARGET_MIDDLE): $(OBJS_MIDDLE) $(OBJS_COMMON) $(OBJS_FRONT_NO_MAIN) $(TREE_TO_CODE_OBJ)
-	@mkdir -p build/bin
-	@$(CC) $^ -o $@ $(LDFLAGS)
+$(BACK): $(BACK_OBJS) $(FRONT_OBJS) $(MIDDLE_OBJS) $(COMMON_OBJS)
+	@mkdir -p $(BIN)
+	@$(CXX) $^ -o $@ $(LDFLAGS)
 
-$(TARGET_BACK): $(OBJS_BACK) $(OBJS_COMMON) $(OBJS_FRONT) $(OBJS_MIDDLE)
-	@mkdir -p build/bin
-	@$(CC) $^ -o $@ $(LDFLAGS)
+$(REVERSE): $(REVERSE_OBJS) $(FRONT_OBJS_NO_MAIN) $(COMMON_OBJS)
+	@mkdir -p $(BIN)
+	@$(CXX) $^ -o $@ $(LDFLAGS)
 
-$(TARGET_REVERSE): $(OBJS_REVERSE) $(OBJS_FRONT_NO_MAIN) $(OBJS_COMMON)
-	@mkdir -p build/bin
-	@$(CC) $^ -o $@ $(LDFLAGS)
+$(ALL): $(FRONT_OBJS) $(MIDDLE_OBJS) $(BACK_OBJS) $(COMMON_OBJS)
+	@mkdir -p $(BIN)
+	@$(CXX) $^ -o $@ $(LDFLAGS)
 
-$(TARGET_ALL): $(OBJS_ALL)
-	@mkdir -p build/bin
-	@$(CC) $^ -o $@ $(LDFLAGS)
+$(OBJ_COMMON)/%.o: Common/%.cpp
+	@mkdir -p $(OBJ_COMMON)
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
-build/front/%.o: Front-End/%.cpp
-	@mkdir -p build/front
-	@$(CC) $(CFLAGS) -c $< -o $@
+$(OBJ_FRONT)/%.o: Front-End/%.cpp
+	@mkdir -p $(OBJ_FRONT)
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
-build/middle/%.o: Middle-End/%.cpp
-	@mkdir -p build/middle
-	@$(CC) $(CFLAGS) -c $< -o $@
+$(OBJ_MIDDLE)/%.o: Middle-End/%.cpp
+	@mkdir -p $(OBJ_MIDDLE)
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
-build/back/%.o: Back-End/%.cpp
-	@mkdir -p build/back
-	@$(CC) $(CFLAGS) -c $< -o $@
+$(OBJ_BACK)/%.o: Back-End/%.cpp
+	@mkdir -p $(OBJ_BACK)
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
-build/reverse/%.o: Reverse-End/%.cpp
-	@mkdir -p build/reverse
-	@$(CC) $(CFLAGS) -c $< -o $@
-
-build/common/%.o: %.cpp
-	@mkdir -p build/common
-	@$(CC) $(CFLAGS) -c $< -o $@
+$(OBJ_REVERSE)/%.o: Reverse-End/%.cpp
+	@mkdir -p $(OBJ_REVERSE)
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -rf build
+	rm -rf $(BUILD)
 
 rebuild: clean all
 
-debug: $(TARGET_ALL)
-	./$(TARGET_ALL)
+debug: all
+	./$(ALL)
 
-front-debug: $(TARGET_FRONT)
-	./$(TARGET_FRONT)
-
-reverse-debug: $(TARGET_REVERSE)
-	./$(TARGET_REVERSE)
-
-middle-debug: $(TARGET_MIDDLE)
-	./$(TARGET_MIDDLE)
-
-back-debug: $(TARGET_BACK)
-	./$(TARGET_BACK)
-
-list:
-	@echo "Доступные цели:"
-	@echo "  make all|solver     - полная сборка"
-	@echo "  make front          - фронтенд"
-	@echo "  make middle         - мидл + фронтенд"
-	@echo "  make back           - бэк + все предыдущие"
-	@echo "  make reverse        - reverse-end (Reverse-End/*.cpp + common)"
-
-.PHONY: all front middle back solver reverse clean rebuild debug front-debug middle-debug back-debug reverse-debug list```
+.PHONY: all front middle back reverse clean rebuild debug

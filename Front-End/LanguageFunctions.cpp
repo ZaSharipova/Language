@@ -1,7 +1,7 @@
 #include "Front-End/LanguageFunctions.h"
 
-#include "Enums.h"
-#include "Structs.h"
+#include "Common/Enums.h"
+#include "Common/Structs.h"
 #include "Front-End/Rules.h"
 
 #include <stdio.h>

@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 
-#include "Enums.h"
+#include "Common/Enums.h"
 
 #define MAX_IMAGE_SIZE 60
 #define MAX_TEXT_SIZE 120

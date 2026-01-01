@@ -1,10 +1,10 @@
-#include "StackFunctions.h"
+#include "Common/StackFunctions.h"
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
 
-#include "Enums.h"
-#include "Structs.h"
+#include "Common/Enums.h"
+#include "Common/Structs.h"
 
 static Realloc_Mode CheckSize(ssize_t size, ssize_t *capacity);
 

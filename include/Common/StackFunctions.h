@@ -3,8 +3,8 @@
 
 #include <stdio.h>
 
-#include "Enums.h"
-#include "Structs.h"
+#include "Common/Enums.h"
+#include "Common/Structs.h"
 
 DifErrors StackCtor(Stack_Info *stk, ssize_t capacity, FILE *open_log_file);
 DifErrors StackPush(Stack_Info *stk, LangNode_t *value, FILE *open_log_file);

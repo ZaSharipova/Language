@@ -5,30 +5,6 @@
 #define eps 1e-12 //
 
 #define MAIN "adepio_maximus"
-// #define IF "si"
-// #define ELSE "altius"
-// #define WHILE "perpetuum"
-// #define PRINT "revelatio"
-// #define SCANF "augurio"
-// #define DECLARE "incantatio"
-// #define RETURN "reporto"
-// #define GOODBYE "exit"
-// #define PRINTC "printc"
-// #define MUL "multiplico"
-// #define SUB "minuo"
-// #define ADD "augeo"
-// #define DIV "divido"
-// #define EQUAL "aequalis"
-// #define BEQ "infernum_par"
-// #define A "superior"       // >
-// #define AE "superior_aut"   // >=
-// #define B "inferior"       // <
-// #define BRACEOP "|>"
-// #define BRACECL "<|"
-// #define THEN "~~"
-// #define PAROP '|'
-// #define PARCL '|'
-// #define IS "magica"
 
 enum DifErrors {
     kSuccess,

@@ -1,10 +1,12 @@
 #include "Front-End/Rules.h"
-#include "Structs.h"
-#include "Enums.h"
+#include "Common/Structs.h"
+#include "Common/Enums.h"
 #include "Front-End/LanguageFunctions.h"
 #include "Reverse-End/TreeToCode.h"
-#include "DoGraph.h"
+#include "Common/DoGraph.h"
 #include "Middle-End/Optimise.h"
+#include "Common/ReadTree.h"
+#include "Common/CommonFunctions.h"
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
