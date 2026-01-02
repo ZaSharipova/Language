@@ -19,7 +19,7 @@
 В моем языке программирования реализованы 3 программы:
 
 - решатель квадратных уравнений
-![Square](./ast_screenShots/image1.svg)
+![Square](./ast_screenshots/image1.svg)
 
 - подсчет факториала
 ![Factorial](./ast_screenshots/image2.svg)
