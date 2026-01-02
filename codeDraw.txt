@@ -1,0 +1,39 @@
+incantatio adepio_maximus() |> 
+    radius magica 0~~
+    centrum_x magica 0~~
+    centrum_y magica 0~~
+    
+    augurio(radius)~~
+    augurio(centrum_x)~~
+    augurio(centrum_y)~~
+
+    si (radius superior 16) |>
+        printc(18)~~
+        printc(81)~~
+        printc(81)~~
+        exit~~
+    <|
+    
+    radius_quadratus magica radius multiplico radius~~
+    
+    y magica 0~~
+    perpetuum (y inferior 32) |>
+        x magica 0~~
+        perpetuum (x inferior 32) |>
+            dx magica x minuo centrum_x~~
+            dy magica y minuo centrum_y~~
+            distantia_quadrata magica (dx multiplico dx) augeo (dy multiplico dy)~~
+            
+            si (distantia_quadrata inferior_aut radius_quadratus) |>
+                printc(43)~~
+                printc(43)~~
+            <| altius |>
+                printc(46)~~
+                printc(46)~~
+            <|
+            x magica x augeo 1~~
+        <|
+        printc(10)~~
+        y magica y augeo 1~~
+    <|
+<|

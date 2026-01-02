@@ -90,7 +90,7 @@ static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int 
 
     int var_idx = -1;
     for (size_t i = 0; i < arr->size; i++) {
-        if (strncmp(arr->var_array[i].variable_name, arr->var_array[node->value.pos].variable_name, strlen(arr->var_array[i].variable_name)) == 0) {
+        if (strcmp(arr->var_array[i].variable_name, arr->var_array[node->value.pos].variable_name) == 0) {
             if (arr->var_array[i].pos_in_code == -1) {
                 var_idx = arr->var_array[i].pos_in_code = asm_info->counter++;
                 //FPRINTFf("AAAAA%d", arr->var_array[i].pos_in_code);
@@ -123,8 +123,7 @@ static int FindVarPos(VariableArr *arr, LangNode_t *node, int ram_base, int para
 
     int var_idx = -1;
     for (size_t i = 0; i < arr->size; i++) {
-        if (strncmp(arr->var_array[i].variable_name, arr->var_array[node->value.pos].variable_name,
-                    strlen(arr->var_array[i].variable_name)) == 0) {
+        if (strcmp(arr->var_array[i].variable_name, arr->var_array[node->value.pos].variable_name) == 0) {
             if (arr->var_array[i].pos_in_code == -1) {
                 var_idx = arr->var_array[i].pos_in_code = asm_info->counter++;
             } else {
@@ -203,6 +202,11 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
                 case kOperationWrite:
                     PrintExpr(file, stmt->left, arr, ram_base, param_count, asm_info);
                     FPRINTF("OUT\n");
+                    break;
+
+                case kOperationWriteChar:
+                    PrintExpr(file, stmt->left, arr, ram_base, param_count, asm_info);
+                    FPRINTF("OUTC\n");
                     break;
 
                 case kOperationRead:

@@ -128,7 +128,7 @@ DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filena
    PRIMARY :: = ( E ) | N | S
 */
 
-static LangNode_t *GetGoal(Language *lang_info) { // why hlt is called function
+static LangNode_t *GetGoal(Language *lang_info) {
     assert(lang_info);
 
     int cnt = 0;
@@ -240,7 +240,7 @@ LangNode_t *GetOp(Language *lang_info, LangNode_t *func) {
     assert(lang_info);
     assert(func);
 
-    //printf("[DEBUG GetOp] Current token position: %zu\n", *(lang_info->tokens_pos));
+    //fprintf(stderr, "[DEBUG GetOp] Current token position: %zu\n", *(lang_info->tokens_pos));
     LangNode_t *stmt = NULL;
     size_t save_pos = (*lang_info->tokens_pos);
 
