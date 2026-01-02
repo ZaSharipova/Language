@@ -6,7 +6,7 @@ incantatio adepio_maximus() |>
 <|
 
 incantatio countfact (n) |>
-    si (n minuo 1 infernum_par 0) |>
+    si (n minuo 1 inferior_aut 0) |>
         reporto 1 ~~
     <| altius |>
         reporto n multiplico countfact (n minuo 1) ~~
