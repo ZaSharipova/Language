@@ -10,6 +10,7 @@
 #include "Common/CommonFunctions.h"
 
 int main(int argc, char *argv[]) {
+    (void)argc;
     char *tree_file = argv[1];
     char *code_file = argv[2];
 
@@ -17,6 +18,7 @@ int main(int argc, char *argv[]) {
     DifErrors err = kSuccess;
     CHECK_ERROR_RETURN(InitArrOfVariable(&Variable_Array, 10));
 
+    
     INIT_DUMP_INFO(dump_info);
     
     FILE_OPEN_AND_CHECK(ast_file, tree_file, "r");
@@ -48,7 +50,7 @@ int main(int argc, char *argv[]) {
     fclose(code_out);
     
     DtorVariableArray(&Variable_Array);
-    //TreeDtor(&root);
+    TreeDtor(&parsed_root);
 
     return kSuccess;
 }

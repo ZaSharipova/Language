@@ -23,7 +23,7 @@ static void GenFunctionCall(LangNode_t *node, FILE *out, VariableArr *arr, int i
 static void PrintIndent(FILE *out, int indent) {
     assert(out);
 
-    for (size_t i = 0; i < indent; i++) {
+    for (int i = 0; i < indent; i++) {
         fputc('\t', out);
     }
 }
@@ -34,6 +34,10 @@ void GenerateCodeFromAST(LangNode_t *node, FILE *out, VariableArr *arr, int inde
     if (!node) return;
 
     if (node->type == kOperation) {
+
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wswitch-enum"
+
         switch (node->value.operation) {
 
             case kOperationIf:
@@ -58,8 +62,9 @@ void GenerateCodeFromAST(LangNode_t *node, FILE *out, VariableArr *arr, int inde
             case kOperationReturn:
                 PrintIndent(out, indent);
                 fprintf(out, "%s ", PrintCodeNameFromTable(kOperationReturn));
-                if (node->left)
+                if (node->left) {
                     GenExpr(node->left, out, arr);
+                }
 
                 fprintf(out, "%s\n", PrintCodeNameFromTable(kOperationThen));
                 return;
@@ -88,6 +93,8 @@ void GenerateCodeFromAST(LangNode_t *node, FILE *out, VariableArr *arr, int inde
             default:
                 break;
         }
+
+        #pragma clang diagnostic pop
     }
 
     PrintIndent(out, indent);
@@ -233,6 +240,10 @@ static void GenFunctionCall(LangNode_t *node, FILE *out, VariableArr *arr, int i
 }
 
 static int GetOpPrecedence(OperationTypes op) {
+
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wswitch-enum"
+
     switch (op) {
         case kOperationPow:     return 4;
         case kOperationMul:     return 3;
@@ -247,6 +258,8 @@ static int GetOpPrecedence(OperationTypes op) {
         case kOperationNE:      return 1;
         default:                return 0;
     }
+
+    #pragma clang diagnostic pop
 }
 
 static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr) { //
@@ -270,6 +283,9 @@ static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr) { //
             fprintf(out, "UNKNOWN");
             return;
     }
+
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wswitch-enum"
 
     switch (node->value.operation) {
 
@@ -381,4 +397,6 @@ static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr) { //
             fprintf(out, "UNSUPPORTED_OP");
             return;
     }
+    
+    #pragma clang diagnostic pop
 }

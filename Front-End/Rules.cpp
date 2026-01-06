@@ -16,12 +16,8 @@
 #include "Front-End/LexicalAnalysis.h"
 #include "Common/CommonFunctions.h"
 
-static long long SizeOfFile(const char *filename);
-static char *ReadToBuf(const char *filename, FILE *file, size_t filesize);
-
 static LangNode_t *ParseFunctionArgs(Language *lang_info, size_t *cnt);
 static LangNode_t *ParseFunctionBody(Language *lang_info, LangNode_t *func);
-static LangNode_t *ParseStatementSequence(Language *lang_info, LangNode_t *func);
 
 #define CHECK_NULL_RETURN(name, cond) \
     LangNode_t *name = cond;           \
@@ -91,7 +87,9 @@ DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filena
 
     Stack_Info tokens = {};
     StackCtor(&tokens, 1, stderr);
-    CheckAndReturn(lang_info->root, (const char **)&Info.buf_ptr, &tokens, lang_info->arr);
+    
+    const char *temp_buf_ptr = Info.buf_ptr;
+    CheckAndReturn(lang_info->root, &temp_buf_ptr, &tokens, lang_info->arr);
     lang_info->tokens = &tokens;
 
     size_t tokens_pos = 0;
@@ -131,7 +129,6 @@ DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filena
 static LangNode_t *GetGoal(Language *lang_info) {
     assert(lang_info);
 
-    int cnt = 0;
     LangNode_t *first = NULL;
     do {
         LangNode_t *next = GetFunctionDeclare(lang_info);
@@ -140,7 +137,6 @@ static LangNode_t *GetGoal(Language *lang_info) {
             first->right = next;
         } else {
             first = NEWOP(kOperationThen, first, next);
-            cnt++;
         }
     } while (true);
 
@@ -410,8 +406,6 @@ static LangNode_t *GetFunctionCall(Language *lang_info) {
             return NULL;
         }
         
-        int cnt = 0;
-        cnt++;
         if (!args_root) {
             args_root = arg;
         } else {
@@ -603,7 +597,7 @@ LangNode_t *GetAssignment(Language *lang_info, LangNode_t *func) {
 
     if (lang_info->arr->var_array[maybe_var->value.pos].variable_value == POISON && 
         value->type == kNumber) {
-        lang_info->arr->var_array[maybe_var->value.pos].variable_value = value->value.number;
+        lang_info->arr->var_array[maybe_var->value.pos].variable_value = (int)value->value.number; //
     }
     
     return NEWOP(kOperationThen, assign_op, NULL);
@@ -735,7 +729,6 @@ static LangNode_t *GetWhile(Language *lang_info, LangNode_t *func) {
 
     LangNode_t *body = NULL, *last = NULL;
     while (true) {
-        size_t body_pos = *(lang_info->tokens_pos);
         LangNode_t *stmt = GetOp(lang_info, func);
         if (!stmt) break;
         
@@ -893,39 +886,4 @@ static LangNode_t *GetHLT(Language *lang_info) {
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationThen), );
 
     return name;
-}
-
-static LangNode_t *ParseStatementSequence(Language *lang_info, LangNode_t *func) {
-    assert(lang_info);
-    assert(func);
-
-    LangNode_t *first_stmt = GetOp(lang_info, func);
-    if (!first_stmt) {
-        fprintf(stderr, "SYNTAX_ERROR_WHILE: expected statements in body\n");
-        return NULL;
-    }
-
-    LangNode_t *last_stmt = first_stmt;
-    LangNode_t *tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
-
-    while (IsThatOperation(tok, kOperationThen)) {
-        (*(lang_info->tokens_pos))++;
-
-        LangNode_t *next_stmt = GetOp(lang_info, func);
-        if (!next_stmt) {
-            fprintf(stderr, "SYNTAX_ERROR_WHILE: expected statement after ';'\n");
-            return NULL;
-        }
-
-        LangNode_t *then_node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos) - 1);
-        then_node->left  = last_stmt;
-        then_node->right = next_stmt;
-        last_stmt->parent = then_node;
-        next_stmt->parent = then_node;
-
-        last_stmt = then_node;
-        tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
-    }
-
-    return last_stmt;
 }

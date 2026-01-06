@@ -151,8 +151,6 @@ static void WriteOperationNode(FILE *file, const LangNode_t *node) {
     assert(file);
     assert(node);
     
-    GraphOperation op_info = PrintExpressionType(node);
-    
     fprintf(file, DOT_INDENT "\"%p\" [label=\"{Parent: %p \\n | Addr: %p \\n | Type: %s", 
             (void *)node, (void *)node->parent, (void *)node, GetNodeTypeString(node->type));
     fprintf(file, " | Value: %s | {Left: %p | Right: %p}}\" shape=Mrecord color=black fillcolor=%s, style=filled];\n", 

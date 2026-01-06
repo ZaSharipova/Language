@@ -189,7 +189,12 @@ static void SkipSpaces(const char *buf, size_t *pos) {
 }
 
 static DifErrors PrintSyntaxErrorNode(size_t pos, char c) {
-    fprintf(stderr, "Syntax error at position %zu: unexpected character '%c'\n", pos, (c == '\0' ? 'EOF' : c));
+    fprintf(stderr, "Syntax error at position %zu: unexpected character ", pos);
+    
+    if (c == '\0') fprintf(stderr, "EOF");
+    else fprintf(stderr, "'%c'", c);
+    fprintf(stderr, "\n");
+
 
     return kSyntaxError;
 }

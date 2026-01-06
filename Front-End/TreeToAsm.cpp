@@ -15,8 +15,8 @@ static const char *ChooseCompareMode(LangNode_t *node);
 
 static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, int *ram_base, AsmInfo *asm_info);
 static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info);
-static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int ram_base, int param_count, AsmInfo *asm_info);
-static int  FindVarPos(VariableArr *arr, LangNode_t *node, int ram_base, int param_count, AsmInfo *asm_info);
+static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int param_count, AsmInfo *asm_info);
+static int  FindVarPos(VariableArr *arr, LangNode_t *node, AsmInfo *asm_info);
 static void PushParamsToStack(FILE *file, LangNode_t *args_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info);
 static void PushParamsToRam(FILE *file, LangNode_t *args_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info);
 static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info);
@@ -82,7 +82,7 @@ static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, i
     }
 }
 
-static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int ram_base, int param_count, AsmInfo *asm_info) {
+static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int param_count, AsmInfo *asm_info) {
     assert(file);
     assert(arr);
     assert(node);
@@ -116,7 +116,7 @@ static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int 
     }
 }
 
-static int FindVarPos(VariableArr *arr, LangNode_t *node, int ram_base, int param_count, AsmInfo *asm_info) {
+static int FindVarPos(VariableArr *arr, LangNode_t *node, AsmInfo *asm_info) {
     assert(arr);
     assert(node);
     assert(asm_info);
@@ -158,7 +158,7 @@ void PushParamsToRam(FILE *file, LangNode_t *args_node, VariableArr *arr, int ra
     if (!args_node) return;
 
     if (!(args_node->type == kOperation && args_node->value.operation == kOperationComma)) {
-        FindVarPosPopMN(file, arr, args_node, ram_base, param_count, asm_info);
+        FindVarPosPopMN(file, arr, args_node, param_count, asm_info);
         return;
     }
 
@@ -174,6 +174,8 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
 
     switch (stmt->type) {
         case kOperation:
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Wswitch-enum"
             switch (stmt->value.operation) {
                 case kOperationHLT:
                     FPRINTF("HLT\n");
@@ -211,7 +213,7 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
 
                 case kOperationRead:
                     FPRINTF( "IN\n");
-                    FindVarPosPopMN(file, arr, stmt->left, ram_base, param_count, asm_info);
+                    FindVarPosPopMN(file, arr, stmt->left, param_count, asm_info);
                     break;
 
                 case kOperationThen:
@@ -269,14 +271,19 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
                     PrintExpr(file, stmt, arr, ram_base, param_count, asm_info);
                     break;
             }
+            #pragma clang diagnostic pop
             break;
 
         case kVariable:
-            FindVarPosPopMN(file, arr, stmt, ram_base, param_count, asm_info);
+            FindVarPosPopMN(file, arr, stmt, param_count, asm_info);
             break;
 
         case kNumber:
             FPRINTF("PUSH %.0f", stmt->value.number);
+            break;
+
+        default:
+            fprintf(stderr, "No such switch case.\n");
             break;
     }
 }
@@ -292,7 +299,7 @@ static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_ba
         FPRINTF("PUSH %.0f", expr->value.number);
         break;
         case kVariable: {
-            int var_idx = FindVarPos(arr, expr, ram_base, param_count, asm_info);
+            int var_idx = FindVarPos(arr, expr, asm_info);
             FPRINTF("PUSHR RAX");
             FPRINTF("PUSH %d", (-1) * param_count + var_idx);
             FPRINTF("ADD");
@@ -300,6 +307,8 @@ static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_ba
             FPRINTF("PUSHM [RCX]\n");
         } break;
         case kOperation:
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Wswitch-enum"
             switch (expr->value.operation) {
                 case kOperationSQRT:
                     PrintExpr(file, expr->left, arr, ram_base, param_count, asm_info);
@@ -329,8 +338,12 @@ static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_ba
                     PushParamsToStack(file, expr->right, arr, ram_base, param_count, asm_info);
                     FPRINTF("CALL :%s\n", arr->var_array[expr->left->value.pos].variable_name);
                     break;
+
+                default:
+                    break;
             }
             break;
+            #pragma clang diagnostic pop
     }
 }
 
@@ -344,6 +357,8 @@ static void CleanPositions(VariableArr *arr) {
 static const char *ChooseCompareMode(LangNode_t *node) {
     if (!node || node->type != kOperation) return "NULL";
 
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wswitch-enum"
     switch (node->value.operation) {
         case kOperationA:  return "JBE";
         case kOperationAE: return "JB";
@@ -353,4 +368,5 @@ static const char *ChooseCompareMode(LangNode_t *node) {
         case kOperationNE: return "JE";
         default: return "NULL";
     }
+    #pragma clang diagnostic pop
 }

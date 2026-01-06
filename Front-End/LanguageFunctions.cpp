@@ -97,7 +97,6 @@ DifErrors InitArrOfVariable(VariableArr *arr, size_t capacity) {
         arr->var_array[i].variable_value = POISON;
         arr->var_array[i].type           = kUnknown;
     }
-
     
     return kSuccess;
 }
@@ -135,13 +134,19 @@ DifErrors ResizeArray(VariableArr *arr)  {
 DifErrors DtorVariableArray(VariableArr *arr) {
     assert(arr);
 
-    arr->capacity = 0;
-    arr->size = 0;
+    for (size_t i = 0; i < arr->size; i++) {
+        free(arr->var_array[i].variable_name);
+        free(arr->var_array[i].func_made);
+    }
 
     free(arr->var_array);
+    arr->var_array = NULL;
+    arr->capacity  = 0;
+    arr->size      = 0;
 
     return kSuccess;
 }
+
 
 LangNode_t *NewNode(LangRoot *root, DifTypes type, Value value, LangNode_t *left, LangNode_t *right) {
     assert(root);
