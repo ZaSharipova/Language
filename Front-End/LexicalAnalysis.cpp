@@ -8,7 +8,7 @@
 #include "Common/Enums.h"
 #include "Common/Structs.h"
 #include "Common/StackFunctions.h"
-#include "Front-End/LanguageFunctions.h"
+#include "Common/LanguageFunctions.h"
 
 static bool SkipComment(const char **string);
 static void SkipSpaces(const char **string);
@@ -195,7 +195,7 @@ static bool ParseNumberToken(LangRoot *root, const char **string, Stack_Info *to
 
     if (has_minus) value = -value;
 
-    StackPush(tokens, NEWN(value), stderr);
+    StackPush(tokens, (LangNode_t *)NEWN(value), stderr);
     (*cnt)++;
 
     return true;

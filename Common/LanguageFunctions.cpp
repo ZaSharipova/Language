@@ -1,4 +1,4 @@
-#include "Front-End/LanguageFunctions.h"
+#include "Common/LanguageFunctions.h"
 
 #include "Common/Enums.h"
 #include "Common/Structs.h"

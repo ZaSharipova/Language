@@ -6,7 +6,7 @@
 
 #include "Common/Enums.h"
 #include "Common/Structs.h"
-#include "Front-End/LanguageFunctions.h"
+#include "Common/LanguageFunctions.h"
 #include "Common/DoGraph.h"
 
 static LangNode_t *AddOptimise(LangRoot *root, LangNode_t *node, bool *has_change);

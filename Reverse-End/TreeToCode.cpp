@@ -8,7 +8,7 @@
 #include "Common/Enums.h"
 #include "Common/Structs.h"
 #include "Front-End/Rules.h"
-#include "Front-End/LanguageFunctions.h"
+#include "Common/LanguageFunctions.h"
 #include "Common/CommonFunctions.h"
 
 static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr);

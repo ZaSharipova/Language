@@ -9,7 +9,7 @@
 #include <ctype.h>
 
 #include "Front-End/Rules.h"
-#include "Front-End/LanguageFunctions.h"
+#include "Common/LanguageFunctions.h"
 #include "Common/CommonFunctions.h"
 
 static DifErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *Variable_Array);

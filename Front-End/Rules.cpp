@@ -10,7 +10,7 @@
 #include <ctype.h>
 #include <sys/stat.h>
 
-#include "Front-End/LanguageFunctions.h"
+#include "Common/LanguageFunctions.h"
 #include "Common/StackFunctions.h"
 #include "Common/DoGraph.h"
 #include "Front-End/LexicalAnalysis.h"
@@ -87,7 +87,7 @@ DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filena
 
     Stack_Info tokens = {};
     StackCtor(&tokens, 1, stderr);
-    
+
     const char *temp_buf_ptr = Info.buf_ptr;
     CheckAndReturn(lang_info->root, &temp_buf_ptr, &tokens, lang_info->arr);
     lang_info->tokens = &tokens;

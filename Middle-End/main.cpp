@@ -1,7 +1,7 @@
 #include "Front-End/Rules.h"
 #include "Common/Structs.h"
 #include "Common/Enums.h"
-#include "Front-End/LanguageFunctions.h"
+#include "Common/LanguageFunctions.h"
 #include "Reverse-End/TreeToCode.h"
 #include "Common/DoGraph.h"
 #include "Middle-End/Optimise.h"
