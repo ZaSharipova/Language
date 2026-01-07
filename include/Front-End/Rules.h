@@ -7,17 +7,27 @@
 #include "Common/Enums.h"
 #include "Common/Structs.h"
 
-#define CHECK_ERROR_RETURN(cond) \
-    err = cond;                  \
-    if (err != kSuccess) {       \
-        return err;              \
-    }
+#define CHECK_ERROR_RETURN(cond, ...)                                                         \
+    do {                                                                                      \
+        err = (cond);                                                                         \
+        if (err != kSuccess) {                                                                \
+            void *args[] = {__VA_ARGS__};                                                     \
+            int arg_count = sizeof(args)/sizeof(args[0]);                                     \
+            if (arg_count >= 1 && args[0] != NULL) DtorVariableArray((VariableArr *)args[0]); \
+            if (arg_count >= 2 && args[1] != NULL) TreeDtor((LangRoot *)args[1]);             \
+            return err;                                                                       \
+        }                                                                                     \
+    } while (0)
 
-#define FILE_OPEN_AND_CHECK(file, filename, mode) \
-    FILE *file = fopen(filename, mode);           \
-    if (!file) {                                  \
-        perror("Error opening file");             \
-        return kErrorOpening;                     \
+#define FILE_OPEN_AND_CHECK(file, filename, mode, ...) \
+    FILE *file = fopen(filename, mode);                                                   \
+    if (!file) {                                                                          \
+        perror("Error opening file");                                                     \
+        void *args[] = {__VA_ARGS__};                                                     \
+        int arg_count = sizeof(args)/sizeof(args[0]);                                     \
+        if (arg_count >= 1 && args[0] != NULL) DtorVariableArray((VariableArr *)args[0]); \
+        if (arg_count >= 2 && args[1] != NULL) TreeDtor((LangRoot *)args[1]);             \
+        return kErrorOpening;                                                             \
     }
 
 #define INIT_DUMP_INFO(name)                                       \

@@ -69,7 +69,9 @@ DifErrors DeleteNode(LangRoot *root, LangNode_t *node) {
 }
 
 DifErrors TreeDtor(LangRoot *tree) {
-    assert(tree);
+    if (!tree) {
+        return kSuccess;
+    }
 
     DeleteNode(tree, tree->root);
 
@@ -132,7 +134,9 @@ DifErrors ResizeArray(VariableArr *arr)  {
 }
 
 DifErrors DtorVariableArray(VariableArr *arr) {
-    assert(arr);
+    if (!arr || !arr->var_array) {
+        return kSuccess;
+    }
 
     for (size_t i = 0; i < arr->size; i++) {
         free(arr->var_array[i].variable_name);
@@ -146,7 +150,6 @@ DifErrors DtorVariableArray(VariableArr *arr) {
 
     return kSuccess;
 }
-
 
 LangNode_t *NewNode(LangRoot *root, DifTypes type, Value value, LangNode_t *left, LangNode_t *right) {
     assert(root);

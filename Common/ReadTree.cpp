@@ -12,24 +12,24 @@
 #include "Front-End/LanguageFunctions.h"
 #include "Common/CommonFunctions.h"
 
-static DifErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *arr);
+static DifErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *Variable_Array);
 static DifErrors ParseTitle(const char *buffer, size_t *pos, char **out_title);
 static DifErrors ParseMaybeNil(const char *buffer, size_t *pos, LangNode_t **out);
 static DifErrors ExpectClosingParen(const char *buffer, size_t *pos);
 
 static int CountArgs(LangNode_t *args_root);
-static void RegisterInit(LangNode_t *func_name_node, LangNode_t *var_node, VariableArr *arr);
-static void ScanInitsInSubtree(LangNode_t *func_name_node, LangNode_t *root, VariableArr *arr);
-static void ComputeFuncSizes(LangNode_t *node, VariableArr *arr);
+static void RegisterInit(LangNode_t *func_name_node, LangNode_t *var_node, VariableArr *Variable_Array);
+static void ScanInitsInSubtree(LangNode_t *func_name_node, LangNode_t *root, VariableArr *Variable_Array);
+static void ComputeFuncSizes(LangNode_t *node, VariableArr *Variable_Array);
 
 static void SkipSpaces(const char *buf, size_t *pos);
 static DifErrors PrintSyntaxErrorNode(size_t pos, char c);
 
-DifErrors ParseNodeFromString(const char *buffer, size_t *pos, LangNode_t *parent, LangNode_t **node_to_add, VariableArr *arr) {
+DifErrors ParseNodeFromString(const char *buffer, size_t *pos, LangNode_t *parent, LangNode_t **node_to_add, VariableArr *Variable_Array) {
     assert(buffer);
     assert(pos);
     assert(node_to_add);
-    assert(arr);
+    assert(Variable_Array);
 
     DifErrors err = ParseMaybeNil(buffer, pos, node_to_add);
     if (err == kSuccess) {
@@ -46,22 +46,22 @@ DifErrors ParseNodeFromString(const char *buffer, size_t *pos, LangNode_t *paren
     NodeCtor(&node, NULL);
     node->parent = parent;
 
-    err = CheckType(title, node, arr);
+    err = CheckType(title, node, Variable_Array);
     free(title);
     if (err != kSuccess) {
         return err;
     }
 
     LangNode_t *left = NULL;
-    CHECK_ERROR_RETURN(ParseNodeFromString(buffer, pos, node, &left, arr));
+    CHECK_ERROR_RETURN(ParseNodeFromString(buffer, pos, node, &left, Variable_Array));
     node->left = left;
 
     LangNode_t *right = NULL;
-    CHECK_ERROR_RETURN(ParseNodeFromString(buffer, pos, node, &right, arr));
+    CHECK_ERROR_RETURN(ParseNodeFromString(buffer, pos, node, &right, Variable_Array));
     node->right = right;
 
     if (node->type == kOperation && node->value.operation == kOperationFunction) {
-        ComputeFuncSizes(node, arr);
+        ComputeFuncSizes(node, Variable_Array);
     }
 
     CHECK_ERROR_RETURN(ExpectClosingParen(buffer, pos));
@@ -70,12 +70,12 @@ DifErrors ParseNodeFromString(const char *buffer, size_t *pos, LangNode_t *paren
     return kSuccess;
 }
 
-static void ComputeFuncSizes(LangNode_t *node, VariableArr *arr) {
-    assert(arr);
+static void ComputeFuncSizes(LangNode_t *node, VariableArr *Variable_Array) {
+    assert(Variable_Array);
     if (!node) return;
 
-    ComputeFuncSizes(node->left, arr);
-    ComputeFuncSizes(node->right, arr);
+    ComputeFuncSizes(node->left, Variable_Array);
+    ComputeFuncSizes(node->right, Variable_Array);
 
     if (IsThatOperation(node, kOperationFunction)) {
 
@@ -84,15 +84,15 @@ static void ComputeFuncSizes(LangNode_t *node, VariableArr *arr) {
         LangNode_t *body_root = node->right ? node->right->right : NULL;
 
         int argc = CountArgs(args_root);
-        arr->var_array[func_name->value.pos].variable_value = argc;
-        ScanInitsInSubtree(func_name, body_root, arr);
+        Variable_Array->var_array[func_name->value.pos].variable_value = argc;
+        ScanInitsInSubtree(func_name, body_root, Variable_Array);
     }
 }
 
-static DifErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *arr) {
+static DifErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *Variable_Array) {
     assert(title);
     assert(node);
-    assert(arr);
+    assert(Variable_Array);
     
     for (size_t i = 0; i < OP_TABLE_SIZE; i++) {
         if (strcmp(NAME_TYPES_TABLE[i].name_in_tree, title) == 0) {
@@ -118,24 +118,24 @@ static DifErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *arr) {
 
     node->type = kVariable;
 
-    for (size_t j = 0; j < arr->size; j++) {
-        if (strcmp(arr->var_array[j].variable_name, title) == 0) {
+    for (size_t j = 0; j < Variable_Array->size; j++) {
+        if (strcmp(Variable_Array->var_array[j].variable_name, title) == 0) {
             node->value.pos = j;
             return kSuccess;
         }
     }
 
-    if (arr->size >= arr->capacity) {
+    if (Variable_Array->size >= Variable_Array->capacity) {
         return kNoMemory;
     }
 
-    ResizeArray(arr);
-    arr->var_array[arr->size].variable_name = strdup(title);
-    arr->var_array[arr->size].variable_value = 0;
-    arr->var_array[arr->size].func_made = NULL;
+    ResizeArray(Variable_Array);
+    Variable_Array->var_array[Variable_Array->size].variable_name = strdup(title);
+    Variable_Array->var_array[Variable_Array->size].variable_value = 0;
+    Variable_Array->var_array[Variable_Array->size].func_made = NULL;
 
-    node->value.pos = arr->size;
-    arr->size++;
+    node->value.pos = Variable_Array->size;
+    Variable_Array->size++;
 
     return kSuccess;
 }
@@ -150,13 +150,13 @@ static int CountArgs(LangNode_t *args_root) {
     return 1;
 }
 
-static void RegisterInit(LangNode_t *func_name_node, LangNode_t *var_node, VariableArr *arr) {
+static void RegisterInit(LangNode_t *func_name_node, LangNode_t *var_node, VariableArr *Variable_Array) {
     assert(func_name_node);
     assert(var_node);
-    assert(arr);
+    assert(Variable_Array);
 
-    VariableInfo *func_vi = &arr->var_array[func_name_node->value.pos];
-    VariableInfo *var_vi  = &arr->var_array[var_node->value.pos];
+    VariableInfo *func_vi = &Variable_Array->var_array[func_name_node->value.pos];
+    VariableInfo *var_vi  = &Variable_Array->var_array[var_node->value.pos];
 
     if (!var_vi->func_made || strcmp(var_vi->func_made, func_vi->variable_name) != 0) {
         var_vi->func_made = strdup(func_vi->variable_name);
@@ -164,19 +164,19 @@ static void RegisterInit(LangNode_t *func_name_node, LangNode_t *var_node, Varia
     }
 }
 
-static void ScanInitsInSubtree(LangNode_t *func_name_node, LangNode_t *root, VariableArr *arr) {
+static void ScanInitsInSubtree(LangNode_t *func_name_node, LangNode_t *root, VariableArr *Variable_Array) {
     assert(func_name_node);
-    assert(arr);
+    assert(Variable_Array);
     if (!root) return;
 
     if (IsThatOperation(root, kOperationIs) &&
         root->left && root->left->type == kVariable) {
         
-        RegisterInit(func_name_node, root->left, arr);
+        RegisterInit(func_name_node, root->left, Variable_Array);
     }
 
-    ScanInitsInSubtree(func_name_node, root->left, arr);
-    ScanInitsInSubtree(func_name_node, root->right, arr);
+    ScanInitsInSubtree(func_name_node, root->left, Variable_Array);
+    ScanInitsInSubtree(func_name_node, root->right, Variable_Array);
 }
 
 static void SkipSpaces(const char *buf, size_t *pos) {
@@ -190,7 +190,7 @@ static void SkipSpaces(const char *buf, size_t *pos) {
 
 static DifErrors PrintSyntaxErrorNode(size_t pos, char c) {
     fprintf(stderr, "Syntax error at position %zu: unexpected character ", pos);
-    
+
     if (c == '\0') fprintf(stderr, "EOF");
     else fprintf(stderr, "'%c'", c);
     fprintf(stderr, "\n");

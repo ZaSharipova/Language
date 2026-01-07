@@ -21,38 +21,36 @@ int main(int argc, char *argv[]) {
 
     VariableArr Variable_Array = {};
     DifErrors err = kSuccess;
-    CHECK_ERROR_RETURN(InitArrOfVariable(&Variable_Array, 4));
+    CHECK_ERROR_RETURN(InitArrOfVariable(&Variable_Array, 16), &Variable_Array, &root);
 
     INIT_DUMP_INFO(dump_info);
     dump_info.tree = &root;
     //Language lang_info = {&root, NULL, NULL, &Variable_Array};
 
-    FILE_OPEN_AND_CHECK(ast_file_read, tree_file, "r");
+    FILE_OPEN_AND_CHECK(ast_file_read, tree_file, "r", &Variable_Array, &root);
     
     FileInfo info = {};
     DoBufRead(ast_file_read, tree_file, &info);
     fclose(ast_file_read);
-
-    LangRoot root1 = {};
-    LangRootCtor(&root1);
     
     LangNode_t *root_node = NULL;
     size_t pos = 0;
-    CHECK_ERROR_RETURN(ParseNodeFromString(info.buf_ptr, &pos, NULL, &root_node, &Variable_Array));
-    root1.root = root_node;
+    CHECK_ERROR_RETURN(ParseNodeFromString(info.buf_ptr, &pos, NULL, &root_node, &Variable_Array), &Variable_Array, &root);
+    root.root = root_node;
     
-    dump_info.tree = &root1;
-    DoTreeInGraphviz(root1.root, &dump_info, &Variable_Array);
+    dump_info.tree = &root;
+    DoTreeInGraphviz(root.root, &dump_info, &Variable_Array);
 
-    root1.root = OptimiseTree(&root1, root1.root, &Variable_Array);
+    root.root = OptimiseTree(&root, root.root, &Variable_Array);
     
-    FILE_OPEN_AND_CHECK(ast_file_write, tree_file, "w");
-    PrintAST(root1.root, ast_file_write, &Variable_Array, 0);
+    FILE_OPEN_AND_CHECK(ast_file_write, tree_file, "w", &Variable_Array, &root);
+    PrintAST(root.root, ast_file_write, &Variable_Array, 0);
     fclose(ast_file_write);
     
-    DoTreeInGraphviz(root1.root, &dump_info, &Variable_Array);
+    DoTreeInGraphviz(root.root, &dump_info, &Variable_Array);
 
     DtorVariableArray(&Variable_Array);
+    TreeDtor(&root);
 
     return kSuccess;
 }

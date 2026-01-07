@@ -10,15 +10,22 @@
 #include "Common/CommonFunctions.h"
 
 int main(int argc, char *argv[]) {
-    (void)argc;
+    if (argc < 3) {
+        fprintf(stderr, "less args than 3.\n");
+        return 1;
+    } 
+    
     char *tree_file = argv[1];
     char *code_file = argv[2];
 
     VariableArr Variable_Array = {};
     DifErrors err = kSuccess;
-    CHECK_ERROR_RETURN(InitArrOfVariable(&Variable_Array, 10));
 
-    
+    LangRoot root = {};
+    LangRootCtor(&root);
+
+    CHECK_ERROR_RETURN(InitArrOfVariable(&Variable_Array, 10), &Variable_Array, &root);
+
     INIT_DUMP_INFO(dump_info);
     
     FILE_OPEN_AND_CHECK(ast_file, tree_file, "r");
@@ -27,30 +34,27 @@ int main(int argc, char *argv[]) {
     DoBufRead(ast_file, tree_file, &info);
     fclose(ast_file);
 
-    LangRoot parsed_root = {};
-    LangRootCtor(&parsed_root);
-
     size_t pos = 0;
     LangNode_t *tree = NULL;
 
-    CHECK_ERROR_RETURN(ParseNodeFromString(info.buf_ptr, &pos, NULL, &tree, &Variable_Array));
+    CHECK_ERROR_RETURN(ParseNodeFromString(info.buf_ptr, &pos, NULL, &tree, &Variable_Array), &Variable_Array, &tree);
 
     // fprintf(stderr, "%zu\n\n", variable_array.size);
     // for (size_t i = 0; i < variable_array.size; i++) {
     //     fprintf(stderr, "%s %d\n\n", variable_array.var_array[i].variable_name, variable_array.var_array[i].variable_value);
     // }
 
-    parsed_root.root = tree;
-    dump_info.tree = &parsed_root;
+    root.root = tree;
+    dump_info.tree = &root;
 
-    DoTreeInGraphviz(parsed_root.root, &dump_info, &Variable_Array);
+    DoTreeInGraphviz(root.root, &dump_info, &Variable_Array);
 
-    FILE_OPEN_AND_CHECK(code_out, code_file, "w");
-    GenerateCodeFromAST(parsed_root.root, code_out, &Variable_Array, 0);
+    FILE_OPEN_AND_CHECK(code_out, code_file, "w", &Variable_Array, &root);
+    GenerateCodeFromAST(root.root, code_out, &Variable_Array, 0);
     fclose(code_out);
     
     DtorVariableArray(&Variable_Array);
-    TreeDtor(&parsed_root);
+    TreeDtor(&root);
 
     return kSuccess;
 }

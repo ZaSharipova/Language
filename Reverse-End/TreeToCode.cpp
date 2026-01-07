@@ -142,7 +142,7 @@ static void GenIf(LangNode_t *node, FILE *out, VariableArr *arr, int indent) {
     PrintIndent(out, indent);
     fprintf(out, "%s (", PrintCodeNameFromTable(kOperationIf));
     GenExpr(condition, out, arr);
-    fprintf(out, ") %s\n", PrintCodeNameFromTable(kOperationThen));
+    fprintf(out, ") %s\n", PrintCodeNameFromTable(kOperationBraceOpen));
 
     if (then_branch) {
         GenThenChain(then_branch, out, arr, indent + 1);
@@ -269,7 +269,7 @@ static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr) { //
 
     switch (node->type) {
         case kNumber:
-            fprintf(out, "%g", node->value.number);
+            fprintf(out, "%.0f", node->value.number);
             return;
 
         case kVariable:
@@ -397,6 +397,6 @@ static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr) { //
             fprintf(out, "UNSUPPORTED_OP");
             return;
     }
-    
+
     #pragma clang diagnostic pop
 }

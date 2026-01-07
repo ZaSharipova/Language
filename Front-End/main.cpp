@@ -34,77 +34,77 @@ int main(int argc, char *argv[]) {
     LangRootCtor(&root);
 
     DifErrors err = kSuccess;
-    VariableArr variable_array = {};
-    CHECK_ERROR_RETURN(InitArrOfVariable(&variable_array, 16));
+    VariableArr Variable_Array = {};
+    CHECK_ERROR_RETURN(InitArrOfVariable(&Variable_Array, 16), &Variable_Array, &root);
 
     INIT_DUMP_INFO(dump_info);
     dump_info.tree = &root;
 
-    Language lang_info = {&root, NULL, NULL, &variable_array};
+    Language lang_info = {&root, NULL, NULL, &Variable_Array};
 
     if (strcmp(mode, "tree-asm") == 0) {
 
-        FILE_OPEN_AND_CHECK(ast_file, filename_in, "r");
+        FILE_OPEN_AND_CHECK(ast_file, filename_in, "r", lang_info.arr, lang_info.root);
 
         FileInfo info = {};
         DoBufRead(ast_file, filename_in, &info);
         fclose(ast_file);
 
-        LangRoot parsed_root = {};
-        LangRootCtor(&parsed_root);
+        // LangRoot parsed_root = {};
+        // LangRootCtor(&parsed_root);
 
         size_t pos = 0;
         LangNode_t *tree = NULL;
 
-        CHECK_ERROR_RETURN(ParseNodeFromString(info.buf_ptr, &pos, NULL, &tree, &variable_array));
+        CHECK_ERROR_RETURN(ParseNodeFromString(info.buf_ptr, &pos, NULL, &tree, &Variable_Array), lang_info.arr, lang_info.root);
 
-        // fprintf(stderr, "%zu\n\n", variable_array.size);
-        // for (size_t i = 0; i < variable_array.size; i++) {
-        //     fprintf(stderr, "%s %d\n\n", variable_array.var_array[i].variable_name, variable_array.var_array[i].variable_value);
+        // fprintf(stderr, "%zu\n\n", Variable_Array.size);
+        // for (size_t i = 0; i < Variable_Array.size; i++) {
+        //     fprintf(stderr, "%s %d\n\n", Variable_Array.var_array[i].variable_name, Variable_Array.var_array[i].variable_value);
         // }
 
-        parsed_root.root = tree;
-        dump_info.tree = &parsed_root;
+        lang_info.root->root = tree;
+        dump_info.tree = lang_info.root;
 
-        DoTreeInGraphviz(parsed_root.root, &dump_info, &variable_array);
+        DoTreeInGraphviz(lang_info.root->root, &dump_info, &Variable_Array);
 
-        FILE_OPEN_AND_CHECK(asm_file, filename_out, "w");
+        FILE_OPEN_AND_CHECK(asm_file, filename_out, "w", &Variable_Array, lang_info.root->root, lang_info.arr, lang_info.root);
 
         int ram_base = 0;
         AsmInfo asm_info = {};
-        PrintProgram(asm_file, parsed_root.root, &variable_array, &ram_base, &asm_info);
+        PrintProgram(asm_file, lang_info.root->root, lang_info.arr, &ram_base, &asm_info);
 
         fclose(asm_file);
     }
 
     else if (strcmp(mode, "code-asm") == 0) {
-        CHECK_ERROR_RETURN(ReadInfix(&lang_info, &dump_info, filename_in));
+        CHECK_ERROR_RETURN(ReadInfix(&lang_info, &dump_info, filename_in), lang_info.arr, lang_info.root);
 
-        FILE_OPEN_AND_CHECK(asm_file, filename_out, "w");
+        FILE_OPEN_AND_CHECK(asm_file, filename_out, "w", lang_info.arr, lang_info.root);
 
         int ram_base = 0;
         AsmInfo asm_info = {};
-        PrintProgram(asm_file, root.root, &variable_array, &ram_base, &asm_info);
+        PrintProgram(asm_file, root.root, &Variable_Array, &ram_base, &asm_info);
 
         fclose(asm_file);
     }
 
     else if (strcmp(mode, "code-tree") == 0) {
 
-        CHECK_ERROR_RETURN(ReadInfix(&lang_info, &dump_info, filename_in));
+        CHECK_ERROR_RETURN(ReadInfix(&lang_info, &dump_info, filename_in), lang_info.arr, lang_info.root);
 
-        FILE_OPEN_AND_CHECK(ast_file, filename_out, "w");
-        PrintAST(root.root, ast_file, &variable_array, 0);
+        FILE_OPEN_AND_CHECK(ast_file, filename_out, "w", lang_info.arr, lang_info.root);
+        PrintAST(root.root, ast_file, &Variable_Array, 0); //
         fclose(ast_file);
     }
 
     else {
         fprintf(stderr, "Unknown mode: %s\n", mode);
-        DtorVariableArray(&variable_array);
+        DtorVariableArray(&Variable_Array);
         return 1;
     }
 
-    DtorVariableArray(&variable_array);
+    DtorVariableArray(&Variable_Array);
 
     return 0;
 }
