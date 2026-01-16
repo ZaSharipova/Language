@@ -17,7 +17,7 @@
 #include "Common/CommonFunctions.h"
 
 static LangNode_t *ParseFunctionArgs(Language *lang_info, size_t *cnt);
-static LangNode_t *ParseFunctionBody(Language *lang_info, LangNode_t *func);
+static LangNode_t *ParseFunctionBody(Language *lang_info, LangNode_t *func_name);
 
 #define CHECK_NULL_RETURN(name, cond) \
     LangNode_t *name = cond;          \
@@ -50,25 +50,26 @@ static LangNode_t *ParseFunctionBody(Language *lang_info, LangNode_t *func);
 
 static LangNode_t *GetGoal(Language *lang_info);
 
-static LangNode_t *GetAssignment(Language *lang_info, LangNode_t *func);
-static LangNode_t *GetOp(Language *lang_info, LangNode_t *func);
-static LangNode_t *GetWhile(Language *lang_info, LangNode_t *func);
-static LangNode_t *GetIf(Language *lang_info, LangNode_t *func);
-static LangNode_t *GetElse(Language *lang_info, LangNode_t *if_node, LangNode_t *func);
+static LangNode_t *GetAssignment(Language *lang_info, LangNode_t *func_name);
+static LangNode_t *GetOp(Language *lang_info, LangNode_t *func_name);
+static LangNode_t *GetWhile(Language *lang_info, LangNode_t *func_name);
+static LangNode_t *GetIf(Language *lang_info, LangNode_t *func_name);
+static LangNode_t *GetElse(Language *lang_info, LangNode_t *if_node, LangNode_t *func_name);
 static LangNode_t *GetFunctionDeclare(Language *lang_info);
 static LangNode_t *GetFunctionCall(Language *lang_info);
-static LangNode_t *GetReturn(Language *lang_info);
+static LangNode_t *GetReturn(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetPrintf(Language *lang_info);
+LangNode_t *GetScanf(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetUnaryFunc(Language *lang_info);
 static LangNode_t *GetHLT(Language *lang_info);
 
-static LangNode_t *GetExpression(Language *lang_info);
-static LangNode_t *GetTerm(Language *lang_info);
-static LangNode_t *GetPrimary(Language *lang_info);
-static LangNode_t *GetPower(Language *lang_info);
+static LangNode_t *GetExpression(Language *lang_info, LangNode_t *func_name);
+static LangNode_t *GetTerm(Language *lang_info, LangNode_t *func_name);
+static LangNode_t *GetPrimary(Language *lang_info, LangNode_t *func_name);
+static LangNode_t *GetPower(Language *lang_info, LangNode_t *func_name);
 
 static LangNode_t *GetNumber(Language *lang_info);
-static LangNode_t *GetString(Language *lang_info);
+static LangNode_t *GetString(Language *lang_info, LangNode_t *func_name, ValCategory val_cat);
 
 static bool CheckAndSetFunctionArgsNumber(Language *lang_info, LangNode_t *name_token, size_t cnt);
 
@@ -97,10 +98,6 @@ DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filena
     if (!lang_info->root->root) {
         return kFailure;
     }
-    
-    dump_info->tree = lang_info->root;
-
-    strcpy(dump_info->message, "Code");
     
     DoTreeInGraphviz(lang_info->root->root, dump_info, lang_info->arr);
     StackDtor(&tokens, stderr);
@@ -141,8 +138,9 @@ static LangNode_t *GetGoal(Language *lang_info) {
     return first;
 }
 
-static LangNode_t *GetReturn(Language *lang_info) {
+static LangNode_t *GetReturn(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
+    assert(func_name);
 
     LangNode_t *return_node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (!IsThatOperation(return_node, kOperationReturn)) {
@@ -150,7 +148,7 @@ static LangNode_t *GetReturn(Language *lang_info) {
     }
     (*lang_info->tokens_pos)++; 
 
-    LangNode_t *node = GetExpression(lang_info);
+    LangNode_t *node = GetExpression(lang_info, func_name);
     if (!node) {
         return NULL;
     }
@@ -159,8 +157,9 @@ static LangNode_t *GetReturn(Language *lang_info) {
     return NEWOP(kOperationReturn, node, NULL);
 }
 
-LangNode_t *GetScanf(Language *lang_info) {
+LangNode_t *GetScanf(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
+    assert(func_name);
 
     size_t save_pos = (*lang_info->tokens_pos);
 
@@ -177,7 +176,7 @@ LangNode_t *GetScanf(Language *lang_info) {
     }
     (*lang_info->tokens_pos)++; 
     
-    LangNode_t *node = GetString(lang_info);
+    LangNode_t *node = GetString(lang_info, func_name, krvalue);
     if (!node) {
         (*lang_info->tokens_pos) = save_pos;
         return NULL;
@@ -200,13 +199,13 @@ LangNode_t *GetScanf(Language *lang_info) {
     return NEWOP(kOperationRead, node, NULL);
 }
 
-LangNode_t *GetStatement(Language *lang_info, LangNode_t *func) {
+LangNode_t *GetStatement(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
-    assert(func);
+    assert(func_name);
 
     size_t save_pos = *lang_info->tokens_pos;
     
-    LangNode_t *stmt = GetAssignment(lang_info, func);
+    LangNode_t *stmt = GetAssignment(lang_info, func_name);
     if (stmt) {
         return stmt;
     }
@@ -230,27 +229,27 @@ LangNode_t *GetStatement(Language *lang_info, LangNode_t *func) {
     return NULL;
 }
 
-LangNode_t *GetOp(Language *lang_info, LangNode_t *func) {
+LangNode_t *GetOp(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
-    assert(func);
+    assert(func_name);
 
     //fprintf(stderr, "[DEBUG GetOp] Current token position: %zu\n", *(lang_info->tokens_pos));
     LangNode_t *stmt = NULL;
     size_t save_pos = (*lang_info->tokens_pos);
 
-    TRY_PARSE_RETURN(stmt, GetReturn(lang_info));
+    TRY_PARSE_RETURN(stmt, GetReturn(lang_info, func_name));
     //printf("[DEBUG] After GetReturn: stmt=%p\n", stmt);
     
     TRY_PARSE_RETURN(stmt, GetPrintf(lang_info));
     //printf("[DEBUG] After GetPrintf: stmt=%p\n", stmt);
     
-    TRY_PARSE_RETURN(stmt, GetScanf(lang_info));
+    TRY_PARSE_RETURN(stmt, GetScanf(lang_info, func_name));
     //printf("[DEBUG] After GetScanf: stmt=%p\n", stmt);
     
-    TRY_PARSE_RETURN(stmt, GetWhile (lang_info, func));
+    TRY_PARSE_RETURN(stmt, GetWhile (lang_info, func_name));
     //printf("[DEBUG] After GetWhile: stmt=%p\n", stmt);
     
-    TRY_PARSE_RETURN(stmt, GetIf    (lang_info, func));
+    TRY_PARSE_RETURN(stmt, GetIf    (lang_info, func_name));
     //printf("[DEBUG] After GetIf: stmt=%p\n", stmt);
 
     TRY_PARSE_RETURN(stmt, GetHLT   (lang_info));
@@ -260,7 +259,7 @@ LangNode_t *GetOp(Language *lang_info, LangNode_t *func) {
     while (1) {
         save_pos = (*lang_info->tokens_pos);
         
-        stmt = GetStatement(lang_info, func);
+        stmt = GetStatement(lang_info, func_name);
         if (!stmt) {
             (*lang_info->tokens_pos) = save_pos;
             break;
@@ -332,7 +331,7 @@ static LangNode_t *GetFunctionDeclare(Language *lang_info) {
     lang_info->arr->var_array[func_name->value.pos].type = kVarFunction;
     size_t cnt = 0;
     LangNode_t *args_root = ParseFunctionArgs(lang_info, &cnt);
-    
+
     if (!CheckAndSetFunctionArgsNumber(lang_info, func_name, cnt)) {
         return NULL;
     }
@@ -392,7 +391,7 @@ static LangNode_t *GetFunctionCall(Language *lang_info) {
             continue;
         }
 
-        LangNode_t *arg = GetExpression(lang_info);
+        LangNode_t *arg = GetExpression(lang_info, name_token);
         if (!arg) {
             fprintf(stderr, "SYNTAX_ERROR: expected argument in function call\n");
             *lang_info->tokens_pos = save_pos;
@@ -421,10 +420,10 @@ static LangNode_t *GetFunctionCall(Language *lang_info) {
 }
 
 
-static LangNode_t *GetExpression(Language *lang_info) {
+static LangNode_t *GetExpression(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
 
-    LangNode_t *val = GetTerm(lang_info);
+    LangNode_t *val = GetTerm(lang_info, func_name);
     if (!val) return NULL;
 
     lang_info->root->size++;
@@ -433,7 +432,7 @@ static LangNode_t *GetExpression(Language *lang_info) {
     while (IsThatOperation(node, kOperationAdd) || IsThatOperation(node, kOperationSub)) {
         (*lang_info->tokens_pos)++;
 
-        LangNode_t *val2 = GetTerm(lang_info);
+        LangNode_t *val2 = GetTerm(lang_info, func_name);
         if (!val2) return val;
 
         lang_info->root->size++;
@@ -449,10 +448,10 @@ static LangNode_t *GetExpression(Language *lang_info) {
     return val;
 }
 
-static LangNode_t *GetTerm(Language *lang_info) {
+static LangNode_t *GetTerm(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
 
-    LangNode_t *left = GetPower(lang_info);
+    LangNode_t *left = GetPower(lang_info, func_name);
     if (!left) return NULL;
 
     lang_info->root->size++;
@@ -461,7 +460,7 @@ static LangNode_t *GetTerm(Language *lang_info) {
     while (IsThatOperation(node, kOperationMul) || IsThatOperation(node, kOperationDiv)) {
         (*lang_info->tokens_pos)++; 
 
-        LangNode_t *right = GetTerm(lang_info);
+        LangNode_t *right = GetTerm(lang_info, func_name);
         if (!right) return left;
 
         node->left  = left;
@@ -477,8 +476,9 @@ static LangNode_t *GetTerm(Language *lang_info) {
     return left;
 }
 
-static LangNode_t *GetPrimary(Language *lang_info) {
+static LangNode_t *GetPrimary(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
+    assert(func_name);
 
     LangNode_t *node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (!node) {
@@ -488,7 +488,7 @@ static LangNode_t *GetPrimary(Language *lang_info) {
     if (IsThatOperation(node, kOperationParOpen)) {
         (*lang_info->tokens_pos)++; 
 
-        LangNode_t *val = GetExpression(lang_info);
+        LangNode_t *val = GetExpression(lang_info, func_name);
         if (!val) {
             return NULL;
         }
@@ -503,7 +503,6 @@ static LangNode_t *GetPrimary(Language *lang_info) {
 
         return val;
     }
-
     
     LangNode_t *value_number = GetNumber(lang_info);
     if (value_number) {
@@ -520,7 +519,7 @@ static LangNode_t *GetPrimary(Language *lang_info) {
         return value_number;
     }
 
-    return GetString(lang_info);
+    return GetString(lang_info, func_name, krvalue);
 }
 
 static LangNode_t *GetUnaryFunc(Language *lang_info) {
@@ -533,7 +532,7 @@ static LangNode_t *GetUnaryFunc(Language *lang_info) {
     LangNode_t *par = NULL;
     CHECK_EXPECTED_TOKEN(par, IsThatOperation(par, kOperationParOpen),);
 
-    LangNode_t *value = GetExpression(lang_info);
+    LangNode_t *value = GetExpression(lang_info, func_name);
     if (!value) {
         fprintf(stderr, "SYNTAX_ERROR_UNARYF\n");
         return NULL;
@@ -546,30 +545,29 @@ static LangNode_t *GetUnaryFunc(Language *lang_info) {
 }
 
 
-LangNode_t *GetAssignment(Language *lang_info, LangNode_t *func) {
+LangNode_t *GetAssignment(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
+    assert(func_name);
 
     size_t save_pos = *lang_info->tokens_pos;
     
-    LangNode_t *maybe_var = GetString(lang_info);
+    LangNode_t *maybe_var = GetString(lang_info, func_name, klvalue);
     if (!maybe_var) {
         *lang_info->tokens_pos = save_pos;
         return NULL;
     }
-
-    // printf("[DEBUG GetAssignment] maybe_var: %s\n", 
-    //        lang_info->arr->var_array[maybe_var->value.pos].variable_name);
            
     LangNode_t *assign_op = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
-    if (!assign_op || assign_op->type != kOperation || assign_op->value.operation != kOperationIs) {
+    if (!IsThatOperation(assign_op, kOperationIs)) {
         (*lang_info->tokens_pos) = save_pos;
         return NULL;
     }
     (*lang_info->tokens_pos)++;
 
-    if (!lang_info->arr->var_array[maybe_var->value.pos].func_made || strcmp(lang_info->arr->var_array[maybe_var->value.pos].func_made, lang_info->arr->var_array[func->value.pos].variable_name) != 0) {
-        lang_info->arr->var_array[maybe_var->value.pos].func_made = strdup(lang_info->arr->var_array[func->value.pos].variable_name);
-        lang_info->arr->var_array[func->value.pos].variable_value ++;
+    if (!lang_info->arr->var_array[maybe_var->value.pos].func_made 
+            || strcmp(lang_info->arr->var_array[maybe_var->value.pos].func_made, lang_info->arr->var_array[func_name->value.pos].variable_name) != 0) {
+        lang_info->arr->var_array[maybe_var->value.pos].func_made = strdup(lang_info->arr->var_array[func_name->value.pos].variable_name);
+        lang_info->arr->var_array[func_name->value.pos].variable_value ++;
     }
     LangNode_t *value = NULL;
     
@@ -579,7 +577,7 @@ LangNode_t *GetAssignment(Language *lang_info, LangNode_t *func) {
         value = GetFunctionCall(lang_info);
     }
     else {
-        value = GetExpression(lang_info);
+        value = GetExpression(lang_info, func_name);
     }
     
     if (!value) {
@@ -593,17 +591,16 @@ LangNode_t *GetAssignment(Language *lang_info, LangNode_t *func) {
     maybe_var->parent = assign_op;
     value->parent = assign_op;
 
-    if (lang_info->arr->var_array[maybe_var->value.pos].variable_value == POISON && 
-        value->type == kNumber) {
+    if (lang_info->arr->var_array[maybe_var->value.pos].variable_value == POISON && value->type == kNumber) {
         lang_info->arr->var_array[maybe_var->value.pos].variable_value = (int)value->value.number; //
     }
     
     return NEWOP(kOperationThen, assign_op, NULL);
 }
 
-static LangNode_t *GetIf(Language *lang_info, LangNode_t *func) {
+static LangNode_t *GetIf(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
-    assert(func);
+    assert(func_name);
 
     size_t save_pos = *lang_info->tokens_pos;
     LangNode_t *tok = NULL;
@@ -612,7 +609,7 @@ static LangNode_t *GetIf(Language *lang_info, LangNode_t *func) {
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationParOpen),
         fprintf(stderr, "%s", "SYNTAX_ERROR_IF: expected '('\n"));
     
-    LangNode_t *cond = GetExpression(lang_info);
+    LangNode_t *cond = GetExpression(lang_info, func_name);
     if (!cond) {
         fprintf(stderr, "SYNTAX_ERROR_IF: expected condition\n");
         return NULL;
@@ -622,7 +619,7 @@ static LangNode_t *GetIf(Language *lang_info, LangNode_t *func) {
     if (IsThatOperation(sign, kOperationBE) || IsThatOperation(sign, kOperationB) || IsThatOperation(sign, kOperationAE) 
             || IsThatOperation(sign, kOperationA) || IsThatOperation(sign, kOperationE) || IsThatOperation(sign, kOperationNE)) {
         (*lang_info->tokens_pos)++;
-        LangNode_t *number = GetExpression(lang_info);
+        LangNode_t *number = GetExpression(lang_info, func_name);
         if (!number) {
             fprintf(stderr, "SYNTAX_ERROR_IF: no expression if if written.\n");
         }
@@ -639,7 +636,7 @@ static LangNode_t *GetIf(Language *lang_info, LangNode_t *func) {
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationBraceOpen), 
         fprintf(stderr, "%s", "SYNTAX_ERROR_IF: expected '{'\n"));
 
-    LangNode_t *first = GetOp(lang_info, func);
+    LangNode_t *first = GetOp(lang_info, func_name);
     if (!first) {
         fprintf(stderr, "SYNTAX_ERROR_IF: empty if-body\n");
         return NULL;
@@ -648,7 +645,7 @@ static LangNode_t *GetIf(Language *lang_info, LangNode_t *func) {
     LangNode_t *last = first;
 
     while (true) {
-        LangNode_t *stmt = GetOp(lang_info, func);
+        LangNode_t *stmt = GetOp(lang_info, func_name);
         if (!stmt) break;
         
         last = NEWOP(kOperationThen, last, stmt);
@@ -659,7 +656,7 @@ static LangNode_t *GetIf(Language *lang_info, LangNode_t *func) {
 
     LangNode_t *if_node = NEWOP(kOperationIf, cond, last);
 
-    LangNode_t *else_node = GetElse(lang_info, last, func);
+    LangNode_t *else_node = GetElse(lang_info, last, func_name);
     if (else_node) {
         if_node->right = else_node;
         else_node->parent = if_node;
@@ -668,7 +665,7 @@ static LangNode_t *GetIf(Language *lang_info, LangNode_t *func) {
     return if_node;
 }
 
-static LangNode_t *GetElse(Language *lang_info, LangNode_t *if_node, LangNode_t *func) {
+static LangNode_t *GetElse(Language *lang_info, LangNode_t *if_node, LangNode_t *func_name) {
     assert(lang_info);
     assert(if_node);
 
@@ -679,7 +676,7 @@ static LangNode_t *GetElse(Language *lang_info, LangNode_t *if_node, LangNode_t 
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationBraceOpen), );
 
     while (true) {
-        LangNode_t *stmt = GetOp(lang_info, func);
+        LangNode_t *stmt = GetOp(lang_info, func_name);
         if (!stmt) break;
         
         if (last) last = NEWOP(kOperationThen, last, stmt);
@@ -698,21 +695,24 @@ static LangNode_t *GetElse(Language *lang_info, LangNode_t *if_node, LangNode_t 
     return node;
 }
 
-static LangNode_t *GetWhile(Language *lang_info, LangNode_t *func) {
+static LangNode_t *GetWhile(Language *lang_info, LangNode_t *func_name) {
+    assert(lang_info);
+    assert(func_name);
+
     size_t save_pos = *(lang_info->tokens_pos);
     
     LangNode_t *tok = NULL;
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationWhile), );
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationParOpen), );
 
-    LangNode_t *cond_left = GetExpression(lang_info);
+    LangNode_t *cond_left = GetExpression(lang_info, func_name);
     LangNode_t *cond_sign = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     
     if (IsThatOperation(cond_sign, kOperationB) || IsThatOperation(cond_sign, kOperationBE) || 
         IsThatOperation(cond_sign, kOperationA) || IsThatOperation(cond_sign, kOperationAE) ||
         IsThatOperation(cond_sign, kOperationE) || IsThatOperation(cond_sign, kOperationNE)) {
         (*lang_info->tokens_pos)++;
-        LangNode_t *cond_right = GetExpression(lang_info);
+        LangNode_t *cond_right = GetExpression(lang_info, func_name);
         cond_sign->left = cond_left;
         cond_sign->right = cond_right;
         cond_left->parent = cond_sign;
@@ -727,7 +727,7 @@ static LangNode_t *GetWhile(Language *lang_info, LangNode_t *func) {
 
     LangNode_t *body = NULL, *last = NULL;
     while (true) {
-        LangNode_t *stmt = GetOp(lang_info, func);
+        LangNode_t *stmt = GetOp(lang_info, func_name);
         if (!stmt) break;
         
         if (!body) {
@@ -749,10 +749,11 @@ static LangNode_t *GetWhile(Language *lang_info, LangNode_t *func) {
     return while_tok;
 }
 
-LangNode_t *GetPower(Language *lang_info) {
+LangNode_t *GetPower(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
+    assert(func_name);
 
-    LangNode_t *val = GetPrimary(lang_info);
+    LangNode_t *val = GetPrimary(lang_info, func_name);
     if (!val) {
         return NULL;
     }
@@ -760,7 +761,7 @@ LangNode_t *GetPower(Language *lang_info) {
     LangNode_t *node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     while (IsThatOperation(node, kOperationPow)) {
         (*(lang_info->tokens_pos))++;
-        LangNode_t *val2 = GetPower(lang_info);
+        LangNode_t *val2 = GetPower(lang_info, func_name);
         if (!val2) {
             return NULL;
         }
@@ -792,14 +793,25 @@ static LangNode_t *GetNumber(Language *lang_info) {
     return NULL;
 }
 
-static LangNode_t *GetString(Language *lang_info) {
+static LangNode_t *GetString(Language *lang_info, LangNode_t *func_name, ValCategory val_cat) {
     assert(lang_info);
+    assert(func_name);
 
     LangNode_t *node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (node && node->type == kVariable) {
         (*(lang_info->tokens_pos))++;
     } else {
         return NULL;
+    }
+
+    if (lang_info->arr->var_array[node->value.pos].func_made && lang_info->arr->var_array[func_name->value.pos].func_made 
+            && strcmp(lang_info->arr->var_array[node->value.pos].func_made, lang_info->arr->var_array[func_name->value.pos].func_made) != 0) {
+        if  (val_cat == klvalue) {
+            strcpy(lang_info->arr->var_array[node->value.pos].func_made, lang_info->arr->var_array[func_name->value.pos].func_made);
+        } else {
+            fprintf(stderr, "SYNTAX_ERROR_STRING: usage of undeclared variable %s\n", lang_info->arr->var_array[node->value.pos].variable_name);
+            return NULL;
+        }
     }
 
     return node;
@@ -856,14 +868,14 @@ static LangNode_t *ParseFunctionArgs(Language *lang_info, size_t *cnt) {
     return args_root;
 }
 
-static LangNode_t *ParseFunctionBody(Language *lang_info, LangNode_t *func) {
+static LangNode_t *ParseFunctionBody(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
-    assert(func);
+    assert(func_name);
 
     LangNode_t *body_root = NULL;
     
     while (true) {
-        LangNode_t *stmt = GetOp(lang_info, func);
+        LangNode_t *stmt = GetOp(lang_info, func_name);
         if (!stmt) {
             break;
         }

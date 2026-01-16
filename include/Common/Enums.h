@@ -92,4 +92,9 @@ enum VariableModes {
     kUnknown,
 };
 
+enum ValCategory {
+    klvalue,
+    krvalue,
+};
+
 #endif //ENUMS_H_

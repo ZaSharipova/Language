@@ -1,6 +1,6 @@
 #include "Front-End/Rules.h"
 #include "Common/Structs.h"
-#include "Common/Enums.h" //TODO
+#include "Common/Enums.h"
 #include "Common/LanguageFunctions.h"
 #include "Common/DoGraph.h"
 #include "Front-End/TreeToAsm.h"
@@ -50,18 +50,10 @@ int main(int argc, char *argv[]) {
         DoBufRead(ast_file, filename_in, &info);
         fclose(ast_file);
 
-        // LangRoot parsed_root = {};
-        // LangRootCtor(&parsed_root);
-
         size_t pos = 0;
         LangNode_t *tree = NULL;
 
         CHECK_ERROR_RETURN(ParseNodeFromString(info.buf_ptr, &pos, NULL, &tree, &Variable_Array), lang_info.arr, lang_info.root);
-
-        // fprintf(stderr, "%zu\n\n", Variable_Array.size);
-        // for (size_t i = 0; i < Variable_Array.size; i++) {
-        //     fprintf(stderr, "%s %d\n\n", Variable_Array.var_array[i].variable_name, Variable_Array.var_array[i].variable_value);
-        // }
 
         lang_info.root->root = tree;
         dump_info.tree = lang_info.root;
@@ -105,6 +97,5 @@ int main(int argc, char *argv[]) {
     }
 
     DtorVariableArray(&Variable_Array);
-
     return 0;
 }
