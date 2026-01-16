@@ -20,7 +20,7 @@ static LangNode_t *ParseFunctionArgs(Language *lang_info, size_t *cnt);
 static LangNode_t *ParseFunctionBody(Language *lang_info, LangNode_t *func);
 
 #define CHECK_NULL_RETURN(name, cond) \
-    LangNode_t *name = cond;           \
+    LangNode_t *name = cond;          \
     if (name == NULL) {               \
         return NULL;                  \
     }
@@ -45,11 +45,7 @@ static LangNode_t *ParseFunctionBody(Language *lang_info, LangNode_t *func);
         (*lang_info->tokens_pos)++;                                              \
     } while (0)
 
-// TODO: 1. перевод из дерева в ассеблер
 // TODO: 4. сделать тернарные операторы
-// TODO: 6. убрать указатель на таблицу меток в структуру узла
-// TODO: 9. разобраться с makefile
-
 // TODO: проверка на инициализированность
 
 static LangNode_t *GetGoal(Language *lang_info);
@@ -73,6 +69,8 @@ static LangNode_t *GetPower(Language *lang_info);
 
 static LangNode_t *GetNumber(Language *lang_info);
 static LangNode_t *GetString(Language *lang_info);
+
+static bool CheckAndSetFunctionArgsNumber(Language *lang_info, LangNode_t *name_token, size_t cnt);
 
 DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filename) {
     assert(lang_info);
@@ -334,15 +332,9 @@ static LangNode_t *GetFunctionDeclare(Language *lang_info) {
     lang_info->arr->var_array[func_name->value.pos].type = kVarFunction;
     size_t cnt = 0;
     LangNode_t *args_root = ParseFunctionArgs(lang_info, &cnt);
-    if (lang_info->arr->var_array[func_name->value.pos].variable_value != (int)cnt) {
-        if (lang_info->arr->var_array[func_name->value.pos].variable_value == POISON) {
-            lang_info->arr->var_array[func_name->value.pos].variable_value = (int)cnt;
-        }
-        else {
-            fprintf(stderr, "Number of function arguments is not the same as in declaration: had to be %d, got %zu\n", 
-                lang_info->arr->var_array[func_name->value.pos].variable_value, cnt);
-            return NULL;
-        }
+    
+    if (!CheckAndSetFunctionArgsNumber(lang_info, func_name, cnt)) {
+        return NULL;
     }
     
     CHECK_EXPECTED_TOKEN(token, IsThatOperation(token, kOperationBraceOpen),
@@ -363,7 +355,7 @@ static LangNode_t *GetFunctionCall(Language *lang_info) {
     LangNode_t *name_token = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
 
     if (!name_token || name_token->type != kVariable) {
-        *lang_info->tokens_pos= save_pos;
+        *lang_info->tokens_pos = save_pos;
         return NULL;
     }
     (*lang_info->tokens_pos)++; 
@@ -380,6 +372,7 @@ static LangNode_t *GetFunctionCall(Language *lang_info) {
 
     LangNode_t *args_root = NULL;
     LangNode_t *rightmost = NULL;
+    size_t cnt = 0;
 
     while (true) {
         LangNode_t *next_tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
@@ -405,6 +398,7 @@ static LangNode_t *GetFunctionCall(Language *lang_info) {
             *lang_info->tokens_pos = save_pos;
             return NULL;
         }
+        cnt++;
         
         if (!args_root) {
             args_root = arg;
@@ -417,6 +411,10 @@ static LangNode_t *GetFunctionCall(Language *lang_info) {
             }
             rightmost = comma_node;
         }
+    }
+
+    if (!CheckAndSetFunctionArgsNumber(lang_info, name_token, cnt)) {
+        return NULL;
     }
 
     return NEWOP(kOperationCall, name_token, args_root);
@@ -751,7 +749,6 @@ static LangNode_t *GetWhile(Language *lang_info, LangNode_t *func) {
     return while_tok;
 }
 
-
 LangNode_t *GetPower(Language *lang_info) {
     assert(lang_info);
 
@@ -886,4 +883,23 @@ static LangNode_t *GetHLT(Language *lang_info) {
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationThen), );
 
     return name;
+}
+
+static bool CheckAndSetFunctionArgsNumber(Language *lang_info, LangNode_t *name_token, size_t cnt) {
+    assert(lang_info);
+    assert(name_token);
+
+    VariableInfo *variable = &lang_info->arr->var_array[name_token->value.pos];
+    
+    if (variable->variable_value != (int)cnt) {
+        if (variable->variable_value == POISON) {
+            variable->variable_value = (int)cnt;
+        } else {
+            fprintf(stderr, "Number of function arguments is not the same as in its first mention: expected %d, got %zu\n", 
+                variable->variable_value, cnt);
+            return false;
+        }
+    }
+    
+    return true;
 }
