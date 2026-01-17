@@ -13,7 +13,7 @@
 #include "Common/LanguageFunctions.h"
 #include "Common/StackFunctions.h"
 #include "Common/DoGraph.h"
-#include "Front-End/FSM_LexicalAnalysis.h"
+#include "Front-End/LexicalAnalysis.h"
 #include "Common/CommonFunctions.h"
 
 static LangNode_t *ParseFunctionArgs(Language *lang_info, size_t *cnt);
@@ -67,6 +67,7 @@ static LangNode_t *GetExpression(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetTerm(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetPrimary(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetPower(Language *lang_info, LangNode_t *func_name);
+static LangNode_t *GetTernary(Language *lang_info, LangNode_t *func_name);
 
 static LangNode_t *GetNumber(Language *lang_info);
 static LangNode_t *GetString(Language *lang_info, LangNode_t *func_name, ValCategory val_cat);
@@ -88,7 +89,7 @@ DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filena
     StackCtor(&tokens, 1, stderr);
 
     const char *temp_buf_ptr = Info.buf_ptr;
-    CheckAndReturn_fsm(lang_info->root, &temp_buf_ptr, &tokens, lang_info->arr);
+    CheckAndReturn(lang_info->root, &temp_buf_ptr, &tokens, lang_info->arr);
     lang_info->tokens = &tokens;
 
     size_t tokens_pos = 0;
@@ -412,7 +413,7 @@ static LangNode_t *GetFunctionCall(Language *lang_info) {
         }
     }
 
-    if (!CheckAndSetFunctionArgsNumber(lang_info, name_token, cnt)) {
+    if (!CheckAndSetFunctionArgsNumber(lang_info, name_token, cnt)) { // TODO: проблемы возникают иногда, когда создается переменная фнутри функции (ans = 0 || ans = 1 ? 2 : 3)
         return NULL;
     }
 
@@ -577,11 +578,16 @@ LangNode_t *GetAssignment(Language *lang_info, LangNode_t *func_name) {
     
     LangNode_t *tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     LangNode_t *next = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos) + 1);
-    if (tok && IsThatOperation(next, kOperationParOpen) && !IsThatOperation(tok, kOperationSQRT) && tok->type == kVariable) {
-        value = GetFunctionCall(lang_info);
-    }
-    else {
-        value = GetExpression(lang_info, func_name);
+
+    value = GetTernary(lang_info, func_name);
+
+    if (!value) {
+        if (tok && IsThatOperation(next, kOperationParOpen) && !IsThatOperation(tok, kOperationSQRT) && tok->type == kVariable) {
+            value = GetFunctionCall(lang_info);
+        }
+        else {
+            value = GetExpression(lang_info, func_name);
+        }
     }
     
     if (!value) {
@@ -838,6 +844,52 @@ static LangNode_t *GetString(Language *lang_info, LangNode_t *func_name, ValCate
     }
 
     return node;
+}
+
+static LangNode_t *GetTernary(Language *lang_info, LangNode_t *func_name) {
+    assert(lang_info);
+    assert(func_name);
+    
+    size_t save_pos = *lang_info->tokens_pos;
+    
+    LangNode_t *condition = GetExpression(lang_info, func_name);
+    if (!condition) {
+        return NULL;
+    }
+    
+    LangNode_t *question_tok = NULL;
+    CHECK_EXPECTED_TOKEN(question_tok, IsThatOperation(question_tok, kOperationTrueSeparator), );
+    
+    LangNode_t *true_expr = GetExpression(lang_info, func_name);
+    if (!true_expr) {
+        fprintf(stderr, "SYNTAX_ERROR_TERNARY: expected expression after '?'\n");
+        *lang_info->tokens_pos = save_pos;
+        return NULL;
+    }
+    
+    LangNode_t *colon_tok = NULL;
+    CHECK_EXPECTED_TOKEN(colon_tok, IsThatOperation(colon_tok, kOperationFalseSeparator), 
+    fprintf(stderr, "SYNTAX_ERROR_TERNARY: expected ':' after true expression\n"));
+    
+    LangNode_t *false_expr = GetExpression(lang_info, func_name);
+    if (!false_expr) {
+        fprintf(stderr, "SYNTAX_ERROR_TERNARY: expected expression after ':'\n");
+        *lang_info->tokens_pos = save_pos;
+        return NULL;
+    }
+    
+    LangNode_t *then_node = NEWOP(kOperationThen, true_expr, false_expr);
+    then_node->type = kOperation;
+    then_node->value.operation = kOperationThen;
+    
+    LangNode_t *ternary_node = NEWOP(kOperationTernary, condition, then_node);
+    
+    condition->parent = ternary_node;
+    true_expr->parent = then_node;
+    false_expr->parent = then_node;
+    then_node->parent = ternary_node;
+    
+    return ternary_node;
 }
 
 #undef NEWN

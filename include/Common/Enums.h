@@ -66,6 +66,11 @@ enum OperationTypes {
     kOperationBraceOpen = 34,
     kOperationBraceClose= 35,
     kOperationHLT       = 36,
+
+    kOperationTrueSeparator  = 37,
+    kOperationFalseSeparator = 38,
+    kOperationTernary        = 39,
+
     kOperationNone      = -1,
 };
 
