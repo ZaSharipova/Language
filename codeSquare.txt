@@ -17,7 +17,7 @@ incantatio adepio_maximus() |>
 <|
 
 incantatio nulla(a, b, c) |>
-    si(a aequalis 0)|> 
+    si (a aequalis 0)|> 
         dolinear(b, c)~~
     <|
 <|

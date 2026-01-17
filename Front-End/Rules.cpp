@@ -60,7 +60,7 @@ static LangNode_t *GetFunctionCall(Language *lang_info);
 static LangNode_t *GetReturn(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetPrintf(Language *lang_info);
 LangNode_t *GetScanf(Language *lang_info, LangNode_t *func_name);
-static LangNode_t *GetUnaryFunc(Language *lang_info);
+static LangNode_t *GetUnaryFunc(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetHLT(Language *lang_info);
 
 static LangNode_t *GetExpression(Language *lang_info, LangNode_t *func_name);
@@ -422,6 +422,7 @@ static LangNode_t *GetFunctionCall(Language *lang_info) {
 
 static LangNode_t *GetExpression(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
+    assert(func_name);
 
     LangNode_t *val = GetTerm(lang_info, func_name);
     if (!val) return NULL;
@@ -450,6 +451,7 @@ static LangNode_t *GetExpression(Language *lang_info, LangNode_t *func_name) {
 
 static LangNode_t *GetTerm(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
+    assert(func_name);
 
     LangNode_t *left = GetPower(lang_info, func_name);
     if (!left) return NULL;
@@ -514,7 +516,7 @@ static LangNode_t *GetPrimary(Language *lang_info, LangNode_t *func_name) {
         return value_number;
     }
 
-    value_number = GetUnaryFunc(lang_info);
+    value_number = GetUnaryFunc(lang_info, func_name);
     if (value_number) {
         return value_number;
     }
@@ -522,26 +524,28 @@ static LangNode_t *GetPrimary(Language *lang_info, LangNode_t *func_name) {
     return GetString(lang_info, func_name, krvalue);
 }
 
-static LangNode_t *GetUnaryFunc(Language *lang_info) {
+static LangNode_t *GetUnaryFunc(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
-    LangNode_t *func_name = NULL;
-    size_t save_pos = *lang_info->tokens_pos;
-    CHECK_EXPECTED_TOKEN(func_name, IsThatOperation(func_name, kOperationSQRT),);
-    // printf("UNARY");
+    assert(func_name);
 
+    LangNode_t *unary_func_name = NULL;
+    size_t save_pos = *lang_info->tokens_pos;
+    CHECK_EXPECTED_TOKEN(unary_func_name, IsThatOperation(unary_func_name, kOperationSQRT),);
+    
     LangNode_t *par = NULL;
     CHECK_EXPECTED_TOKEN(par, IsThatOperation(par, kOperationParOpen),);
-
+    
     LangNode_t *value = GetExpression(lang_info, func_name);
     if (!value) {
-        fprintf(stderr, "SYNTAX_ERROR_UNARYF\n");
+        fprintf(stderr, "SYNTAX_ERROR_UNARY\n");
         return NULL;
     }
-
+    
     CHECK_EXPECTED_TOKEN(par, IsThatOperation(par, kOperationParClose),);
-    func_name->left = value;
-    value->parent = func_name;
-    return func_name;
+    unary_func_name->left = value;
+    value->parent = unary_func_name;
+
+    return unary_func_name;
 }
 
 
@@ -668,6 +672,7 @@ static LangNode_t *GetIf(Language *lang_info, LangNode_t *func_name) {
 static LangNode_t *GetElse(Language *lang_info, LangNode_t *if_node, LangNode_t *func_name) {
     assert(lang_info);
     assert(if_node);
+    assert(func_name);
 
     size_t save_pos = *lang_info->tokens_pos;
     LangNode_t *node = NULL, *tok = NULL, *last = NULL;
@@ -800,16 +805,34 @@ static LangNode_t *GetString(Language *lang_info, LangNode_t *func_name, ValCate
     LangNode_t *node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (node && node->type == kVariable) {
         (*(lang_info->tokens_pos))++;
+
     } else {
         return NULL;
     }
 
-    if (lang_info->arr->var_array[node->value.pos].func_made && lang_info->arr->var_array[func_name->value.pos].func_made 
-            && strcmp(lang_info->arr->var_array[node->value.pos].func_made, lang_info->arr->var_array[func_name->value.pos].func_made) != 0) {
-        if  (val_cat == klvalue) {
-            strcpy(lang_info->arr->var_array[node->value.pos].func_made, lang_info->arr->var_array[func_name->value.pos].func_made);
-        } else {
-            fprintf(stderr, "SYNTAX_ERROR_STRING: usage of undeclared variable %s\n", lang_info->arr->var_array[node->value.pos].variable_name);
+    size_t var_pos = node->value.pos;
+    size_t func_pos = func_name->value.pos;
+
+    if (var_pos >= lang_info->arr->size || func_pos >= lang_info->arr->size) {
+        fprintf(stderr, "SYNTAX_ERROR_STRING: invalid variable position %zu %zu\n", var_pos, func_pos);
+        return NULL;
+    }
+
+    VariableInfo *var_info = &lang_info->arr->var_array[var_pos];
+    VariableInfo *func_info = &lang_info->arr->var_array[func_pos];
+
+    if (!var_info->func_made || !func_info->func_made ||
+        strcmp(var_info->func_made, func_info->func_made) != 0) {
+        if (val_cat == klvalue && func_info->func_made) {
+            if (var_info->func_made) free(var_info->func_made);
+            var_info->func_made = strdup(func_info->func_made);
+            if (!var_info->func_made) {
+                perror("strdup failed");
+                return NULL;
+            }
+        } else if (var_info->func_made && func_info->func_made) {
+            fprintf(stderr, "SYNTAX_ERROR_STRING: usage of undeclared variable %s\n",
+                    var_info->variable_name ? var_info->variable_name : "unknown");
             return NULL;
         }
     }

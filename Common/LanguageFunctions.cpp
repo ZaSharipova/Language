@@ -109,7 +109,7 @@ DifErrors ResizeArray(VariableArr *arr)  {
     if (arr->size + 2 > arr->capacity) {
         arr->capacity += 2;
         
-        VariableInfo *new_array = (VariableInfo *) calloc(arr->capacity, sizeof(VariableInfo));
+        VariableInfo *new_array = (VariableInfo *) calloc (arr->capacity, sizeof(VariableInfo));
         if (!new_array) {
             fprintf(stderr, "Memory error.\n");
             return kNoMemory;
