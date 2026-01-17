@@ -13,7 +13,7 @@
 #include "Common/LanguageFunctions.h"
 #include "Common/StackFunctions.h"
 #include "Common/DoGraph.h"
-#include "Front-End/LexicalAnalysis.h"
+#include "Front-End/FSM_LexicalAnalysis.h"
 #include "Common/CommonFunctions.h"
 
 static LangNode_t *ParseFunctionArgs(Language *lang_info, size_t *cnt);
@@ -88,7 +88,7 @@ DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filena
     StackCtor(&tokens, 1, stderr);
 
     const char *temp_buf_ptr = Info.buf_ptr;
-    CheckAndReturn(lang_info->root, &temp_buf_ptr, &tokens, lang_info->arr);
+    CheckAndReturn_fsm(lang_info->root, &temp_buf_ptr, &tokens, lang_info->arr);
     lang_info->tokens = &tokens;
 
     size_t tokens_pos = 0;
