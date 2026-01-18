@@ -58,7 +58,7 @@ size_t CheckAndReturn(LangRoot *root, const char **string, Stack_Info *tokens, V
             continue;
         }
 
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationBraceOpen),  kOperationBraceOpen);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationBraceOpen),  kOperationBraceOpen); // TODO
         CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationBraceClose), kOperationBraceClose);
         CHECK_SYMBOL_AND_PUSH('(', kOperationParOpen);
         CHECK_SYMBOL_AND_PUSH(')', kOperationParClose);
@@ -80,6 +80,9 @@ size_t CheckAndReturn(LangRoot *root, const char **string, Stack_Info *tokens, V
         CHECK_SYMBOL_AND_PUSH('^', kOperationPow);
         CHECK_SYMBOL_AND_PUSH('?', kOperationTrueSeparator);
         CHECK_SYMBOL_AND_PUSH(':', kOperationFalseSeparator);
+        CHECK_SYMBOL_AND_PUSH('[', kOperationBracketOpen);
+        CHECK_SYMBOL_AND_PUSH(']', kOperationBracketClose);
+        CHECK_STROKE_AND_PUSH("voco", kOperationArrDecl);
 
         CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationSin),    kOperationSin);
         CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationSQRT),   kOperationSQRT);

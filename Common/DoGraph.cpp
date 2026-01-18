@@ -269,6 +269,11 @@ static GraphOperation PrintExpressionType(const LangNode_t *node) {
             return {"ternary", "hotpink2"};
         case (kOperationHLT):
             return {"HLT", "lightpink"};
+        case (kOperationArrDecl):
+            return {"arr declare", "lightgoldenrod3"};
+        case (kOperationArrPos):
+            return {"arr info", "lightsteelblue"};
+
 
         case (kOperationTrueSeparator):
         case (kOperationFalseSeparator):
@@ -276,6 +281,8 @@ static GraphOperation PrintExpressionType(const LangNode_t *node) {
         case (kOperationParClose):
         case (kOperationBraceOpen):
         case (kOperationBraceClose):
+        case (kOperationBracketOpen):
+        case (kOperationBracketClose):
         case (kOperationNone):
         default: return {"red", "red"};
     }

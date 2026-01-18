@@ -271,7 +271,8 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
                     PrintStatement(file, stmt->left->right, arr, ram_base, param_count, asm_info);
                     PrintStatement(file, stmt->left->left, arr, ram_base, param_count, asm_info);
                     
-                }
+                }  break;
+
 
                 default:
                     PrintExpr(file, stmt, arr, ram_base, param_count, asm_info);

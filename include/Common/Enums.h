@@ -64,12 +64,17 @@ enum OperationTypes {
     kOperationParOpen   = 32,
     kOperationParClose  = 33,
     kOperationBraceOpen = 34,
-    kOperationBraceClose= 35,
+    kOperationBraceClose = 35,
     kOperationHLT       = 36,
-
+    
     kOperationTrueSeparator  = 37,
     kOperationFalseSeparator = 38,
     kOperationTernary        = 39,
+    
+    kOperationBracketOpen = 40,
+    kOperationBracketClose = 41,
+    kOperationArrPos    = 42,
+    kOperationArrDecl   = 43,
 
     kOperationNone      = -1,
 };
