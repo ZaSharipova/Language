@@ -15,6 +15,7 @@ struct VariableInfo {
     VariableModes type;
     char *variable_name;
     int variable_value;
+    int params_number;
     int pos_in_code;
     char *func_made;
 };
@@ -141,7 +142,7 @@ static const LangTable NAME_TYPES_TABLE [] = {
 
     {"?",            "?",      kOperationTrueSeparator},
     {":",            ":",      kOperationFalseSeparator},
-    
+
     {"",             "",       kOperationNone},
 };
 static const size_t OP_TABLE_SIZE = sizeof(NAME_TYPES_TABLE) / sizeof(NAME_TYPES_TABLE[0]);

@@ -137,7 +137,7 @@ static void WriteVariableNode(FILE *file, const LangNode_t *node, VariableArr *a
     fprintf(file, "Type: %s\\n", GetNodeTypeString(node->type));
     
     if (node->value.pos < arr->size) {
-        fprintf(file, "Value: %s\\n", arr->var_array[node->value.pos].variable_name);
+        if (arr->var_array[node->value.pos].variable_name) fprintf(file, "Value: %s\\n", arr->var_array[node->value.pos].variable_name);
     } else {
         fprintf(file, "Value: INVALID_POS[%zu]\\n", node->value.pos);
     }
@@ -265,9 +265,13 @@ static GraphOperation PrintExpressionType(const LangNode_t *node) {
             return {"E", "lightgoldenrod"};
         case (kOperationNE):
             return {"NE", "lightgoldenrod"};
+        case (kOperationTernary):
+            return {"ternary", "hotpink2"};
         case (kOperationHLT):
-        return {"HLT", "lightpink"};
+            return {"HLT", "lightpink"};
 
+        case (kOperationTrueSeparator):
+        case (kOperationFalseSeparator):
         case (kOperationParOpen):
         case (kOperationParClose):
         case (kOperationBraceOpen):

@@ -97,6 +97,7 @@ DifErrors InitArrOfVariable(VariableArr *arr, size_t capacity) {
         arr->var_array[i].variable_name  = NULL;
         arr->var_array[i].func_made      = NULL;
         arr->var_array[i].variable_value = POISON;
+        arr->var_array[i].params_number  = POISON;
         arr->var_array[i].type           = kUnknown;
     }
     
@@ -123,6 +124,7 @@ DifErrors ResizeArray(VariableArr *arr)  {
             new_array[i].variable_name  = NULL;
             new_array[i].func_made      = NULL;
             new_array[i].variable_value = POISON;
+            new_array[i].params_number  = POISON;
             new_array[i].type           = kUnknown;
         }
         

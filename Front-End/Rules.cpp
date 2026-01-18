@@ -13,7 +13,7 @@
 #include "Common/LanguageFunctions.h"
 #include "Common/StackFunctions.h"
 #include "Common/DoGraph.h"
-#include "Front-End/LexicalAnalysis.h"
+#include "Front-End/FSM_LexicalAnalysis.h"
 #include "Common/CommonFunctions.h"
 
 static LangNode_t *ParseFunctionArgs(Language *lang_info, size_t *cnt);
@@ -45,9 +45,6 @@ static LangNode_t *ParseFunctionBody(Language *lang_info, LangNode_t *func_name)
         (*lang_info->tokens_pos)++;                                              \
     } while (0)
 
-// TODO: 4. сделать тернарные операторы
-// TODO: проверка на инициализированность
-
 static LangNode_t *GetGoal(Language *lang_info);
 
 static LangNode_t *GetAssignment(Language *lang_info, LangNode_t *func_name);
@@ -59,7 +56,7 @@ static LangNode_t *GetFunctionDeclare(Language *lang_info);
 static LangNode_t *GetFunctionCall(Language *lang_info);
 static LangNode_t *GetReturn(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetPrintf(Language *lang_info);
-LangNode_t *GetScanf(Language *lang_info, LangNode_t *func_name);
+static LangNode_t *GetScanf(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetUnaryFunc(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetHLT(Language *lang_info);
 
@@ -72,6 +69,7 @@ static LangNode_t *GetTernary(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetNumber(Language *lang_info);
 static LangNode_t *GetString(Language *lang_info, LangNode_t *func_name, ValCategory val_cat);
 
+static LangNode_t *GetAssignmentLValue(Language *lang_info, LangNode_t *func_name);
 static bool CheckAndSetFunctionArgsNumber(Language *lang_info, LangNode_t *name_token, size_t cnt);
 
 DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filename) {
@@ -89,7 +87,7 @@ DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filena
     StackCtor(&tokens, 1, stderr);
 
     const char *temp_buf_ptr = Info.buf_ptr;
-    CheckAndReturn(lang_info->root, &temp_buf_ptr, &tokens, lang_info->arr);
+    CheckAndReturn_fsm(lang_info->root, &temp_buf_ptr, &tokens, lang_info->arr);
     lang_info->tokens = &tokens;
 
     size_t tokens_pos = 0;
@@ -158,7 +156,7 @@ static LangNode_t *GetReturn(Language *lang_info, LangNode_t *func_name) {
     return NEWOP(kOperationReturn, node, NULL);
 }
 
-LangNode_t *GetScanf(Language *lang_info, LangNode_t *func_name) {
+static LangNode_t *GetScanf(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
     assert(func_name);
 
@@ -284,6 +282,7 @@ LangNode_t *GetOp(Language *lang_info, LangNode_t *func_name) {
 }
 
 #define NEWN(num) NewNode(root, kNumber, ((Value){ .number = (num)}), NULL, NULL)
+#define NEWV(name) NewVariable(root, name, Variable_Array)
 #define ADD_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationAdd}, left, right)
 #define SUB_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationSub}, left, right)
 #define MUL_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationMul}, left, right)
@@ -340,6 +339,7 @@ static LangNode_t *GetFunctionDeclare(Language *lang_info) {
     CHECK_EXPECTED_TOKEN(token, IsThatOperation(token, kOperationBraceOpen),
         fprintf(stderr, "%s", "SYNTAX_ERROR_FUNC: expected '{' after function declaration\n"));
     
+    
     LangNode_t *body_root = ParseFunctionBody(lang_info, func_name);
     
     CHECK_EXPECTED_TOKEN(token, IsThatOperation(token, kOperationBraceClose),
@@ -365,7 +365,7 @@ static LangNode_t *GetFunctionCall(Language *lang_info) {
     LangNode_t *par_open = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (!IsThatOperation(par_open, kOperationParOpen)) {
         //printf("[DEBUG GetFunctionCall] No '(' after function name\n");
-        *lang_info->tokens_pos= save_pos;
+        *lang_info->tokens_pos = save_pos;
         return NULL;
     }
     (*lang_info->tokens_pos)++; 
@@ -413,7 +413,7 @@ static LangNode_t *GetFunctionCall(Language *lang_info) {
         }
     }
 
-    if (!CheckAndSetFunctionArgsNumber(lang_info, name_token, cnt)) { // TODO: проблемы возникают иногда, когда создается переменная фнутри функции (ans = 0 || ans = 1 ? 2 : 3)
+    if (!CheckAndSetFunctionArgsNumber(lang_info, name_token, cnt)) {
         return NULL;
     }
 
@@ -549,60 +549,45 @@ static LangNode_t *GetUnaryFunc(Language *lang_info, LangNode_t *func_name) {
     return unary_func_name;
 }
 
-
 LangNode_t *GetAssignment(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
     assert(func_name);
 
     size_t save_pos = *lang_info->tokens_pos;
     
-    LangNode_t *maybe_var = GetString(lang_info, func_name, klvalue);
-    if (!maybe_var) {
-        *lang_info->tokens_pos = save_pos;
-        return NULL;
+    LangNode_t *value = GetTernary(lang_info, func_name);
+    if (value) {
+        return value;
     }
-           
-    LangNode_t *assign_op = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
-    if (!IsThatOperation(assign_op, kOperationIs)) {
-        (*lang_info->tokens_pos) = save_pos;
-        return NULL;
-    }
-    (*lang_info->tokens_pos)++;
 
-    if (!lang_info->arr->var_array[maybe_var->value.pos].func_made 
-            || strcmp(lang_info->arr->var_array[maybe_var->value.pos].func_made, lang_info->arr->var_array[func_name->value.pos].variable_name) != 0) {
-        lang_info->arr->var_array[maybe_var->value.pos].func_made = strdup(lang_info->arr->var_array[func_name->value.pos].variable_name);
-        lang_info->arr->var_array[func_name->value.pos].variable_value ++;
-    }
-    LangNode_t *value = NULL;
-    
-    LangNode_t *tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
-    LangNode_t *next = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos) + 1);
 
-    value = GetTernary(lang_info, func_name);
-
+    LangNode_t *assign_op = NULL;
     if (!value) {
+        assign_op = GetAssignmentLValue(lang_info, func_name);
+        if (!assign_op) {
+            return NULL;
+        }
+
+        LangNode_t *tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
+        LangNode_t *next = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos) + 1);
         if (tok && IsThatOperation(next, kOperationParOpen) && !IsThatOperation(tok, kOperationSQRT) && tok->type == kVariable) {
             value = GetFunctionCall(lang_info);
-        }
-        else {
+        } else {
             value = GetExpression(lang_info, func_name);
         }
     }
     
     if (!value) {
-        fprintf(stderr, "SYNTAX_ERROR_ASSIGNMENT: no body of assignment\n");
+        fprintf(stderr, "SYNTAX_ERROR_ASSIGNMENT: no body of assignment %s\n", lang_info->arr->var_array[func_name->value.pos].variable_name);
         (*lang_info->tokens_pos) = save_pos;
         return NULL;
     }
 
-    assign_op->left = maybe_var;
     assign_op->right = value;
-    maybe_var->parent = assign_op;
     value->parent = assign_op;
 
-    if (lang_info->arr->var_array[maybe_var->value.pos].variable_value == POISON && value->type == kNumber) {
-        lang_info->arr->var_array[maybe_var->value.pos].variable_value = (int)value->value.number; //
+    if (lang_info->arr->var_array[assign_op->left->value.pos].variable_value == POISON && value->type == kNumber) {
+        lang_info->arr->var_array[assign_op->left->value.pos].variable_value = (int)value->value.number; //
     }
     
     return NEWOP(kOperationThen, assign_op, NULL);
@@ -827,11 +812,12 @@ static LangNode_t *GetString(Language *lang_info, LangNode_t *func_name, ValCate
     VariableInfo *var_info = &lang_info->arr->var_array[var_pos];
     VariableInfo *func_info = &lang_info->arr->var_array[func_pos];
 
-    if (!var_info->func_made || !func_info->func_made ||
-        strcmp(var_info->func_made, func_info->func_made) != 0) {
+    if (!var_info->func_made || !func_info->func_made || strcmp(var_info->func_made, func_info->func_made) != 0) {
         if (val_cat == klvalue && func_info->func_made) {
+
             if (var_info->func_made) free(var_info->func_made);
             var_info->func_made = strdup(func_info->func_made);
+
             if (!var_info->func_made) {
                 perror("strdup failed");
                 return NULL;
@@ -851,7 +837,11 @@ static LangNode_t *GetTernary(Language *lang_info, LangNode_t *func_name) {
     assert(func_name);
     
     size_t save_pos = *lang_info->tokens_pos;
+    LangRoot *root = lang_info->root;
+    VariableArr *Variable_Array = lang_info->arr;
     
+    LangNode_t *assign_op = GetAssignmentLValue(lang_info, func_name);
+
     LangNode_t *condition = GetExpression(lang_info, func_name);
     if (!condition) {
         return NULL;
@@ -878,18 +868,22 @@ static LangNode_t *GetTernary(Language *lang_info, LangNode_t *func_name) {
         return NULL;
     }
     
-    LangNode_t *then_node = NEWOP(kOperationThen, true_expr, false_expr);
-    then_node->type = kOperation;
-    then_node->value.operation = kOperationThen;
+    LangNode_t *if_compare_node = NEWOP(kOperationE, NEWV(lang_info->arr->var_array[assign_op->left->value.pos].variable_name), condition);
+    LangNode_t *ternary_root = NEWOP(kOperationTernary, assign_op, NULL);
+    LangNode_t *else_node = NEWOP(kOperationElse, true_expr, false_expr);
+    LangNode_t *if_node = NEWOP(kOperationIf, if_compare_node, else_node);
     
-    LangNode_t *ternary_node = NEWOP(kOperationTernary, condition, then_node);
+    assign_op->parent = ternary_root;
+    assign_op->right = if_node;
+    if_node->parent = assign_op;
+
+    if_compare_node->parent = if_node;
+    condition->parent = if_compare_node;
+    else_node->parent = if_node;
+    false_expr->parent = else_node;
+    true_expr->parent = else_node;
     
-    condition->parent = ternary_node;
-    true_expr->parent = then_node;
-    false_expr->parent = then_node;
-    then_node->parent = ternary_node;
-    
-    return ternary_node;
+    return ternary_root;
 }
 
 #undef NEWN
@@ -947,6 +941,7 @@ static LangNode_t *ParseFunctionBody(Language *lang_info, LangNode_t *func_name)
     assert(lang_info);
     assert(func_name);
 
+    lang_info->arr->var_array[func_name->value.pos].variable_value = lang_info->arr->var_array[func_name->value.pos].params_number;
     LangNode_t *body_root = NULL;
     
     while (true) {
@@ -972,18 +967,50 @@ static LangNode_t *GetHLT(Language *lang_info) {
     return name;
 }
 
+static LangNode_t *GetAssignmentLValue(Language *lang_info, LangNode_t *func_name) {
+    assert(lang_info);
+    assert(func_name);
+
+    size_t save_pos = *lang_info->tokens_pos;
+    
+    LangNode_t *maybe_var = GetString(lang_info, func_name, klvalue);
+    if (!maybe_var) {
+        *lang_info->tokens_pos = save_pos;
+        return NULL;
+    }
+           
+    LangNode_t *assign_op = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
+    if (!IsThatOperation(assign_op, kOperationIs)) {
+        (*lang_info->tokens_pos) = save_pos;
+        return NULL;
+    }
+    (*lang_info->tokens_pos)++;
+
+    if (!lang_info->arr->var_array[maybe_var->value.pos].func_made 
+            || strcmp(lang_info->arr->var_array[maybe_var->value.pos].func_made, lang_info->arr->var_array[func_name->value.pos].variable_name) != 0) {
+        lang_info->arr->var_array[maybe_var->value.pos].func_made = strdup(lang_info->arr->var_array[func_name->value.pos].variable_name);
+        lang_info->arr->var_array[func_name->value.pos].variable_value ++;
+    }
+
+    assign_op->left = maybe_var;
+    maybe_var->parent = assign_op;
+    
+    return assign_op;
+}
+
 static bool CheckAndSetFunctionArgsNumber(Language *lang_info, LangNode_t *name_token, size_t cnt) {
     assert(lang_info);
     assert(name_token);
 
     VariableInfo *variable = &lang_info->arr->var_array[name_token->value.pos];
+    //fprintf(stderr, "%s %d\n", variable->variable_name, variable->variable_value);
     
-    if (variable->variable_value != (int)cnt) {
-        if (variable->variable_value == POISON) {
-            variable->variable_value = (int)cnt;
+    if (variable->params_number != (int)cnt) {
+        if (variable->params_number == POISON) {
+            variable->params_number = (int)cnt;
         } else {
             fprintf(stderr, "Number of function arguments is not the same as in its first mention: expected %d, got %zu\n", 
-                variable->variable_value, cnt);
+                variable->params_number, cnt);
             return false;
         }
     }

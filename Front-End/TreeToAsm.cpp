@@ -90,7 +90,7 @@ static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int 
 
     int var_idx = -1;
     for (size_t i = 0; i < arr->size; i++) {
-        if (strcmp(arr->var_array[i].variable_name, arr->var_array[node->value.pos].variable_name) == 0) {
+        if (arr->var_array[node->value.pos].variable_name && strcmp(arr->var_array[i].variable_name, arr->var_array[node->value.pos].variable_name) == 0) {
             if (arr->var_array[i].pos_in_code == -1) {
                 var_idx = arr->var_array[i].pos_in_code = asm_info->counter++;
                 //FPRINTFf("AAAAA%d", arr->var_array[i].pos_in_code);
@@ -266,6 +266,12 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
                     FPRINTF("JMP :while_start_%d", start_label);
                     FPRINTF(":while_end_%d", end_label);
                 } break;
+
+                case (kOperationTernary): {
+                    PrintStatement(file, stmt->left->right, arr, ram_base, param_count, asm_info);
+                    PrintStatement(file, stmt->left->left, arr, ram_base, param_count, asm_info);
+                    
+                }
 
                 default:
                     PrintExpr(file, stmt, arr, ram_base, param_count, asm_info);
