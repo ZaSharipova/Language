@@ -16,9 +16,6 @@
 #include "Front-End/LexicalAnalysis.h"
 #include "Common/CommonFunctions.h"
 
-static LangNode_t *ParseFunctionArgs(Language *lang_info, size_t *cnt);
-static LangNode_t *ParseFunctionBody(Language *lang_info, LangNode_t *func_name);
-
 #define CHECK_NULL_RETURN(name, cond) \
     LangNode_t *name = cond;          \
     if (name == NULL) {               \
@@ -69,6 +66,9 @@ static LangNode_t *GetTernary(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetNumber(Language *lang_info);
 static LangNode_t *GetString(Language *lang_info, LangNode_t *func_name, ValCategory val_cat);
 
+static LangNode_t *ParseFunctionArgs(Language *lang_info, size_t *cnt);
+static LangNode_t *ParseFunctionBody(Language *lang_info, LangNode_t *func_name);
+
 static LangNode_t *GetArrayAssignment(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetAssignmentLValue(Language *lang_info, LangNode_t *func_name);
 static bool CheckAndSetFunctionArgsNumber(Language *lang_info, LangNode_t *name_token, size_t cnt);
@@ -100,7 +100,7 @@ DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filena
     }
     
     DoTreeInGraphviz(lang_info->root->root, dump_info, lang_info->arr);
-    StackDtor(&tokens, stderr); // TODO
+    //StackDtor(&tokens, stderr); // TODO
 
     return kSuccess;
 }
@@ -339,7 +339,6 @@ static LangNode_t *GetFunctionDeclare(Language *lang_info) {
     
     CHECK_EXPECTED_TOKEN(token, IsThatOperation(token, kOperationBraceOpen),
         fprintf(stderr, "%s", "SYNTAX_ERROR_FUNC: expected '{' after function declaration\n"));
-    
     
     LangNode_t *body_root = ParseFunctionBody(lang_info, func_name);
     
@@ -1004,12 +1003,13 @@ static LangNode_t *GetArrayAssignment(Language *lang_info, LangNode_t *func_name
     LangRoot *root = lang_info->root;
     
     LangNode_t *declare_node = GetStackElem(lang_info->tokens, *lang_info->tokens_pos);
-    if (declare_node) {
+    if (IsThatOperation(declare_node, kOperationArrDecl)) {
         (*lang_info->tokens_pos)++;
     }
 
     LangNode_t *maybe_var = GetString(lang_info, func_name, klvalue);
     if (!maybe_var) {
+        //fprintf(stderr, "%d\n", *lang_info->tokens_pos);
         *lang_info->tokens_pos = save_pos;
         return NULL;
     }
@@ -1024,7 +1024,7 @@ static LangNode_t *GetArrayAssignment(Language *lang_info, LangNode_t *func_name
     }
 
     CHECK_EXPECTED_TOKEN(bracket_node, IsThatOperation(bracket_node, kOperationBracketClose), 
-        fprintf(stderr, "SYNTAX_ERROR_ARRAY: no closing brcket.\n"););
+        fprintf(stderr, "SYNTAX_ERROR_ARRAY: no closing bracket.\n"););
 
     LangNode_t *is_node = NULL;
     CHECK_EXPECTED_TOKEN(is_node, IsThatOperation(is_node, kOperationIs), 
@@ -1038,22 +1038,21 @@ static LangNode_t *GetArrayAssignment(Language *lang_info, LangNode_t *func_name
     
     is_node->left = NEWOP(kOperationArrPos, maybe_var, number);
 
-    if (declare_node) {
+    if (IsThatOperation(declare_node, kOperationArrDecl)) {
         declare_node->left = is_node;
         is_node->parent = declare_node;
 
-        is_node->right = NEWN(0.0); // TODO
+        is_node->right = rvalue_node; // TODO: doesn't have to be only 0
         lang_info->arr->var_array[maybe_var->value.pos].variable_value = (int)number->value.number;
         lang_info->arr->var_array[func_name->value.pos].variable_value += (int)number->value.number; // TODO
 
         return declare_node;
     }
-
     is_node->right = rvalue_node;
     rvalue_node->parent = is_node;
 
     if (lang_info->arr->var_array[maybe_var->value.pos].variable_value == POISON 
-        || lang_info->arr->var_array[maybe_var->value.pos].variable_value > number->value.number) {
+        || lang_info->arr->var_array[maybe_var->value.pos].variable_value < number->value.number) {
             fprintf(stderr, "SYNTAX_ERROR_ARRAY: usage of undeclared array or index out of range.\n");
             return NULL;
     }

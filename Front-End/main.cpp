@@ -65,8 +65,9 @@ int main(int argc, char *argv[]) {
         int ram_base = 0;
         AsmInfo asm_info = {};
         PrintProgram(asm_file, lang_info.root->root, lang_info.arr, &ram_base, &asm_info);
-
         fclose(asm_file);
+
+        TreeDtor(lang_info.root);
     }
 
     else if (strcmp(mode, "code-asm") == 0) {
@@ -77,8 +78,9 @@ int main(int argc, char *argv[]) {
         int ram_base = 0;
         AsmInfo asm_info = {};
         PrintProgram(asm_file, root.root, &Variable_Array, &ram_base, &asm_info);
-
         fclose(asm_file);
+
+        TreeDtor(lang_info.root);
     }
 
     else if (strcmp(mode, "code-tree") == 0) {
@@ -88,6 +90,8 @@ int main(int argc, char *argv[]) {
         FILE_OPEN_AND_CHECK(ast_file, filename_out, "w", lang_info.arr, lang_info.root);
         PrintAST(root.root, ast_file, &Variable_Array, 0); //
         fclose(ast_file);
+        
+        TreeDtor(lang_info.root);
     }
 
     else {

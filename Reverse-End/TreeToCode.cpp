@@ -56,6 +56,7 @@ void GenerateCodeFromAST(LangNode_t *node, FILE *out, VariableArr *arr, int inde
             case kOperationFunction:
                 GenFunctionDeclare(node, out, arr, indent);
                 return;
+
             case kOperationCall:
                 GenFunctionCall(node, out, arr, indent);
                 return;
@@ -93,6 +94,15 @@ void GenerateCodeFromAST(LangNode_t *node, FILE *out, VariableArr *arr, int inde
             case kOperationHLT:
                 PrintIndent(out, indent);
                 fprintf(out, "%s%s\n", PrintCodeNameFromTable(kOperationHLT), PrintCodeNameFromTable(kOperationThen));
+                return;
+
+            case kOperationArrDecl:
+                PrintIndent(out, indent);
+                fprintf(out, "%s %s%s%d%s %s %d%s\n", 
+                    PrintCodeNameFromTable(kOperationArrDecl), arr->var_array[node->left->left->left->value.pos].variable_name, 
+                    PrintCodeNameFromTable(kOperationBracketOpen), (int)node->left->left->right->value.number, 
+                    PrintCodeNameFromTable(kOperationBracketClose), PrintCodeNameFromTable(kOperationIs),  
+                    (int)node->left->right->value.number, PrintCodeNameFromTable(kOperationThen));
                 return;
 
             default:
@@ -304,6 +314,12 @@ static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr) { //
             return;
 
         case kOperation:
+            if (IsThatOperation(node, kOperationArrPos)) {
+                fprintf(out, "%s%s%d%s", 
+                    arr->var_array[node->left->value.pos].variable_name, PrintCodeNameFromTable(kOperationBracketOpen),
+                    (int)node->right->value.number, PrintCodeNameFromTable(kOperationBracketClose));
+                return;
+            }
             break;
 
         default:

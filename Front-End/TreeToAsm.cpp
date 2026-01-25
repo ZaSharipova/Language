@@ -8,6 +8,7 @@
 #include "Common/Structs.h"
 #include "Common/Enums.h"
 #include "Common/StackFunctions.h"
+#include "Common/CommonFunctions.h"
 
 #define FPRINTF(fmt, ...) fprintf(file, fmt "\n", ##__VA_ARGS__)
 static void CleanPositions(VariableArr *arr);
@@ -21,6 +22,9 @@ static void PushParamsToStack(FILE *file, LangNode_t *args_node, VariableArr *ar
 static void PushParamsToRam(FILE *file, LangNode_t *args_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info);
 static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info);
 
+static void PrintIfToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info);
+static void PrintWhileToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info);
+
 void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base, AsmInfo *asm_info) {
     assert(file);
     assert(arr);
@@ -30,12 +34,16 @@ void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base,
 
     asm_info->counter = 0;
 
-    if (root->type == kOperation && root->value.operation == kOperationFunction) {
+    if (IsThatOperation(root, kOperationFunction)) {
         PrintFunction(file, root, arr, ram_base, asm_info);
     }
 
-    if (root->left) PrintProgram(file, root->left, arr, ram_base, asm_info);
-    if (root->right) PrintProgram(file, root->right, arr, ram_base, asm_info);
+    if (root->left) {
+        PrintProgram(file, root->left, arr, ram_base, asm_info);
+    }
+    if (root->right) {
+        PrintProgram(file, root->right, arr, ram_base, asm_info);
+    }
 }
 
 static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, int *ram_base, AsmInfo *asm_info) {
@@ -141,13 +149,17 @@ static void PushParamsToStack(FILE *file, LangNode_t *args_node, VariableArr *ar
     assert(asm_info);
     if (!args_node) return;
 
-    if (!(args_node->type == kOperation && args_node->value.operation == kOperationComma)) {
+    if (!IsThatOperation(args_node, kOperationComma)) {
         PrintExpr(file, args_node, arr, ram_base, param_count, asm_info);
         return;
     }
 
-    if (args_node->left) PushParamsToStack(file, args_node->right, arr, ram_base, param_count, asm_info);
-    if (args_node->right) PushParamsToStack(file, args_node->left, arr, ram_base, param_count, asm_info);
+    if (args_node->left) {
+        PushParamsToStack(file, args_node->right, arr, ram_base, param_count, asm_info);
+    }
+    if (args_node->right) {
+        PushParamsToStack(file, args_node->left, arr, ram_base, param_count, asm_info);
+    }
     
 }
 
@@ -157,13 +169,17 @@ void PushParamsToRam(FILE *file, LangNode_t *args_node, VariableArr *arr, int ra
     assert(asm_info);
     if (!args_node) return;
 
-    if (!(args_node->type == kOperation && args_node->value.operation == kOperationComma)) {
+    if (!IsThatOperation(args_node, kOperationComma)) {
         FindVarPosPopMN(file, arr, args_node, param_count, asm_info);
         return;
     }
 
-    if (args_node->left) PushParamsToRam(file, args_node->left, arr, ram_base, param_count, asm_info);
-    if (args_node->right) PushParamsToRam(file, args_node->right, arr, ram_base, param_count, asm_info);
+    if (args_node->left) {
+        PushParamsToRam(file, args_node->left, arr, ram_base, param_count, asm_info);
+    }
+    if (args_node->right) {
+        PushParamsToRam(file, args_node->right, arr, ram_base, param_count, asm_info);
+    }
 }
 
 static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info) {
@@ -221,65 +237,32 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
                     PrintStatement(file, stmt->right, arr, ram_base, param_count, asm_info);
                     break;
 
-                case kOperationIf: {
-                    LangNode_t *condition = stmt->left;
+                case kOperationIf: 
+                    PrintIfToAsm(file, stmt, arr, ram_base, param_count, asm_info);
+                    break;
 
-                    PrintExpr(file, condition->left, arr, ram_base, param_count, asm_info);
-                    PrintExpr(file, condition->right, arr, ram_base, param_count, asm_info);
-
-                    int this_if = asm_info->label_if++;
-                    int this_else = asm_info->label_else++;
-
-                    FPRINTF("%s :else_%d", ChooseCompareMode(condition), this_else);
-
-                    if (stmt->right && stmt->right->type == kOperation &&
-                        stmt->right->value.operation == kOperationElse) {
-                        PrintStatement(file, stmt->right->left, arr, ram_base, param_count, asm_info);
-                        FPRINTF( "JMP :end_if_%d", this_if);
-                    } else {
-                        PrintStatement(file, stmt->right, arr, ram_base, param_count, asm_info);
-                        FPRINTF("JMP :end_if_%d", this_if);
-                    }
-
-                    FPRINTF(":else_%d", this_else);
-                    if (stmt->right && stmt->right->type == kOperation &&
-                        stmt->right->value.operation == kOperationElse) {
-                        PrintStatement(file, stmt->right->right, arr, ram_base, param_count, asm_info);
-                    }
-
-                    FPRINTF(":end_if_%d", this_if);
-                } break;
-
-                case kOperationWhile: {
-                    int start_label = asm_info->label_counter++;
-                    int end_label = asm_info->label_counter++;
-
-                    FPRINTF(":while_start_%d", start_label);
-
-                    PrintExpr(file, stmt->left->left, arr, ram_base, param_count, asm_info);
-                    PrintExpr(file, stmt->left->right, arr, ram_base, param_count, asm_info);
-
-                    FPRINTF("%s :while_end_%d", ChooseCompareMode(stmt->left), end_label);
-
-                    PrintStatement(file, stmt->right, arr, ram_base, param_count, asm_info);
-
-                    FPRINTF("JMP :while_start_%d", start_label);
-                    FPRINTF(":while_end_%d", end_label);
-                } break;
+                case kOperationWhile:
+                    PrintWhileToAsm(file, stmt, arr, ram_base, param_count, asm_info);
+                    break;
 
                 case (kOperationTernary): {
                     PrintStatement(file, stmt->left->right, arr, ram_base, param_count, asm_info);
                     PrintStatement(file, stmt->left->left, arr, ram_base, param_count, asm_info);
-                    
                 }  break;
 
                 case (kOperationArrDecl): { //
+                    arr->var_array[stmt->value.pos].pos_in_code = asm_info->counter;
                     for (size_t i = 0; i < stmt->left->left->right->value.number; i++) {
                         FPRINTF("PUSH 0");
-                        FPRINTF("POPM ");
-                    }
-                }
+                        FPRINTF("PUSHR RAX");
+                        FPRINTF("PUSH %d", (-1) * param_count + asm_info->counter + (int)i);
 
+                        FPRINTF("ADD");
+                        FPRINTF("POPR RCX");
+                        FPRINTF("POPM [RCX]\n");
+                    }
+                    asm_info->counter += (int)stmt->left->left->right->value.number;
+                }
 
                 default:
                     PrintExpr(file, stmt, arr, ram_base, param_count, asm_info);
@@ -353,6 +336,15 @@ static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_ba
                     FPRINTF("CALL :%s\n", arr->var_array[expr->left->value.pos].variable_name);
                     break;
 
+                case kOperationArrPos:
+                        FPRINTF("PUSH 0");
+                        FPRINTF("PUSHR RAX");
+                        FPRINTF("PUSH %d", (-1) * param_count + arr->var_array[expr->value.pos].pos_in_code + (int)expr->right->value.number);
+
+                        FPRINTF("ADD");
+                        FPRINTF("POPR RCX");
+                        FPRINTF("POPM [RCX]\n");
+
                 default:
                     break;
             }
@@ -383,4 +375,58 @@ static const char *ChooseCompareMode(LangNode_t *node) {
         default: return "NULL";
     }
     #pragma clang diagnostic pop
+}
+
+static void PrintIfToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info) {
+    assert(file);
+    assert(stmt);
+    assert(arr);
+    assert(asm_info);
+
+    LangNode_t *condition = stmt->left;
+
+    PrintExpr(file, condition->left, arr, ram_base, param_count, asm_info);
+    PrintExpr(file, condition->right, arr, ram_base, param_count, asm_info);
+
+    int this_if = asm_info->label_if++;
+    int this_else = asm_info->label_else++;
+
+    FPRINTF("%s :else_%d", ChooseCompareMode(condition), this_else);
+
+    if (IsThatOperation(stmt->right, kOperationElse)) {
+        PrintStatement(file, stmt->right->left, arr, ram_base, param_count, asm_info);
+        FPRINTF( "JMP :end_if_%d", this_if);
+    } else {
+        PrintStatement(file, stmt->right, arr, ram_base, param_count, asm_info);
+        FPRINTF("JMP :end_if_%d", this_if);
+    }
+
+    FPRINTF(":else_%d", this_else);
+    if (IsThatOperation(stmt->right, kOperationElse)) {
+        PrintStatement(file, stmt->right->right, arr, ram_base, param_count, asm_info);
+    }
+
+    FPRINTF(":end_if_%d", this_if);
+}
+
+static void PrintWhileToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info) {
+    assert(file);
+    assert(stmt);
+    assert(arr);
+    assert(asm_info);
+
+    int start_label = asm_info->label_counter++;
+    int end_label = asm_info->label_counter++;
+
+    FPRINTF(":while_start_%d", start_label);
+
+    PrintExpr(file, stmt->left->left, arr, ram_base, param_count, asm_info);
+    PrintExpr(file, stmt->left->right, arr, ram_base, param_count, asm_info);
+
+    FPRINTF("%s :while_end_%d", ChooseCompareMode(stmt->left), end_label);
+
+    PrintStatement(file, stmt->right, arr, ram_base, param_count, asm_info);
+
+    FPRINTF("JMP :while_start_%d", start_label);
+    FPRINTF(":while_end_%d", end_label);
 }
