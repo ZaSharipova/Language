@@ -241,7 +241,7 @@ static DifErrors ParseTitle(const char *buffer, size_t *pos, char **out_title) {
 
     size_t len = *pos - start;
 
-    char *title = (char *) calloc(len + 1, 1);
+    char *title = (char *) calloc (len + 1, 1);
     if (!title) return kNoMemory;
 
     memcpy(title, buffer + start, len);

@@ -142,10 +142,12 @@ static const LangTable NAME_TYPES_TABLE [] = {
 
     {"?",            "?",      kOperationTrueSeparator},
     {":",            ":",      kOperationFalseSeparator},
+    {"",             "ternary",kOperationTernary},
 
     {"[",            "[",      kOperationBracketOpen},
     {"]",            "]",      kOperationBracketClose},
 
+    {"",             "NULL",   kOperationArrPos},
     {"voco",         "declare array", kOperationArrDecl},
 
     {"",             "",       kOperationNone},

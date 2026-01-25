@@ -14,6 +14,7 @@
 static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr);
 static void GenThenChain(LangNode_t *node, FILE *out, VariableArr *arr, int indent);
 static void GenIf(LangNode_t *node, FILE *out, VariableArr *arr, int indent);
+static void GenTernary(LangNode_t *node, FILE *out, VariableArr *arr, int indent);
 static void GenWhile(LangNode_t *node, FILE *out, VariableArr *arr, int indent);
 static void GenFunctionDeclare(LangNode_t *node, FILE *out, VariableArr *arr, int indent);
 static void GenFunctionCall(LangNode_t *node, FILE *out, VariableArr *arr, int indent);
@@ -42,6 +43,10 @@ void GenerateCodeFromAST(LangNode_t *node, FILE *out, VariableArr *arr, int inde
 
             case kOperationIf:
                 GenIf(node, out, arr, indent);
+                return;
+
+            case kOperationTernary:
+                GenTernary(node, out, arr, indent);
                 return;
 
             case kOperationWhile:
@@ -159,6 +164,28 @@ static void GenIf(LangNode_t *node, FILE *out, VariableArr *arr, int indent) {
     }
 
     fprintf(out, "\n");
+}
+
+static void GenTernary(LangNode_t *node, FILE *out, VariableArr *arr, int indent) {
+    assert(node);
+    assert(out);
+    assert(arr);
+
+    PrintIndent(out, indent);
+    GenExpr(node->left->left, out, arr);
+    fprintf(out, " %s ", PrintCodeNameFromTable(kOperationIs));
+
+    LangNode_t *body = node->left->right;
+
+    GenExpr(body->left->right, out, arr);
+
+    fprintf(out, " %s ", PrintCodeNameFromTable(kOperationTrueSeparator));
+    GenExpr(body->right->left, out, arr);
+
+    fprintf(out, " %s ", PrintCodeNameFromTable(kOperationFalseSeparator));
+    GenExpr(body->right->right, out, arr);
+    fprintf(out, "%s\n", PrintCodeNameFromTable(kOperationThen));
+
 }
 
 static void GenWhile(LangNode_t *node, FILE *out, VariableArr *arr, int indent) {

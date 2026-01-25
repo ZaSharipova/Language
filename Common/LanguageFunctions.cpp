@@ -272,49 +272,5 @@ static const char *ConvertEnumToOperation(LangNode_t *node, VariableArr *arr) {
     assert(node);
     assert(arr);
 
-    switch (node->value.operation) {
-        case kOperationAdd:       return TreeNameFromTable(kOperationAdd);
-        case kOperationSub:       return TreeNameFromTable(kOperationSub);
-        case kOperationMul:       return TreeNameFromTable(kOperationMul);
-        case kOperationDiv:       return TreeNameFromTable(kOperationDiv);
-        case kOperationPow:       return TreeNameFromTable(kOperationPow);
-        case kOperationSin:       return TreeNameFromTable(kOperationSin);
-        case kOperationSQRT:      return TreeNameFromTable(kOperationSQRT);
-        case kOperationCos:       return TreeNameFromTable(kOperationCos);
-        case kOperationTg:        return TreeNameFromTable(kOperationTg);
-        case kOperationLn:        return TreeNameFromTable(kOperationLn);
-        case kOperationArctg:     return TreeNameFromTable(kOperationArctg);
-        case kOperationSinh:      return TreeNameFromTable(kOperationSinh);
-        case kOperationCosh:      return TreeNameFromTable(kOperationCosh);
-        case kOperationTgh:       return TreeNameFromTable(kOperationTgh);
-
-        case kOperationIs:        return TreeNameFromTable(kOperationIs);
-        case kOperationIf:        return TreeNameFromTable(kOperationIf);
-        case kOperationElse:      return TreeNameFromTable(kOperationElse);
-        case kOperationWhile:     return TreeNameFromTable(kOperationWhile);
-        case kOperationThen:      return TreeNameFromTable(kOperationThen);
-        case kOperationParOpen:   return TreeNameFromTable(kOperationParOpen);
-        case kOperationParClose:  return TreeNameFromTable(kOperationParClose);
-        case kOperationBraceOpen: return TreeNameFromTable(kOperationBraceOpen);
-        case kOperationBraceClose:return TreeNameFromTable(kOperationBraceClose);
-        case kOperationWrite:     return TreeNameFromTable(kOperationWrite);
-        case kOperationRead:      return TreeNameFromTable(kOperationRead);
-        case kOperationComma:     return TreeNameFromTable(kOperationComma);
-        case kOperationCall:      return TreeNameFromTable(kOperationCall);
-        case kOperationFunction:  return TreeNameFromTable(kOperationFunction);
-        case kOperationReturn:    return TreeNameFromTable(kOperationReturn);
-        case kOperationHLT:       return TreeNameFromTable(kOperationHLT);
-        case kOperationWriteChar: return TreeNameFromTable(kOperationWriteChar);
-
-        case kOperationB:         return TreeNameFromTable(kOperationB);
-        case kOperationBE:        return TreeNameFromTable(kOperationBE);
-        case kOperationA:         return TreeNameFromTable(kOperationA);
-        case kOperationAE:        return TreeNameFromTable(kOperationAE);
-        case kOperationE:         return TreeNameFromTable(kOperationE);
-        case kOperationNE:        return TreeNameFromTable(kOperationNE);
-
-        case kOperationNone:      return "NULL";
-    }
-
-    return NULL;
+    return NAME_TYPES_TABLE[node->value.operation].name_in_tree;
 }

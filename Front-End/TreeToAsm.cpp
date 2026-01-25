@@ -273,6 +273,13 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
                     
                 }  break;
 
+                case (kOperationArrDecl): { //
+                    for (size_t i = 0; i < stmt->left->left->right->value.number; i++) {
+                        FPRINTF("PUSH 0");
+                        FPRINTF("POPM ");
+                    }
+                }
+
 
                 default:
                     PrintExpr(file, stmt, arr, ram_base, param_count, asm_info);
