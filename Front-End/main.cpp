@@ -71,6 +71,9 @@ int main(int argc, char *argv[]) {
     }
 
     else if (strcmp(mode, "code-asm") == 0) {
+        Stack_Info tokens = {};
+        StackCtor(&tokens, 1, stderr);
+        lang_info.tokens = &tokens;
         CHECK_ERROR_RETURN(ReadInfix(&lang_info, &dump_info, filename_in), lang_info.arr, lang_info.root);
 
         FILE_OPEN_AND_CHECK(asm_file, filename_out, "w", lang_info.arr, lang_info.root);
@@ -81,17 +84,21 @@ int main(int argc, char *argv[]) {
         fclose(asm_file);
 
         TreeDtor(lang_info.root);
+        StackDtor(&tokens, stderr);
     }
 
     else if (strcmp(mode, "code-tree") == 0) {
-
+        Stack_Info tokens = {};
+        StackCtor(&tokens, 1, stderr);
+        lang_info.tokens = &tokens;
         CHECK_ERROR_RETURN(ReadInfix(&lang_info, &dump_info, filename_in), lang_info.arr, lang_info.root);
 
         FILE_OPEN_AND_CHECK(ast_file, filename_out, "w", lang_info.arr, lang_info.root);
         PrintAST(root.root, ast_file, &Variable_Array, 0); //
         fclose(ast_file);
-        
+
         TreeDtor(lang_info.root);
+        StackDtor(&tokens, stderr);
     }
 
     else {

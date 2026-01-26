@@ -84,12 +84,8 @@ DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filena
     DoBufRead(file, filename, &Info);
     fclose(file);
 
-    Stack_Info tokens = {};
-    StackCtor(&tokens, 1, stderr);
-
     const char *temp_buf_ptr = Info.buf_ptr;
-    CheckAndReturn(lang_info->root, &temp_buf_ptr, &tokens, lang_info->arr);
-    lang_info->tokens = &tokens;
+    CheckAndReturn(lang_info->root, &temp_buf_ptr, lang_info->tokens, lang_info->arr);
 
     size_t tokens_pos = 0;
     lang_info->tokens_pos = &tokens_pos;
@@ -1000,7 +996,7 @@ static LangNode_t *GetArrayAssignment(Language *lang_info, LangNode_t *func_name
     assert(func_name);
 
     size_t save_pos = *lang_info->tokens_pos;
-    LangRoot *root = lang_info->root;
+    //LangRoot *root = lang_info->root;
     
     LangNode_t *declare_node = GetStackElem(lang_info->tokens, *lang_info->tokens_pos);
     if (IsThatOperation(declare_node, kOperationArrDecl)) {

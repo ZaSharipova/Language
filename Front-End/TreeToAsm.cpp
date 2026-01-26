@@ -27,7 +27,7 @@ static const char *ChooseCompareMode(LangNode_t *node);
 static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, int *ram_base, AsmInfo *asm_info, int indent);
 static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
 static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int param_count, AsmInfo *asm_info, int indent);
-static int  FindVarPos(VariableArr *arr, LangNode_t *node, AsmInfo *asm_info, int indent);
+static int  FindVarPos(VariableArr *arr, LangNode_t *node, AsmInfo *asm_info);
 static void PushParamsToStack(FILE *file, LangNode_t *args_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
 static void PushParamsToRam(FILE *file, LangNode_t *args_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
 static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
@@ -135,7 +135,7 @@ static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int 
     }
 }
 
-static int FindVarPos(VariableArr *arr, LangNode_t *node, AsmInfo *asm_info, int indent) {
+static int FindVarPos(VariableArr *arr, LangNode_t *node, AsmInfo *asm_info) {
     assert(arr);
     assert(node);
     assert(asm_info);
@@ -307,7 +307,7 @@ static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_ba
         FPRINTF("PUSH %.0f", expr->value.number);
         break;
         case kVariable: {
-            int var_idx = FindVarPos(arr, expr, asm_info, indent);
+            int var_idx = FindVarPos(arr, expr, asm_info);
             FPRINTF("PUSHR RAX");
             FPRINTF("PUSH %d", (-1) * param_count + var_idx);
             FPRINTF("ADD");
