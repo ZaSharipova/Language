@@ -35,8 +35,9 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
 static void PrintIfToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
 static void PrintWhileToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
 
-static void PrintAddressOf(FILE *file, LangNode_t *var_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
+static void PrintAddressOf(FILE *file, LangNode_t *var_node, VariableArr *arr, int param_count, AsmInfo *asm_info, int indent);
 static void PrintDereference(FILE *file, LangNode_t *ptr_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
+static void PrintAddressAssignment(FILE *file, LangNode_t *deref_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
 
 void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base, AsmInfo *asm_info) {
     assert(file);
@@ -112,13 +113,15 @@ static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int 
     assert(asm_info);
 
     int var_idx = -1;
+    LangNode_t *check_node = node;
     for (size_t i = 0; i < arr->size; i++) {
-        if (arr->var_array[node->value.pos].variable_name && strcmp(arr->var_array[i].variable_name, arr->var_array[node->value.pos].variable_name) == 0) {
+        if (IsThatOperation(node, kOperationGetAddr)) check_node = node->left;
+        if (arr->var_array[check_node->value.pos].variable_name && strcmp(arr->var_array[i].variable_name, arr->var_array[check_node->value.pos].variable_name) == 0) {
             if (arr->var_array[i].pos_in_code == -1) {
                 var_idx = arr->var_array[i].pos_in_code = asm_info->counter++;
                 //FPRINTFf("AAAAA%d", arr->var_array[i].pos_in_code);
                 FPRINTF("PUSHR RAX");
-                FPRINTF("PUSH %d", (-1) * param_count + arr->var_array[node->value.pos].pos_in_code);
+                FPRINTF("PUSH %d", (-1) * param_count + arr->var_array[check_node->value.pos].pos_in_code);
                 FPRINTF("ADD");
                 FPRINTF("POPR RCX");
                 FPRINTF("POPM [RCX]\n");
@@ -213,7 +216,7 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
                     break;
 
                 case kOperationCallAddr:
-                    PrintAddressOf(file, stmt->left, arr, ram_base, param_count, asm_info, indent);
+                    PrintAddressOf(file, stmt->left, arr, param_count, asm_info, indent);
                     break;
 
                 case kOperationGetAddr:
@@ -227,6 +230,10 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
 
                 case kOperationIs:
                     PrintExpr(file, stmt->right, arr, ram_base, param_count, asm_info, indent);
+                    if (IsThatOperation(stmt->left, kOperationGetAddr)) {
+                        PrintAddressAssignment(file, stmt, arr, ram_base, param_count, asm_info, indent);
+                        break;
+                    }
                     PrintStatement(file, stmt->left, arr, ram_base, param_count, asm_info, indent);
                     break;
 
@@ -330,7 +337,7 @@ static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_ba
             #pragma clang diagnostic ignored "-Wswitch-enum"
             switch (expr->value.operation) {
                 case kOperationCallAddr:
-                    PrintAddressOf(file, expr->left, arr, ram_base, param_count, asm_info, indent);
+                    PrintAddressOf(file, expr->left, arr, param_count, asm_info, indent);
                     break;
 
                 case kOperationGetAddr:
@@ -462,7 +469,7 @@ static void PrintWhileToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int 
     FPRINTF_LABEL("\n:while_end_%d", end_label);
 }
 
-static void PrintAddressOf(FILE *file, LangNode_t *var_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent) {
+static void PrintAddressOf(FILE *file, LangNode_t *var_node, VariableArr *arr, int param_count, AsmInfo *asm_info, int indent) {
     assert(file);
     assert(var_node);
     assert(arr);
@@ -482,8 +489,20 @@ static void PrintDereference(FILE *file, LangNode_t *ptr_node, VariableArr *arr,
     assert(arr);
     assert(asm_info);
 
-    PrintAddressOf(file, ptr_node, arr, ram_base, param_count, asm_info, indent);
+    PrintAddressOf(file, ptr_node, arr, param_count, asm_info, indent);
 
-    FPRINTF("\nPOPR RCX");
+    FPRINTF("POPR RCX");
     FPRINTF("PUSHM [RCX]");
+}
+
+static void PrintAddressAssignment(FILE *file, LangNode_t *deref_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent) {
+    assert(file);
+    assert(deref_node);
+    assert(arr);
+    assert(asm_info);
+
+    PrintExpr(file, deref_node->left, arr, ram_base, param_count, asm_info, indent);
+    
+    FPRINTF("POPR RCX");
+    FPRINTF("POPM [RCX]\n");
 }

@@ -63,7 +63,7 @@ static LangNode_t *GetPrimary(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetPower(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetTernary(Language *lang_info, LangNode_t *func_name);
 
-static LangNode_t *GetVariableAddr(Language *lang_info, LangNode_t *func_name);
+static LangNode_t *GetVariableAddr(Language *lang_info, LangNode_t *func_name, ValCategory mode);
 static LangNode_t *GetNumber(Language *lang_info);
 static LangNode_t *GetString(Language *lang_info, LangNode_t *func_name, ValCategory val_cat);
 static LangNode_t *GetArrayElement(Language *lang_info, LangNode_t *func_name);
@@ -516,7 +516,7 @@ static LangNode_t *GetPrimary(Language *lang_info, LangNode_t *func_name) {
     TRY_PARSE_RETURN(value, GetFunctionCall(lang_info));
     TRY_PARSE_RETURN(value, GetUnaryFunc(lang_info, func_name));
     TRY_PARSE_RETURN(value, GetArrayElement(lang_info, func_name));
-    TRY_PARSE_RETURN(value, GetVariableAddr(lang_info, func_name));
+    TRY_PARSE_RETURN(value, GetVariableAddr(lang_info, func_name, krvalue));
     
     return GetString(lang_info, func_name, krvalue);
 }
@@ -771,7 +771,7 @@ LangNode_t *GetPower(Language *lang_info, LangNode_t *func_name) {
     return val;
 }
 
-static LangNode_t *GetVariableAddr(Language *lang_info, LangNode_t *func_name) {
+static LangNode_t *GetVariableAddr(Language *lang_info, LangNode_t *func_name, ValCategory mode) {
     assert(lang_info);
     assert(func_name);
 
@@ -780,7 +780,7 @@ static LangNode_t *GetVariableAddr(Language *lang_info, LangNode_t *func_name) {
 
     CHECK_EXPECTED_TOKEN(addr_node, IsThatOperation(addr_node, kOperationCallAddr) || IsThatOperation(addr_node, kOperationGetAddr), );
 
-    LangNode_t *value = GetString(lang_info, func_name, krvalue);
+    LangNode_t *value = GetString(lang_info, func_name, mode);
     if (!value) {
         fprintf(stderr, "SYNTAX_ERROR_ADDR: wrong/no variable after addr sign.\n");
         return NULL;
@@ -926,9 +926,17 @@ static LangNode_t *ParseFunctionArgs(Language *lang_info, size_t *cnt) {
             continue;
         }
         
-        if (token->type == kVariable || token->type == kNumber) {
-            LangNode_t *arg = token;
+        if (token->type == kVariable || token->type == kNumber || IsThatOperation(token, kOperationGetAddr)) {
+            size_t save_pos = *lang_info->tokens_pos;
             (*(lang_info->tokens_pos))++;
+            if (IsThatOperation(token, kOperationGetAddr)) {
+                LangNode_t *next_token = NULL;
+                CHECK_EXPECTED_TOKEN(next_token, next_token->type == kVariable, 
+                    fprintf(stderr, "SYNTAX_ERROR_ADDR: wrong or no continuation after addr.\n"));
+                token->left = next_token;
+            }
+
+            LangNode_t *arg = token;
             (*cnt)++;
             
             if (!args_root) {
@@ -996,10 +1004,14 @@ static LangNode_t *GetAssignmentLValue(Language *lang_info, LangNode_t *func_nam
 
     size_t save_pos = *lang_info->tokens_pos;
     
-    LangNode_t *maybe_var = GetString(lang_info, func_name, klvalue);
+    LangNode_t *maybe_var = GetVariableAddr(lang_info, func_name, klvalue);
     if (!maybe_var) {
         *lang_info->tokens_pos = save_pos;
-        return NULL;
+        maybe_var = GetString(lang_info, func_name, klvalue);
+        if (!maybe_var) {
+            *lang_info->tokens_pos = save_pos;
+            return NULL;
+        }
     }
            
     LangNode_t *assign_op = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
