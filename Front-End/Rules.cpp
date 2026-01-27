@@ -65,6 +65,7 @@ static LangNode_t *GetTernary(Language *lang_info, LangNode_t *func_name);
 
 static LangNode_t *GetNumber(Language *lang_info);
 static LangNode_t *GetString(Language *lang_info, LangNode_t *func_name, ValCategory val_cat);
+static LangNode_t *GetArrayElement(Language *lang_info, LangNode_t *func_name);
 
 static LangNode_t *ParseFunctionArgs(Language *lang_info, size_t *cnt);
 static LangNode_t *ParseFunctionBody(Language *lang_info, LangNode_t *func_name);
@@ -487,15 +488,15 @@ static LangNode_t *GetPrimary(Language *lang_info, LangNode_t *func_name) {
     if (!node) {
         return NULL;
     }
-
+    
     if (IsThatOperation(node, kOperationParOpen)) {
         (*lang_info->tokens_pos)++; 
-
+        
         LangNode_t *val = GetExpression(lang_info, func_name);
         if (!val) {
             return NULL;
         }
-
+        
         node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
         if (IsThatOperation(node, kOperationParClose)) {
             (*lang_info->tokens_pos)++; 
@@ -503,24 +504,17 @@ static LangNode_t *GetPrimary(Language *lang_info, LangNode_t *func_name) {
             fprintf(stderr, "SYNTAX_ERROR_P: expected ')'\n");
             return NULL;
         }
-
+        
         return val;
     }
     
-    LangNode_t *value_number = GetNumber(lang_info);
-    if (value_number) {
-        return value_number;
-    }
+    size_t save_pos = *lang_info->tokens_pos;
+    LangNode_t *value = NULL;
 
-    value_number = GetFunctionCall(lang_info);
-    if (value_number) {
-        return value_number;
-    }
-
-    value_number = GetUnaryFunc(lang_info, func_name);
-    if (value_number) {
-        return value_number;
-    }
+    TRY_PARSE_RETURN(value, GetNumber(lang_info));
+    TRY_PARSE_RETURN(value, GetFunctionCall(lang_info));
+    TRY_PARSE_RETURN(value, GetUnaryFunc(lang_info, func_name));
+    TRY_PARSE_RETURN(value, GetArrayElement(lang_info, func_name));
 
     return GetString(lang_info, func_name, krvalue);
 }
@@ -1009,7 +1003,6 @@ static LangNode_t *GetArrayAssignment(Language *lang_info, LangNode_t *func_name
     assert(func_name);
 
     size_t save_pos = *lang_info->tokens_pos;
-    //LangRoot *root = lang_info->root;
     
     LangNode_t *declare_node = GetStackElem(lang_info->tokens, *lang_info->tokens_pos);
     if (IsThatOperation(declare_node, kOperationArrDecl)) {
@@ -1018,7 +1011,6 @@ static LangNode_t *GetArrayAssignment(Language *lang_info, LangNode_t *func_name
 
     LangNode_t *maybe_var = GetString(lang_info, func_name, klvalue);
     if (!maybe_var) {
-        //fprintf(stderr, "%d\n", *lang_info->tokens_pos);
         *lang_info->tokens_pos = save_pos;
         return NULL;
     }
@@ -1061,13 +1053,45 @@ static LangNode_t *GetArrayAssignment(Language *lang_info, LangNode_t *func_name
     rvalue_node->parent = is_node;
 
     if (lang_info->arr->var_array[maybe_var->value.pos].variable_value == POISON 
-        || lang_info->arr->var_array[maybe_var->value.pos].variable_value < number->value.number) {
+        || lang_info->arr->var_array[maybe_var->value.pos].variable_value <= number->value.number) {
             fprintf(stderr, "SYNTAX_ERROR_ARRAY: usage of undeclared array or index out of range.\n");
-            return NULL;
+        return NULL;
     }
 
     return is_node;
 
+}
+
+static LangNode_t *GetArrayElement(Language *lang_info, LangNode_t *func_name) { // TODO
+    assert(lang_info);
+    assert(func_name);
+
+    size_t save_pos = *lang_info->tokens_pos;
+
+    LangNode_t *maybe_var = GetString(lang_info, func_name, krvalue);
+    if (!maybe_var) {
+        *lang_info->tokens_pos = save_pos;
+        return NULL;
+    }
+
+    LangNode_t *bracket_node = NULL;
+    CHECK_EXPECTED_TOKEN(bracket_node, IsThatOperation(bracket_node, kOperationBracketOpen), );
+
+    LangNode_t *number = GetNumber(lang_info);
+    if (!number) {
+        fprintf(stderr, "SYNTAX_ERROR_ARRAY: no position or size of array.\n");
+        return NULL;
+    }
+
+    if (lang_info->arr->var_array[maybe_var->value.pos].variable_value <= number->value.number) {
+        fprintf(stderr, "SYNTAX_ERROR_ARRAY: usage of undeclared array or index out of range.\n");
+        return NULL;
+    }
+
+    CHECK_EXPECTED_TOKEN(bracket_node, IsThatOperation(bracket_node, kOperationBracketClose), 
+        fprintf(stderr, "SYNTAX_ERROR_ARRAY: no closing bracket.\n"););
+    
+    return NEWOP(kOperationArrPos, maybe_var, number);
 }
 
 #undef NEWN
@@ -1078,7 +1102,6 @@ static bool CheckAndSetFunctionArgsNumber(Language *lang_info, LangNode_t *name_
     assert(name_token);
 
     VariableInfo *variable = &lang_info->arr->var_array[name_token->value.pos];
-    //fprintf(stderr, "%s %d\n", variable->variable_name, variable->variable_value);
     
     if (variable->params_number != (int)cnt) {
         if (variable->params_number == POISON) {
