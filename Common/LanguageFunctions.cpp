@@ -272,5 +272,10 @@ static const char *ConvertEnumToOperation(LangNode_t *node, VariableArr *arr) {
     assert(node);
     assert(arr);
 
-    return NAME_TYPES_TABLE[node->value.operation].name_in_tree;
+    if ((size_t)node->value.operation < OP_TABLE_SIZE) {
+        return NAME_TYPES_TABLE[node->value.operation].name_in_tree;
+    }
+
+    fprintf(stderr, "Error while trying to convert enum to operation, because the number of operation is more than nametable size.\n");
+    return NULL;
 }

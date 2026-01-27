@@ -273,7 +273,10 @@ static GraphOperation PrintExpressionType(const LangNode_t *node) {
             return {"arr declare", "lightgoldenrod3"};
         case (kOperationArrPos):
             return {"arr info", "lightsteelblue"};
-
+        case (kOperationCallAddr):
+            return {"call addr", "mediumseagreen"};
+        case (kOperationGetAddr):
+            return {"get addr", "x11maroon"};
 
         case (kOperationTrueSeparator):
         case (kOperationFalseSeparator):

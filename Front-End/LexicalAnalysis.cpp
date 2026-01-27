@@ -78,6 +78,8 @@ size_t CheckAndReturn(LangRoot *root, const char **string, Stack_Info *tokens, V
         CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationDiv), kOperationDiv);
         CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationSub), kOperationSub);
         CHECK_SYMBOL_AND_PUSH('^', kOperationPow);
+        CHECK_SYMBOL_AND_PUSH('&', kOperationCallAddr);
+        CHECK_SYMBOL_AND_PUSH('$', kOperationGetAddr);
         CHECK_SYMBOL_AND_PUSH('?', kOperationTrueSeparator);
         CHECK_SYMBOL_AND_PUSH(':', kOperationFalseSeparator);
         CHECK_SYMBOL_AND_PUSH('[', kOperationBracketOpen);

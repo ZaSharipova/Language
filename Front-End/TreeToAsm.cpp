@@ -35,6 +35,9 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
 static void PrintIfToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
 static void PrintWhileToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
 
+static void PrintAddressOf(FILE *file, LangNode_t *var_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
+static void PrintDereference(FILE *file, LangNode_t *ptr_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
+
 void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base, AsmInfo *asm_info) {
     assert(file);
     assert(arr);
@@ -209,10 +212,17 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
                     FPRINTF("HLT\n");
                     break;
 
+                case kOperationCallAddr:
+                    PrintAddressOf(file, stmt->left, arr, ram_base, param_count, asm_info, indent);
+                    break;
+
+                case kOperationGetAddr:
+                    PrintDereference(file, stmt->left, arr, ram_base, param_count, asm_info, indent);
+                    break;
+
                 case kOperationCall:
                     PushParamsToStack(file, stmt->right, arr, ram_base, param_count, asm_info, indent);
                     FPRINTF("CALL :%s\n", arr->var_array[stmt->left->value.pos].variable_name);
-                    
                     break;
 
                 case kOperationIs:
@@ -319,6 +329,14 @@ static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_ba
             #pragma clang diagnostic push
             #pragma clang diagnostic ignored "-Wswitch-enum"
             switch (expr->value.operation) {
+                case kOperationCallAddr:
+                    PrintAddressOf(file, expr->left, arr, ram_base, param_count, asm_info, indent);
+                    break;
+
+                case kOperationGetAddr:
+                    PrintDereference(file, expr->left, arr, ram_base, param_count, asm_info, indent);
+                    break;
+
                 case kOperationSQRT:
                     PrintExpr(file, expr->left, arr, ram_base, param_count, asm_info, indent);
                     FPRINTF( "SQRT\n");
@@ -442,4 +460,30 @@ static void PrintWhileToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int 
 
     FPRINTF("JMP :while_start_%d", start_label);
     FPRINTF_LABEL("\n:while_end_%d", end_label);
+}
+
+static void PrintAddressOf(FILE *file, LangNode_t *var_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent) {
+    assert(file);
+    assert(var_node);
+    assert(arr);
+    assert(asm_info);
+
+    assert(var_node->type == kVariable);
+    
+    int var_idx = FindVarPos(arr, var_node, asm_info);
+    FPRINTF("PUSHR RAX");
+    FPRINTF("PUSH %d", (-1) * param_count + var_idx);
+    FPRINTF("ADD");
+}
+
+static void PrintDereference(FILE *file, LangNode_t *ptr_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent) {
+    assert(file);
+    assert(ptr_node);
+    assert(arr);
+    assert(asm_info);
+
+    PrintAddressOf(file, ptr_node, arr, ram_base, param_count, asm_info, indent);
+
+    FPRINTF("\nPOPR RCX");
+    FPRINTF("PUSHM [RCX]");
 }

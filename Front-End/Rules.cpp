@@ -63,6 +63,7 @@ static LangNode_t *GetPrimary(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetPower(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetTernary(Language *lang_info, LangNode_t *func_name);
 
+static LangNode_t *GetVariableAddr(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetNumber(Language *lang_info);
 static LangNode_t *GetString(Language *lang_info, LangNode_t *func_name, ValCategory val_cat);
 static LangNode_t *GetArrayElement(Language *lang_info, LangNode_t *func_name);
@@ -515,7 +516,8 @@ static LangNode_t *GetPrimary(Language *lang_info, LangNode_t *func_name) {
     TRY_PARSE_RETURN(value, GetFunctionCall(lang_info));
     TRY_PARSE_RETURN(value, GetUnaryFunc(lang_info, func_name));
     TRY_PARSE_RETURN(value, GetArrayElement(lang_info, func_name));
-
+    TRY_PARSE_RETURN(value, GetVariableAddr(lang_info, func_name));
+    
     return GetString(lang_info, func_name, krvalue);
 }
 
@@ -767,6 +769,27 @@ LangNode_t *GetPower(Language *lang_info, LangNode_t *func_name) {
     }
 
     return val;
+}
+
+static LangNode_t *GetVariableAddr(Language *lang_info, LangNode_t *func_name) {
+    assert(lang_info);
+    assert(func_name);
+
+    size_t save_pos = *lang_info->tokens_pos;
+    LangNode_t *addr_node = NULL;
+
+    CHECK_EXPECTED_TOKEN(addr_node, IsThatOperation(addr_node, kOperationCallAddr) || IsThatOperation(addr_node, kOperationGetAddr), );
+
+    LangNode_t *value = GetString(lang_info, func_name, krvalue);
+    if (!value) {
+        fprintf(stderr, "SYNTAX_ERROR_ADDR: wrong/no variable after addr sign.\n");
+        return NULL;
+    }
+    
+    addr_node->left = value;
+    value->parent = addr_node;
+
+    return addr_node;
 }
 
 static LangNode_t *GetNumber(Language *lang_info) {
