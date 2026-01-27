@@ -67,6 +67,15 @@ reverse-build:
 reverse-run *ARGS:
     {{bin_dir}}/reverse {{ARGS}}
 
+[group("TrickEnd")]
+trick-build:
+    @mkdir -p {{bin_dir}}
+    @{{cxx}} {{base_cxxflags}} {{sanitizers_flag}} Trick-End/*.cpp Common/*.cpp Front-End/Rules.cpp Front-End/LexicalAnalysis.cpp -o {{bin_dir}}/trick -lm
+
+[group("TrickEnd")]
+trick-run *ARGS:
+    {{bin_dir}}/trick {{ARGS}}
+
 [group("All")]
 all-build:
     just front-build
@@ -103,3 +112,12 @@ set-debug:
 set-release:
     @echo "Export MODE=release"
     export MODE=release
+
+lint_cmd := "just-lint"
+include_dir := "include"
+sources :=  "**/*.cpp"
+headers := "**/*.h"
+
+# Проверка всего кода
+lint:
+    {{lint_cmd}} Front-End/*.cpp Common/*.cpp {{include_dir}}

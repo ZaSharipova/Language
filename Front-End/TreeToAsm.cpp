@@ -115,7 +115,7 @@ static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int 
     int var_idx = -1;
     LangNode_t *check_node = node;
     for (size_t i = 0; i < arr->size; i++) {
-        if (IsThatOperation(node, kOperationGetAddr)) check_node = node->left;
+        if (IsThatOperation(node, kOperationGetAddr) || IsThatOperation(node, kOperationCallAddr)) check_node = node->left;
         if (arr->var_array[check_node->value.pos].variable_name && strcmp(arr->var_array[i].variable_name, arr->var_array[check_node->value.pos].variable_name) == 0) {
             if (arr->var_array[i].pos_in_code == -1) {
                 var_idx = arr->var_array[i].pos_in_code = asm_info->counter++;
