@@ -69,9 +69,10 @@ static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, i
 
     LangNode_t *args = func_node->right->left;
 
-    //if (strcmp(MAIN, arr->var_array[func_node->left->value.pos].variable_name) != 0) {
-        FPRINTF_LABEL("\n:%s", arr->var_array[func_node->left->value.pos].variable_name);
-    //}
+    if (strcmp(MAIN, arr->var_array[func_node->left->value.pos].variable_name) != 0) {
+        //FPRINTF_LABEL("\n");
+    }
+    FPRINTF_LABEL(":%s", arr->var_array[func_node->left->value.pos].variable_name);
     param_count = arr->var_array[func_node->left->value.pos].variable_value;
 
     FPRINTF("PUSHR RAX");
@@ -367,8 +368,9 @@ static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_ba
 static void CleanPositions(VariableArr *arr) {
     assert(arr);
 
-    for (size_t i = 0; i < arr->size; i++)
+    for (size_t i = 0; i < arr->size; i++) {
         arr->var_array[i].pos_in_code = -1;
+    }
 }
 
 static const char *ChooseCompareMode(LangNode_t *node) {
@@ -429,7 +431,7 @@ static void PrintWhileToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int 
     int start_label = asm_info->label_counter++;
     int end_label = asm_info->label_counter++;
 
-    FPRINTF_LABEL(":while_start_%d", start_label);
+    FPRINTF_LABEL("\n:while_start_%d", start_label);
 
     PrintExpr(file, stmt->left->left, arr, ram_base, param_count, asm_info, indent);
     PrintExpr(file, stmt->left->right, arr, ram_base, param_count, asm_info, indent);
@@ -439,5 +441,5 @@ static void PrintWhileToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int 
     PrintStatement(file, stmt->right, arr, ram_base, param_count, asm_info, indent + 1);
 
     FPRINTF("JMP :while_start_%d", start_label);
-    FPRINTF_LABEL(":while_end_%d", end_label);
+    FPRINTF_LABEL("\n:while_end_%d", end_label);
 }

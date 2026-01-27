@@ -268,7 +268,7 @@ static GraphOperation PrintExpressionType(const LangNode_t *node) {
         case (kOperationTernary):
             return {"ternary", "hotpink2"};
         case (kOperationHLT):
-            return {"HLT", "lightpink"};
+            return {"HLT", "lightsalmon3"};
         case (kOperationArrDecl):
             return {"arr declare", "lightgoldenrod3"};
         case (kOperationArrPos):

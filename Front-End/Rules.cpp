@@ -96,7 +96,6 @@ DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filena
     }
     
     DoTreeInGraphviz(lang_info->root->root, dump_info, lang_info->arr);
-    //StackDtor(&tokens, stderr); // TODO
 
     return kSuccess;
 }
@@ -124,7 +123,11 @@ static LangNode_t *GetGoal(Language *lang_info) {
     do {
         LangNode_t *next = GetFunctionDeclare(lang_info);
         if (!next) break;
-        else if (first && !first->right) {
+        else if (!first) {
+            first = next;
+        } else if (first && !first->left) {
+            first->left = next;
+        } else if (first && !first->right) {
             first->right = next;
         } else {
             first = NEWOP(kOperationThen, first, next);
@@ -213,7 +216,8 @@ LangNode_t *GetStatement(Language *lang_info, LangNode_t *func_name) {
         if (IsThatOperation(tok, kOperationThen)) {
             (*lang_info->tokens_pos)++;
 
-            return NEWOP(kOperationThen, func_call, NULL);
+            return func_call;
+            //return NEWOP(kOperationThen, func_call, NULL);
         } else {
 
             fprintf(stderr, "SYNTAX_ERROR: expected ';' after function call\n");
@@ -584,7 +588,8 @@ LangNode_t *GetAssignment(Language *lang_info, LangNode_t *func_name) {
         lang_info->arr->var_array[assign_op->left->value.pos].variable_value = (int)value->value.number; //
     }
     
-    return NEWOP(kOperationThen, assign_op, NULL);
+    //return NEWOP(kOperationThen, assign_op, NULL);
+    return assign_op;
 }
 
 static LangNode_t *GetIf(Language *lang_info, LangNode_t *func_name) {
@@ -942,7 +947,15 @@ static LangNode_t *ParseFunctionBody(Language *lang_info, LangNode_t *func_name)
         if (!stmt) {
             break;
         }
-        body_root = !body_root ? stmt : NEWOP(kOperationThen, body_root, stmt);
+        if (!body_root) {
+            body_root = stmt;
+        } else if (!body_root->right) {
+            body_root->right = stmt;
+        } else {
+            //fprintf(stderr, "%p\n", stmt);
+            body_root = NEWOP(kOperationThen, body_root, stmt);
+        }
+        //body_root = !body_root ? stmt : NEWOP(kOperationThen, body_root, stmt);
     }
     
     return body_root;
