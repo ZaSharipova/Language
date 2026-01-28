@@ -9,6 +9,8 @@
 #include "Common/ReadTree.h"
 #include "Common/CommonFunctions.h"
 
+#include <stdlib.h>
+
 int main(int argc, char *argv[]) {
     if (argc < 3) {
         fprintf(stderr, "less args than 3.\n");
@@ -44,6 +46,7 @@ int main(int argc, char *argv[]) {
     //     fprintf(stderr, "%s %d\n\n", variable_array.var_array[i].variable_name, variable_array.var_array[i].variable_value);
     // }
 
+    free(info.buf_ptr);
     root.root = tree;
     dump_info.tree = &root;
 

@@ -64,8 +64,6 @@ DifErrors DeleteNode(LangRoot *root, LangNode_t *node) {
     }
 
     //node->parent = NULL;
-
-    printf("%p\n", node);
     free(node);
     node = NULL;
 

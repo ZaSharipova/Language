@@ -8,6 +8,8 @@
 #include "Common/ReadTree.h"
 #include "Common/CommonFunctions.h"
 
+#include <stdlib.h>
+
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <tree_file>\n", argv[0]);
@@ -37,11 +39,13 @@ int main(int argc, char *argv[]) {
     size_t pos = 0;
     CHECK_ERROR_RETURN(ParseNodeFromString(info.buf_ptr, &pos, NULL, &root_node, &Variable_Array), &Variable_Array, &root);
     root.root = root_node;
+    free(info.buf_ptr);
     
     dump_info.tree = &root;
     DoTreeInGraphviz(root.root, &dump_info, &Variable_Array);
 
-    root.root = OptimiseTree(&root, root.root, &Variable_Array);
+    Language lang_info = {&root, NULL, NULL, &Variable_Array};
+    root.root = OptimiseTree(&lang_info, root.root, &Variable_Array);
     
     FILE_OPEN_AND_CHECK(ast_file_write, tree_file, "w", &Variable_Array, &root);
     PrintAST(root.root, ast_file_write, &Variable_Array, 0);

@@ -287,6 +287,12 @@ static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr) {
             return;
         }
 
+        case kOperationSQRT:
+            fprintf(out, "%s(", PrintCodeNameFromTable(node->value.operation));
+            GenExpr(node->left, out, arr);
+            fprintf(out, ")");
+            return;
+
         case kOperationB:
         case kOperationBE:
         case kOperationA:

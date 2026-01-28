@@ -43,7 +43,6 @@ int main(int argc, char *argv[]) {
     
     DtorVariableArray(&Variable_Array);
     StackDtor(&tokens, stderr);
-    TreeDtor(&root);
 
     return 0;
 }

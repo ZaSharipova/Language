@@ -10,10 +10,10 @@
 #include "Common/DoGraph.h"
 
 static LangNode_t *AddOptimise(LangRoot *root, LangNode_t *node, bool *has_change);
-static LangNode_t *SubOptimise(LangRoot *root, LangNode_t *node, bool *has_change);
-static LangNode_t *MulOptimise(LangRoot *root, LangNode_t *node, bool *has_change);
-static LangNode_t *DivOptimise(LangRoot *root, LangNode_t *node, bool *has_change);
-static LangNode_t *PowOptimise(LangRoot *root, LangNode_t *node, bool *has_change);
+static LangNode_t *SubOptimise(Language *lang_info, LangNode_t *node, bool *has_change);
+static LangNode_t *MulOptimise(Language *lang_info, LangNode_t *node, bool *has_change);
+static LangNode_t *DivOptimise(Language *lang_info, LangNode_t *node, bool *has_change);
+static LangNode_t *PowOptimise(Language *lang_info, LangNode_t *node, bool *has_change);
 
 static LangNode_t *CheckNodeAndConstOptimise(LangRoot *root, LangNode_t *node, bool *has_change, VariableArr *arr);
 static LangNode_t *GetSubTree(LangRoot *root, LangNode_t *node, LangNode_t *delete_node, LangNode_t *to_main);
@@ -24,8 +24,8 @@ static bool IsOperation(LangNode_t *node);
 
 static double EvaluateExpression(LangNode_t *node, VariableArr *arr);
 
-LangNode_t *OptimiseTree(LangRoot *root, LangNode_t *node, VariableArr *arr) {
-    assert(root);
+LangNode_t *OptimiseTree(Language *lang_info, LangNode_t *node, VariableArr *arr) {
+    assert(lang_info);
     assert(node);
     assert(arr);
 
@@ -33,11 +33,11 @@ LangNode_t *OptimiseTree(LangRoot *root, LangNode_t *node, VariableArr *arr) {
 
     while (has_change) {
         has_change = false;
-        node = ConstOptimise(root, node, &has_change, arr); 
+        node = ConstOptimise(lang_info->root, node, &has_change, arr); 
         if (has_change) {
             node->parent = NULL;
         }
-        node = EraseNeutralElements(root, node, &has_change);
+        node = EraseNeutralElements(lang_info, node, &has_change);
         if (has_change) {
             node->parent = NULL;
         }
@@ -72,17 +72,17 @@ LangNode_t *ConstOptimise(LangRoot *root, LangNode_t *node, bool *has_change, Va
     return node;
 }
 
-LangNode_t *EraseNeutralElements(LangRoot *root, LangNode_t *node, bool *has_change) {
-    assert(root);
+LangNode_t *EraseNeutralElements(Language *lang_info, LangNode_t *node, bool *has_change) {
+    assert(lang_info);
     assert(node);
     assert(has_change);
 
     if (node->left) {
-        node->left = EraseNeutralElements(root, node->left, has_change);
+        node->left = EraseNeutralElements(lang_info, node->left, has_change);
     }
 
     if (node->right) {
-        node->right = EraseNeutralElements(root, node->right, has_change);
+        node->right = EraseNeutralElements(lang_info, node->right, has_change);
     }
 
     if ((!node->left || !node->right) || !IsOperation(node)) {
@@ -92,26 +92,26 @@ LangNode_t *EraseNeutralElements(LangRoot *root, LangNode_t *node, bool *has_cha
     OperationTypes operation = node->value.operation;
 
     if (operation == kOperationAdd) {
-        return AddOptimise(root, node, has_change);
+        return AddOptimise(lang_info->root, node, has_change);
     }
     if (operation == kOperationSub) {
-        return SubOptimise(root, node, has_change);
+        return SubOptimise(lang_info, node, has_change);
     } 
     if (operation == kOperationMul) {
-        return MulOptimise(root, node, has_change);
+        return MulOptimise(lang_info, node, has_change);
     }
     if (operation == kOperationDiv) {
-        return DivOptimise(root, node, has_change);
+        return DivOptimise(lang_info, node, has_change);
     }
     if (operation == kOperationPow) {
-        return PowOptimise(root, node, has_change);
+        return PowOptimise(lang_info, node, has_change);
     }
 
     return node;
 }
 
-#define NEWN(num) NewNode(root, kNumber, (Value){ .number = (num)}, NULL, NULL)
-#define MUL_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationMul}, left, right)
+#define NEWN(num) NewNode(lang_info, kNumber, (Value){ .number = (num)}, NULL, NULL)
+#define MUL_(left, right) NewNode(lang_info, kOperation, (Value){ .operation = kOperationMul}, left, right)
 
 static LangNode_t *AddOptimise(LangRoot *root, LangNode_t *node, bool *has_change) {
     assert(root);
@@ -131,19 +131,19 @@ static LangNode_t *AddOptimise(LangRoot *root, LangNode_t *node, bool *has_chang
     return node;
 }
 
-static LangNode_t *SubOptimise(LangRoot *root, LangNode_t *node, bool *has_change) {
-    assert(root);
+static LangNode_t *SubOptimise(Language *lang_info, LangNode_t *node, bool *has_change) {
+    assert(lang_info);
     assert(node);
     assert(has_change);
 
     if (IsThisNumber(node->right, 0)) {
         *has_change = true;
-        return GetSubTree(root, node, node->right, node->left);
+        return GetSubTree(lang_info->root, node, node->right, node->left);
     }
 
     if (IsThisNumber(node->left, 0)) {
         *has_change = true;
-        LangNode_t *right = GetSubTree(root, node, node->left, node->right);
+        LangNode_t *right = GetSubTree(lang_info->root, node, node->left, node->right);
 
         // LangNode_t *negative_node = NEWN(-1.0);
         // LangNode_t *mul_node = MUL_(negative_node, right);
@@ -156,23 +156,23 @@ static LangNode_t *SubOptimise(LangRoot *root, LangNode_t *node, bool *has_chang
     return node;
 }
 
-static LangNode_t *MulOptimise(LangRoot *root, LangNode_t *node, bool *has_change) {
-    assert(root);
+static LangNode_t *MulOptimise(Language *lang_info, LangNode_t *node, bool *has_change) {
+    assert(lang_info);
     assert(node);
     assert(has_change);
 
     if (IsThisNumber(node->left, 1)) {
         *has_change = true;
-        return GetSubTree(root, node, node->left, node->right);
+        return GetSubTree(lang_info->root, node, node->left, node->right);
     }
 
     if (IsThisNumber(node->right, 1)) {
         *has_change = true;
-        return GetSubTree(root, node, node->right, node->left);
+        return GetSubTree(lang_info->root, node, node->right, node->left);
     }
 
     if (IsThisNumber(node->left, 0) || IsThisNumber(node->right, 0)) {
-        DeleteNode(root, node);
+        DeleteNode(lang_info->root, node);
         *has_change = true;
 
         return NEWN(0.0);
@@ -181,18 +181,18 @@ static LangNode_t *MulOptimise(LangRoot *root, LangNode_t *node, bool *has_chang
     return node;
 }
 
-static LangNode_t *DivOptimise(LangRoot *root, LangNode_t *node, bool *has_change) {
-    assert(root);
+static LangNode_t *DivOptimise(Language *lang_info, LangNode_t *node, bool *has_change) {
+    assert(lang_info);
     assert(node);
     assert(has_change);
 
     if (IsThisNumber(node->right, 1)) {
         *has_change = true;
-        return GetSubTree(root, node, node->right, node->left);
+        return GetSubTree(lang_info->root, node, node->right, node->left);
     }
 
     if (IsThisNumber(node->left, 0)) {
-        DeleteNode(root, node);
+        DeleteNode(lang_info->root, node);
         *has_change = true;
 
         return NEWN(0.0);
@@ -201,20 +201,20 @@ static LangNode_t *DivOptimise(LangRoot *root, LangNode_t *node, bool *has_chang
     return node;
 }
 
-static LangNode_t *PowOptimise(LangRoot *root, LangNode_t *node, bool *has_change) {
-    assert(root);
+static LangNode_t *PowOptimise(Language *lang_info, LangNode_t *node, bool *has_change) {
+    assert(lang_info);
     assert(node);
     assert(has_change);
 
     if (IsThisNumber(node->left, 0)) {
-        DeleteNode(root, node);
+        DeleteNode(lang_info->root, node);
 
         *has_change = true;
         return NEWN(0.0);
     }
 
     if (IsThisNumber(node->right, 0)) {
-        DeleteNode(root, node);
+        DeleteNode(lang_info->root, node);
 
         *has_change = true;
         return NEWN(1);
@@ -223,7 +223,7 @@ static LangNode_t *PowOptimise(LangRoot *root, LangNode_t *node, bool *has_chang
     if (IsThisNumber(node->right, 1)) {
         *has_change = true;
         
-        return GetSubTree(root, node, node->right, node->left);
+        return GetSubTree(lang_info->root, node, node->right, node->left);
     }
 
     return node;

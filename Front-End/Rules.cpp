@@ -854,7 +854,6 @@ static LangNode_t *GetTernary(Language *lang_info, LangNode_t *func_name) {
     assert(func_name);
     
     size_t save_pos = *lang_info->tokens_pos;
-    LangRoot *root = lang_info->root;
     VariableArr *Variable_Array = lang_info->arr;
     
     LangNode_t *assign_op = GetAssignmentLValue(lang_info, func_name);
