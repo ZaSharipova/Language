@@ -87,11 +87,12 @@ DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filena
     fclose(file);
 
     const char *temp_buf_ptr = Info.buf_ptr;
-    CheckAndReturn(lang_info->root, &temp_buf_ptr, lang_info->tokens, lang_info->arr);
+    CheckAndReturn(lang_info, &temp_buf_ptr, lang_info->tokens, lang_info->arr);
+    free(Info.buf_ptr);
 
     size_t tokens_pos = 0;
     lang_info->tokens_pos = &tokens_pos;
-    
+
     lang_info->root->root = GetGoal(lang_info);
     if (!lang_info->root->root) {
         return kFailure;
@@ -102,8 +103,8 @@ DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filena
     return kSuccess;
 }
 
-#define NEWN(num) NewNode(root, kNumber, ((Value){ .number = (num)}), NULL, NULL)
-#define NEWOP(op, left, right) NewNode(lang_info->root, kOperation, (Value){ .operation = (op) }, left, right) 
+#define NEWN(num) NewNode(lang_info, kNumber, ((Value){ .number = (num)}), NULL, NULL)
+#define NEWOP(op, left, right) NewNode(lang_info, kOperation, (Value){ .operation = (op) }, left, right) 
 
 /* G :: = FUNCTION_D+
    OP :: = WHILE | IF | ASSIGNMENT+; | FUNCTION_C
@@ -284,8 +285,8 @@ LangNode_t *GetOp(Language *lang_info, LangNode_t *func_name) {
     return seq;
 }
 
-#define NEWN(num) NewNode(root, kNumber, ((Value){ .number = (num)}), NULL, NULL)
-#define NEWV(name) NewVariable(root, name, Variable_Array)
+#define NEWN(num) NewNode(lang_info, kNumber, ((Value){ .number = (num)}), NULL, NULL)
+#define NEWV(name) NewVariable(lang_info, name, Variable_Array)
 #define ADD_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationAdd}, left, right)
 #define SUB_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationSub}, left, right)
 #define MUL_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationMul}, left, right)
@@ -1023,6 +1024,9 @@ static LangNode_t *GetAssignmentLValue(Language *lang_info, LangNode_t *func_nam
 
     if (!lang_info->arr->var_array[maybe_var->value.pos].func_made 
             || strcmp(lang_info->arr->var_array[maybe_var->value.pos].func_made, lang_info->arr->var_array[func_name->value.pos].variable_name) != 0) {
+        if (lang_info->arr->var_array[maybe_var->value.pos].func_made) {
+            free(lang_info->arr->var_array[maybe_var->value.pos].func_made);
+        }
         lang_info->arr->var_array[maybe_var->value.pos].func_made = strdup(lang_info->arr->var_array[func_name->value.pos].variable_name);
         lang_info->arr->var_array[func_name->value.pos].variable_value ++;
     }

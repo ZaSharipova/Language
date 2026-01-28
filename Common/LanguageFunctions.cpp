@@ -3,9 +3,11 @@
 #include "Common/Enums.h"
 #include "Common/Structs.h"
 #include "Front-End/Rules.h"
+#include "Common/StackFunctions.h"
 
 #include <stdio.h>
 #include <assert.h>
+#include <cstdlib>
 #include <string.h>
 #include <ctype.h>
 
@@ -61,9 +63,11 @@ DifErrors DeleteNode(LangRoot *root, LangNode_t *node) {
         DeleteNode(root, node->right);
     }
 
-    node->parent = NULL;
+    //node->parent = NULL;
 
+    printf("%p\n", node);
     free(node);
+    node = NULL;
 
     return kSuccess;
 }
@@ -153,13 +157,13 @@ DifErrors DtorVariableArray(VariableArr *arr) {
     return kSuccess;
 }
 
-LangNode_t *NewNode(LangRoot *root, DifTypes type, Value value, LangNode_t *left, LangNode_t *right) {
-    assert(root);
+LangNode_t *NewNode(Language *lang_info, DifTypes type, Value value, LangNode_t *left, LangNode_t *right) {
+    assert(lang_info);
 
     LangNode_t *new_node = NULL;
     NodeCtor(&new_node, NULL);
 
-    root->size++;
+    lang_info->root->size++;
     new_node->type = type;
 
     switch (type) {
@@ -182,18 +186,22 @@ LangNode_t *NewNode(LangRoot *root, DifTypes type, Value value, LangNode_t *left
         break;
     }
 
+    if (StackPush(lang_info->tokens, new_node, stderr) != kSuccess) {
+        fprintf(stderr, "Error making new node.\n");
+        return NULL;
+    }
     return new_node;
 }
 
-LangNode_t *NewVariable(LangRoot *root, const char *variable, VariableArr *VariableArr) {
-    assert(root);
+LangNode_t *NewVariable(Language *lang_info, char *variable, VariableArr *VariableArr) {
+    assert(lang_info);
     assert(variable);
     assert(VariableArr);
 
     LangNode_t *new_node = NULL;
     NodeCtor(&new_node, NULL);
 
-    root->size ++;
+    lang_info->root->size ++;
     new_node->type = kVariable;
     size_t pos = 0;
     bool found_flag = false;
@@ -208,14 +216,21 @@ LangNode_t *NewVariable(LangRoot *root, const char *variable, VariableArr *Varia
 
     if (!found_flag) {
         ResizeArray(VariableArr);
-        VariableArr->var_array[VariableArr->size].variable_name = strdup(variable);
+        VariableArr->var_array[VariableArr->size].variable_name = variable;
+        
         pos = VariableArr->size;
         VariableArr->var_array[VariableArr->size].func_made = NULL;
         VariableArr->size ++;
+    } else {
+        free(variable);
     }
     
     new_node->value.pos = pos;
 
+    if (StackPush(lang_info->tokens, new_node, stderr) != kSuccess) {
+        fprintf(stderr, "Error making new node.\n");
+        return NULL;
+    }
     return new_node;
 }
 

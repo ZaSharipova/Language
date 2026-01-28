@@ -26,9 +26,9 @@ typedef struct {
     LexerState state;
 } Lexer;
 
-#define NEWN(num) NewNode(root, kNumber, (Value){.number = (num)}, NULL, NULL)
-#define NEWV(name) NewVariable(root, name, Variable_Array)
-#define NEWOP(op)  NewNode(root, kOperation, (Value){.operation = (op)}, NULL, NULL)
+#define NEWN(num) NewNode(lang_info, kNumber, (Value){.number = (num)}, NULL, NULL)
+#define NEWV(name) NewVariable(lang_info, name, Variable_Array)
+#define NEWOP(op)  NewNode(lang_info, kOperation, (Value){.operation = (op)}, NULL, NULL)
 
 static void InitLexer(Lexer *lexer, const char *src);
 static inline char Peek(const Lexer *lexer);
@@ -38,11 +38,11 @@ static inline int CheckEnd(const Lexer *lexer);
 static inline int IsWordChar(char c);
 static void SkipWhitespaceAndComments(Lexer *lexer);
 static OperationTypes FindOperator(const Lexer *lexer, size_t *matched_size);
-static int ParseToken(Lexer *lexer, LangRoot *root, Stack_Info *tokens, size_t *cnt, VariableArr *Variable_Array);
-static int ParseNumber(Lexer *lexer, LangRoot *root, Stack_Info *tokens, size_t *cnt);
+static int ParseToken(Lexer *lexer, Language *lang_info, Stack_Info *tokens, size_t *cnt, VariableArr *Variable_Array);
+static int ParseNumber(Lexer *lexer, Language *lang_info, Stack_Info *tokens, size_t *cnt);
 
-size_t CheckAndReturn_fsm(LangRoot *root, const char **string, Stack_Info *tokens, VariableArr *Variable_Array) {
-    assert(root);
+size_t CheckAndReturn_fsm(Language *lang_info, const char **string, Stack_Info *tokens, VariableArr *Variable_Array) {
+    assert(lang_info);
     assert(string);
     assert(tokens);
     assert(Variable_Array);
@@ -51,7 +51,7 @@ size_t CheckAndReturn_fsm(LangRoot *root, const char **string, Stack_Info *token
     InitLexer(&lexer, *string);
 
     size_t cnt = 0;
-    while(ParseToken(&lexer, root, tokens, &cnt, Variable_Array)) {
+    while(ParseToken(&lexer, lang_info, tokens, &cnt, Variable_Array)) {
         continue;
     }
 
@@ -182,9 +182,9 @@ static OperationTypes FindOperator(const Lexer *lexer, size_t *matched_size) {
     return result;
 }
 
-static int ParseToken(Lexer *lexer, LangRoot *root, Stack_Info *tokens, size_t *cnt, VariableArr *Variable_Array) {
+static int ParseToken(Lexer *lexer, Language *lang_info, Stack_Info *tokens, size_t *cnt, VariableArr *Variable_Array) {
     assert(lexer);
-    assert(root);
+    assert(lang_info);
     assert(tokens);
     assert(cnt);
     assert(Variable_Array);
@@ -260,7 +260,7 @@ static int ParseToken(Lexer *lexer, LangRoot *root, Stack_Info *tokens, size_t *
                 size_t len = lexer->pos - lexer->token_start;
                 char *name = (char *) calloc (len + 1, 1);
                 strncpy(name, lexer->src + lexer->token_start, len);
-                StackPush(tokens, NEWV(name), stderr);
+                StackPush(tokens, NEWV(name), stderr); //
                 (*cnt)++;
                 free(name);
                 return 1;
@@ -270,9 +270,9 @@ static int ParseToken(Lexer *lexer, LangRoot *root, Stack_Info *tokens, size_t *
     }
 }
 
-static int ParseNumber(Lexer *lexer, LangRoot *root, Stack_Info *tokens, size_t *cnt) {
+static int ParseNumber(Lexer *lexer, Language *lang_info, Stack_Info *tokens, size_t *cnt) {
     assert(lexer);
-    assert(root);
+    assert(lang_info);
     assert(tokens);
     assert(cnt);
 

@@ -7,17 +7,20 @@
 #include "Common/Enums.h"
 #include "Common/Structs.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
 #define CHECK_ERROR_RETURN(cond, ...)                                                         \
     do {                                                                                      \
         err = (cond);                                                                         \
         if (err != kSuccess) {                                                                \
             void *args[] = {__VA_ARGS__};                                                     \
-            int arg_count = sizeof(args)/sizeof(args[0]);                                     \
+            int arg_count = sizeof(args) / sizeof(args[0]);                                   \
             if (arg_count >= 1 && args[0] != NULL) DtorVariableArray((VariableArr *)args[0]); \
             if (arg_count >= 2 && args[1] != NULL) TreeDtor((LangRoot *)args[1]);             \
             return err;                                                                       \
         }                                                                                     \
     } while (0)
+#pragma GCC diagnostic pop
 
 #define FILE_OPEN_AND_CHECK(file, filename, mode, ...) \
     FILE *file = fopen(filename, mode);                                                   \

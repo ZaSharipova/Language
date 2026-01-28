@@ -6,11 +6,13 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <cstdlib>
 #include <ctype.h>
 
 #include "Front-End/Rules.h"
 #include "Common/LanguageFunctions.h"
 #include "Common/CommonFunctions.h"
+#include "Common/StackFunctions.h"
 
 static DifErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *Variable_Array);
 static DifErrors ParseTitle(const char *buffer, size_t *pos, char **out_title);

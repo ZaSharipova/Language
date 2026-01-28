@@ -81,6 +81,7 @@ struct Stack_Info {
     LangNode_t **data;
     ssize_t size;
     ssize_t capacity;
+    size_t la_size;
 };
 
 struct Language {

@@ -3,28 +3,33 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <cstdlib>
 #include <ctype.h>
 
 #include "Common/Enums.h"
 #include "Common/Structs.h"
 #include "Common/StackFunctions.h"
 #include "Common/LanguageFunctions.h"
+#include "Front-End/Rules.h"
 
 static bool SkipComment(const char **string);
 static void SkipSpaces(const char **string);
 static void SkipEmptyLines(const char **string);
-static bool ParseNumberToken(LangRoot *root, const char **string, Stack_Info *tokens, size_t *cnt);
-static bool ParseStringToken(LangRoot *root, const char **string, Stack_Info *tokens, size_t *cnt, VariableArr *Variable_Array);
+static bool ParseNumberToken(Language *lang_info, const char **string, Stack_Info *tokens, size_t *cnt);
+static bool ParseStringToken(Language *lang_info, const char **string, Stack_Info *tokens, size_t *cnt, VariableArr *Variable_Array);
 
-#define NEWN(num) NewNode(root, kNumber, ((Value){ .number = (num)}), NULL, NULL)
-#define NEWV(name) NewVariable(root, name, Variable_Array)
-#define NEWOP(op, left, right) NewNode(root, kOperation, (Value){ .operation = (op)}, left, right) 
+#define NEWN(num) NewNode(lang_info, kNumber, ((Value){ .number = (num)}), NULL, NULL)
+#define NEWV(name) NewVariable(lang_info, name, Variable_Array)
+#define NEWOP(op, left, right) NewNode(lang_info, kOperation, (Value){ .operation = (op)}, left, right) 
 
 #define CodeNameFromTable(type) NAME_TYPES_TABLE[type].name_in_lang
 
 #define CHECK_SYMBOL_AND_PUSH(symbol_to_check, op_type)                \
     if (**string == symbol_to_check) {                                 \
-        StackPush(tokens, NEWOP(op_type, NULL, NULL), stderr);         \
+        node = NEWOP(op_type, NULL, NULL);                             \
+        if (!node) { \
+            fprintf(stderr, "Error making new variable.\n");  \
+        } \
         cnt++;                                                         \
         (*string)++;                                                   \
         continue;                                                      \
@@ -32,19 +37,23 @@ static bool ParseStringToken(LangRoot *root, const char **string, Stack_Info *to
 
 #define CHECK_STROKE_AND_PUSH(line_to_check, op_type)                     \
     if (strncmp(*string, line_to_check, strlen(line_to_check)) == 0) {    \
-        StackPush(tokens, NEWOP(op_type, NULL, NULL), stderr);            \
+        node = NEWOP(op_type, NULL, NULL);            \
+        if (!node) { \
+            fprintf(stderr, "Error making new variable.\n");  \
+        } \
         cnt++;                                                            \
         (*string) += strlen(line_to_check);                               \
         continue;                                                         \
     }
 
-size_t CheckAndReturn(LangRoot *root, const char **string, Stack_Info *tokens, VariableArr *Variable_Array) {
-    assert(root);
+size_t CheckAndReturn(Language *lang_info, const char **string, Stack_Info *tokens, VariableArr *Variable_Array) {
+    assert(lang_info);
     assert(string);
     assert(tokens);
     assert(Variable_Array);
 
     size_t cnt = 0;
+    LangNode_t *node = NULL;
 
     //printf("%s\n", *string);
     while (**string != '\0') {
@@ -98,13 +107,13 @@ size_t CheckAndReturn(LangRoot *root, const char **string, Stack_Info *tokens, V
         CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationReturn), kOperationReturn);
         CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationHLT),    kOperationHLT);
 
-        if (ParseNumberToken(root, string, tokens, &cnt)) {
+        if (ParseNumberToken(lang_info, string, tokens, &cnt)) {
             continue;
         }
 
         CHECK_SYMBOL_AND_PUSH('-', kOperationSub);
 
-        if (ParseStringToken(root, string, tokens, &cnt, Variable_Array)) {
+        if (ParseStringToken(lang_info, string, tokens, &cnt, Variable_Array)) {
             continue;
         }
 
@@ -117,7 +126,7 @@ size_t CheckAndReturn(LangRoot *root, const char **string, Stack_Info *tokens, V
     // for (size_t i = 0; i < Variable_Array->size; i++) {
     //     fprintf(stderr, "%s %d\n\n", Variable_Array->var_array[i].variable_name, Variable_Array->var_array[i].variable_value);
     // }
-
+    tokens->la_size = cnt;
     return cnt;
 }
 
@@ -174,8 +183,8 @@ static void SkipEmptyLines(const char **string) {
 }
 
 
-static bool ParseNumberToken(LangRoot *root, const char **string, Stack_Info *tokens, size_t *cnt) {
-    assert(root);
+static bool ParseNumberToken(Language *lang_info, const char **string, Stack_Info *tokens, size_t *cnt) {
+    assert(lang_info);
     assert(string);
     assert(tokens);
     assert(cnt);
@@ -202,14 +211,17 @@ static bool ParseNumberToken(LangRoot *root, const char **string, Stack_Info *to
 
     if (has_minus) value = -value;
 
-    StackPush(tokens, (LangNode_t *)NEWN(value), stderr);
+    LangNode_t *node = NEWN(value);
+    if (!node) {
+        fprintf(stderr, "Error making new variable.\n");
+    }
     (*cnt)++;
 
     return true;
 }
 
-static bool ParseStringToken(LangRoot *root, const char **string, Stack_Info *tokens, size_t *cnt, VariableArr *Variable_Array) {
-    assert(root);
+static bool ParseStringToken(Language *lang_info, const char **string, Stack_Info *tokens, size_t *cnt, VariableArr *Variable_Array) {
+    assert(lang_info);
     assert(string);
     assert(tokens);
     assert(cnt);
@@ -230,7 +242,11 @@ static bool ParseStringToken(LangRoot *root, const char **string, Stack_Info *to
     strncpy(name, name_start, len);
     name[len] = '\0';
 
-    StackPush(tokens, NEWV(name), stderr);
+    LangNode_t *node = NEWV(name); 
+    if (!node) {
+        fprintf(stderr, "Error making new variable.\n");
+    }
+
     (*cnt)++;
 
     return true;

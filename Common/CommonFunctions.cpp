@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <sys/stat.h>
+#include <cstdlib>
 
 
 #include "Common/Enums.h"
