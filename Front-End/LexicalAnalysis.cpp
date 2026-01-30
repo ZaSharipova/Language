@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
-#include <cstdlib>
+#include <stdlib.h>
 #include <ctype.h>
 
 #include "Common/Enums.h"
@@ -15,8 +15,8 @@
 static bool SkipComment(const char **string);
 static void SkipSpaces(const char **string);
 static void SkipEmptyLines(const char **string);
-static bool ParseNumberToken(Language *lang_info, const char **string, Stack_Info *tokens, size_t *cnt);
-static bool ParseStringToken(Language *lang_info, const char **string, Stack_Info *tokens, size_t *cnt, VariableArr *Variable_Array);
+static bool ParseNumberToken(Language *lang_info, const char **string, size_t *cnt);
+static bool ParseStringToken(Language *lang_info, const char **string, size_t *cnt);
 
 #define NEWN(num) NewNode(lang_info, kNumber, ((Value){ .number = (num)}), NULL, NULL)
 #define NEWV(name) NewVariable(lang_info, name, Variable_Array)
@@ -27,9 +27,10 @@ static bool ParseStringToken(Language *lang_info, const char **string, Stack_Inf
 #define CHECK_SYMBOL_AND_PUSH(symbol_to_check, op_type)                \
     if (**string == symbol_to_check) {                                 \
         node = NEWOP(op_type, NULL, NULL);                             \
-        if (!node) { \
-            fprintf(stderr, "Error making new variable.\n");  \
-        } \
+        if (!node) {                                                   \
+            fprintf(stderr, "Error making new variable.\n");           \
+            return NULL;                                               \
+        }                                                              \
         cnt++;                                                         \
         (*string)++;                                                   \
         continue;                                                      \
@@ -37,10 +38,11 @@ static bool ParseStringToken(Language *lang_info, const char **string, Stack_Inf
 
 #define CHECK_STROKE_AND_PUSH(line_to_check, op_type)                     \
     if (strncmp(*string, line_to_check, strlen(line_to_check)) == 0) {    \
-        node = NEWOP(op_type, NULL, NULL);            \
-        if (!node) { \
-            fprintf(stderr, "Error making new variable.\n");  \
-        } \
+        node = NEWOP(op_type, NULL, NULL);                                \
+        if (!node) {                                                      \
+            fprintf(stderr, "Error making new variable.\n");              \
+            return NULL;                                                  \
+        }                                                                 \
         cnt++;                                                            \
         (*string) += strlen(line_to_check);                               \
         continue;                                                         \
@@ -55,10 +57,7 @@ size_t CheckAndReturn(Language *lang_info, const char **string, Stack_Info *toke
     size_t cnt = 0;
     LangNode_t *node = NULL;
 
-    //printf("%s\n", *string);
     while (**string != '\0') {
-
-        //printf("DEBUG:::: %d\n", cnt);
         SkipEmptyLines(string);
         SkipSpaces(string);
         if (**string == '\0') break;
@@ -67,25 +66,25 @@ size_t CheckAndReturn(Language *lang_info, const char **string, Stack_Info *toke
             continue;
         }
 
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationBraceOpen),  kOperationBraceOpen); // TODO
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationBraceOpen),  kOperationBraceOpen);
         CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationBraceClose), kOperationBraceClose);
         CHECK_SYMBOL_AND_PUSH('(', kOperationParOpen);
         CHECK_SYMBOL_AND_PUSH(')', kOperationParClose);
 
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationBE), kOperationBE);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationAE), kOperationAE);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationE),  kOperationE);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationNE), kOperationNE);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationBE),   kOperationBE);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationAE),   kOperationAE);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationE),    kOperationE);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationNE),   kOperationNE);
 
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationB),  kOperationB);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationA),  kOperationA);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationIs), kOperationIs);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationB),    kOperationB);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationA),    kOperationA);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationIs),   kOperationIs);
         CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationThen), kOperationThen);
         CHECK_SYMBOL_AND_PUSH(',', kOperationComma);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationAdd), kOperationAdd);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationMul), kOperationMul);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationDiv), kOperationDiv);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationSub), kOperationSub);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationAdd),  kOperationAdd);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationMul),  kOperationMul);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationDiv),  kOperationDiv);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationSub),  kOperationSub);
         CHECK_SYMBOL_AND_PUSH('^', kOperationPow);
         CHECK_SYMBOL_AND_PUSH('&', kOperationCallAddr);
         CHECK_SYMBOL_AND_PUSH('$', kOperationGetAddr);
@@ -95,29 +94,29 @@ size_t CheckAndReturn(Language *lang_info, const char **string, Stack_Info *toke
         CHECK_SYMBOL_AND_PUSH(']', kOperationBracketClose);
         CHECK_STROKE_AND_PUSH("voco", kOperationArrDecl);
 
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationSin),    kOperationSin);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationSQRT),   kOperationSQRT);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationIf),     kOperationIf);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationElse),   kOperationElse);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationWhile),  kOperationWhile);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationSin),       kOperationSin);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationSQRT),      kOperationSQRT);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationIf),        kOperationIf);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationElse),      kOperationElse);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationWhile),     kOperationWhile);
         CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationWriteChar), kOperationWriteChar);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationWrite),  kOperationWrite);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationRead),   kOperationRead);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationFunction), kOperationFunction);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationReturn), kOperationReturn);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationHLT),    kOperationHLT);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationWrite),     kOperationWrite);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationRead),      kOperationRead);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationFunction),  kOperationFunction);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationReturn),    kOperationReturn);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationHLT),       kOperationHLT);
 
-        if (ParseNumberToken(lang_info, string, tokens, &cnt)) {
+        if (ParseNumberToken(lang_info, string, &cnt)) {
             continue;
         }
 
         CHECK_SYMBOL_AND_PUSH('-', kOperationSub);
 
-        if (ParseStringToken(lang_info, string, tokens, &cnt, Variable_Array)) {
+        if (ParseStringToken(lang_info, string, &cnt)) {
             continue;
         }
 
-        fprintf(stderr, "Lexer остановлен на: '%c' (0x%02x), cnt=%zu\n", **string, **string, cnt);
+        fprintf(stderr, "Lexer has stopped in '%c' (0x%02x), cnt=%zu, due to the lack of appropriate token type.\n", **string, **string, cnt);
 
         return 0;
     }
@@ -146,8 +145,9 @@ static bool SkipComment(const char **string) {
         while (**string != '\0' && !((*string)[0] == '*' && (*string)[1] == '/')) {
             (*string)++;
         }
-        if (**string != '\0')
+        if (**string != '\0') {
             (*string) += 2;
+        }
         return true;
     }
 
@@ -183,10 +183,9 @@ static void SkipEmptyLines(const char **string) {
 }
 
 
-static bool ParseNumberToken(Language *lang_info, const char **string, Stack_Info *tokens, size_t *cnt) {
+static bool ParseNumberToken(Language *lang_info, const char **string, size_t *cnt) {
     assert(lang_info);
     assert(string);
-    assert(tokens);
     assert(cnt);
 
     if (!(('0' <= **string && **string <= '9') || **string == '-'))
@@ -207,9 +206,12 @@ static bool ParseNumberToken(Language *lang_info, const char **string, Stack_Inf
     do {
         value = 10 * value + (**string - '0');
         (*string)++;
+        
     } while ('0' <= **string && **string <= '9');
 
-    if (has_minus) value = -value;
+    if (has_minus) {
+        value = -value;
+    }
 
     LangNode_t *node = NEWN(value);
     if (!node) {
@@ -220,12 +222,12 @@ static bool ParseNumberToken(Language *lang_info, const char **string, Stack_Inf
     return true;
 }
 
-static bool ParseStringToken(Language *lang_info, const char **string, Stack_Info *tokens, size_t *cnt, VariableArr *Variable_Array) {
+static bool ParseStringToken(Language *lang_info, const char **string, size_t *cnt) {
     assert(lang_info);
     assert(string);
-    assert(tokens);
     assert(cnt);
-    assert(Variable_Array);
+    
+    VariableArr *Variable_Array = lang_info->arr;
 
     if (!(isalnum(**string) || **string == '_'))
         return false;

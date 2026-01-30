@@ -43,14 +43,15 @@
     } while (0)
 
 static LangNode_t *GetGoal(Language *lang_info);
-
 static LangNode_t *GetAssignment(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetOp(Language *lang_info, LangNode_t *func_name);
+static LangNode_t *GetFunctionDeclare(Language *lang_info);
+static LangNode_t *GetFunctionCall(Language *lang_info);
+
+
 static LangNode_t *GetWhile(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetIf(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetElse(Language *lang_info, LangNode_t *if_node, LangNode_t *func_name);
-static LangNode_t *GetFunctionDeclare(Language *lang_info);
-static LangNode_t *GetFunctionCall(Language *lang_info);
 static LangNode_t *GetReturn(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetPrintf(Language *lang_info);
 static LangNode_t *GetScanf(Language *lang_info, LangNode_t *func_name);
@@ -156,7 +157,9 @@ static LangNode_t *GetReturn(Language *lang_info, LangNode_t *func_name) {
     }
     (*lang_info->tokens_pos)++; 
 
-    return NEWOP(kOperationReturn, node, NULL);
+    return_node->left = node;
+    node->parent = return_node;
+    return return_node;
 }
 
 static LangNode_t *GetScanf(Language *lang_info, LangNode_t *func_name) {
@@ -165,18 +168,11 @@ static LangNode_t *GetScanf(Language *lang_info, LangNode_t *func_name) {
 
     size_t save_pos = (*lang_info->tokens_pos);
 
-    LangNode_t *return_node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
-    if (!IsThatOperation(return_node, kOperationRead)) {
-        return NULL;
-    }
-    (*lang_info->tokens_pos)++; 
+    LangNode_t *read_node = NULL;
+    CHECK_EXPECTED_TOKEN(read_node, IsThatOperation(read_node, kOperationRead),);
 
-    LangNode_t *tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
-    if (!IsThatOperation(tok, kOperationParOpen)) {
-        (*lang_info->tokens_pos) = save_pos;
-        return NULL;
-    }
-    (*lang_info->tokens_pos)++; 
+    LangNode_t *tok = NULL;
+    CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationParOpen), );
     
     LangNode_t *node = GetString(lang_info, func_name, krvalue);
     if (!node) {
@@ -184,21 +180,15 @@ static LangNode_t *GetScanf(Language *lang_info, LangNode_t *func_name) {
         return NULL;
     }
 
-    tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
-    if (!IsThatOperation(tok, kOperationParClose)) {
-        (*lang_info->tokens_pos) = save_pos;
-        return NULL;
-    }
-    (*lang_info->tokens_pos)++; 
+    CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationParClose), 
+        fprintf(stderr, "SYNTAX_ERROR_SCANF: no closing par.\n"));
 
-    tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
-    if (!IsThatOperation(tok, kOperationThen)) {
-        (*lang_info->tokens_pos) = save_pos;
-        return NULL;
-    }
-    (*lang_info->tokens_pos)++; 
+    CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationThen), 
+        fprintf(stderr, "SYNTAX_ERROR_SCANF: no ';'.\n"));
 
-    return NEWOP(kOperationRead, node, NULL);
+    read_node->left = node;
+    node->parent = read_node;
+    return read_node;
 }
 
 LangNode_t *GetStatement(Language *lang_info, LangNode_t *func_name) {
@@ -213,17 +203,16 @@ LangNode_t *GetStatement(Language *lang_info, LangNode_t *func_name) {
     }
     
     *lang_info->tokens_pos = save_pos;
+
     LangNode_t *func_call = GetFunctionCall(lang_info);
     if (func_call) {
         LangNode_t *tok = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
         if (IsThatOperation(tok, kOperationThen)) {
             (*lang_info->tokens_pos)++;
-
             return func_call;
-            //return NEWOP(kOperationThen, func_call, NULL);
-        } else {
 
-            fprintf(stderr, "SYNTAX_ERROR: expected ';' after function call\n");
+        } else {
+            fprintf(stderr, "SYNTAX_ERROR: expected ';' after function call.\n");
             *lang_info->tokens_pos = save_pos;
             return NULL;
         }
@@ -236,31 +225,20 @@ LangNode_t *GetOp(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
     assert(func_name);
 
-    //fprintf(stderr, "[DEBUG GetOp] Current token position: %zu\n", *(lang_info->tokens_pos));
     LangNode_t *stmt = NULL;
     size_t save_pos = (*lang_info->tokens_pos);
 
     TRY_PARSE_RETURN(stmt, GetReturn(lang_info, func_name));
-    //printf("[DEBUG] After GetReturn: stmt=%p\n", stmt);
-    
     TRY_PARSE_RETURN(stmt, GetPrintf(lang_info));
-    //printf("[DEBUG] After GetPrintf: stmt=%p\n", stmt);
-    
     TRY_PARSE_RETURN(stmt, GetScanf(lang_info, func_name));
-    //printf("[DEBUG] After GetScanf: stmt=%p\n", stmt);
-    
     TRY_PARSE_RETURN(stmt, GetWhile (lang_info, func_name));
-    //printf("[DEBUG] After GetWhile: stmt=%p\n", stmt);
-    
     TRY_PARSE_RETURN(stmt, GetIf    (lang_info, func_name));
-    //printf("[DEBUG] After GetIf: stmt=%p\n", stmt);
-
     TRY_PARSE_RETURN(stmt, GetHLT   (lang_info));
 
     LangNode_t *seq = NULL;
 
-    while (1) {
-        save_pos = (*lang_info->tokens_pos);
+    while (true) {
+        save_pos = *lang_info->tokens_pos;
         
         stmt = GetStatement(lang_info, func_name);
         if (!stmt) {
@@ -293,11 +271,11 @@ LangNode_t *GetOp(Language *lang_info, LangNode_t *func_name) {
 #define DIV_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationDiv}, left, right)
 #define POW_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationPow}, left, right)
 
-static LangNode_t *GetPrintf(Language *lang_info) { //
+static LangNode_t *GetPrintf(Language *lang_info) {
     assert(lang_info);
 
-    LangNode_t *print_f = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
-    if (IsThatOperation(print_f, kOperationWrite) || IsThatOperation(print_f, kOperationWriteChar)) {
+    LangNode_t *print_node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
+    if (IsThatOperation(print_node, kOperationWrite) || IsThatOperation(print_node, kOperationWriteChar)) {
         (*lang_info->tokens_pos)++;
 
         size_t save_pos = *(lang_info->tokens_pos);
@@ -305,30 +283,30 @@ static LangNode_t *GetPrintf(Language *lang_info) { //
         CHECK_EXPECTED_TOKEN(par, IsThatOperation(par, kOperationParOpen),);
 
         LangNode_t *printf_arg = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
-        if (!(printf_arg && (printf_arg->type == kVariable || printf_arg->type == kNumber))) { // сделать и для функций
+        if (!(printf_arg && (printf_arg->type == kVariable || printf_arg->type == kNumber))) { // TODO: make it available for functions too
             fprintf(stderr, "NO AVAILABLE ARGUMENT FOR PRINTF WRITTEN.\n");
-            return NULL; //
+            return NULL;
         }
         (*lang_info->tokens_pos)++; 
 
         CHECK_EXPECTED_TOKEN(par, IsThatOperation(par, kOperationParClose), );
 
-        print_f->left = printf_arg;
-        printf_arg->parent = print_f;
+        print_node->left = printf_arg;
+        printf_arg->parent = print_node;
         (*lang_info->tokens_pos)++; 
-        return print_f;
-    } else {
-        return NULL;
+        return print_node;
     }
+
+    return NULL;
 }
 
 static LangNode_t *GetFunctionDeclare(Language *lang_info) {
     assert(lang_info);
     
     size_t save_pos = *(lang_info->tokens_pos);
-    LangNode_t *token = NULL, *func_name = NULL;
+    LangNode_t *func_node = NULL, *token = NULL, *func_name = NULL;
     
-    CHECK_EXPECTED_TOKEN(token, IsThatOperation(token, kOperationFunction), );
+    CHECK_EXPECTED_TOKEN(func_node, IsThatOperation(func_node, kOperationFunction), );
     CHECK_EXPECTED_TOKEN(func_name, func_name && func_name->type == kVariable, );
     CHECK_EXPECTED_TOKEN(token, IsThatOperation(token, kOperationParOpen), );
     
@@ -347,8 +325,12 @@ static LangNode_t *GetFunctionDeclare(Language *lang_info) {
     
     CHECK_EXPECTED_TOKEN(token, IsThatOperation(token, kOperationBraceClose),
         fprintf(stderr, "SYNTAX_ERROR_FUNC: expected '}' at end of function body %zu.\n", *(lang_info->tokens_pos)));
-    
-    return NEWOP(kOperationFunction, func_name, NEWOP(kOperationThen, args_root, body_root));
+
+    func_node->left = func_name;
+    func_name->parent = func_node;
+    func_node->right = NEWOP(kOperationThen, args_root, body_root); //
+
+    return func_node;
 }
 
 static LangNode_t *GetFunctionCall(Language *lang_info) {
@@ -363,15 +345,8 @@ static LangNode_t *GetFunctionCall(Language *lang_info) {
     }
     (*lang_info->tokens_pos)++; 
 
-    // printf("[DEBUG GetFunctionCall] Found variable: %s\n", 
-    //     lang_info->arr->var_array[name_token->value.pos].variable_name);
-    LangNode_t *par_open = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
-    if (!IsThatOperation(par_open, kOperationParOpen)) {
-        //printf("[DEBUG GetFunctionCall] No '(' after function name\n");
-        *lang_info->tokens_pos = save_pos;
-        return NULL;
-    }
-    (*lang_info->tokens_pos)++; 
+    LangNode_t *par_open = NULL;
+    CHECK_EXPECTED_TOKEN(par_open, IsThatOperation(par_open, kOperationParOpen),);
 
     LangNode_t *args_root = NULL;
     LangNode_t *rightmost = NULL;
@@ -429,7 +404,9 @@ static LangNode_t *GetExpression(Language *lang_info, LangNode_t *func_name) {
     assert(func_name);
 
     LangNode_t *val = GetTerm(lang_info, func_name);
-    if (!val) return NULL;
+    if (!val) {
+        return NULL;
+    }
 
     lang_info->root->size++;
     LangNode_t *node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
@@ -438,7 +415,9 @@ static LangNode_t *GetExpression(Language *lang_info, LangNode_t *func_name) {
         (*lang_info->tokens_pos)++;
 
         LangNode_t *val2 = GetTerm(lang_info, func_name);
-        if (!val2) return val;
+        if (!val2) {
+            return val;
+        }
 
         lang_info->root->size++;
         node->left  = val;
@@ -458,7 +437,9 @@ static LangNode_t *GetTerm(Language *lang_info, LangNode_t *func_name) {
     assert(func_name);
 
     LangNode_t *left = GetPower(lang_info, func_name);
-    if (!left) return NULL;
+    if (!left) {
+        return NULL;
+    }
 
     lang_info->root->size++;
     LangNode_t *node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
@@ -467,7 +448,9 @@ static LangNode_t *GetTerm(Language *lang_info, LangNode_t *func_name) {
         (*lang_info->tokens_pos)++; 
 
         LangNode_t *right = GetTerm(lang_info, func_name);
-        if (!right) return left;
+        if (!right) {
+            return left;
+        }
 
         node->left  = left;
         node->right = right;
@@ -475,7 +458,6 @@ static LangNode_t *GetTerm(Language *lang_info, LangNode_t *func_name) {
         right->parent = node;
 
         left = node;
-
         node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     }
 
@@ -552,8 +534,8 @@ LangNode_t *GetAssignment(Language *lang_info, LangNode_t *func_name) {
 
     size_t save_pos = *lang_info->tokens_pos;
     LangNode_t *value = NULL;
-    TRY_PARSE_RETURN(value, GetArrayAssignment(lang_info, func_name));
 
+    TRY_PARSE_RETURN(value, GetArrayAssignment(lang_info, func_name));
     TRY_PARSE_RETURN(value, GetTernary(lang_info, func_name));
 
     LangNode_t *assign_op = NULL;
@@ -585,7 +567,6 @@ LangNode_t *GetAssignment(Language *lang_info, LangNode_t *func_name) {
         lang_info->arr->var_array[assign_op->left->value.pos].variable_value = (int)value->value.number; //
     }
     
-    //return NEWOP(kOperationThen, assign_op, NULL);
     return assign_op;
 }
 
@@ -594,9 +575,9 @@ static LangNode_t *GetIf(Language *lang_info, LangNode_t *func_name) {
     assert(func_name);
 
     size_t save_pos = *lang_info->tokens_pos;
-    LangNode_t *tok = NULL;
+    LangNode_t *if_node = NULL, *tok = NULL;
 
-    CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationIf),);
+    CHECK_EXPECTED_TOKEN(if_node, IsThatOperation(if_node, kOperationIf),);
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationParOpen),
         fprintf(stderr, "%s", "SYNTAX_ERROR_IF: expected '('\n"));
     
@@ -614,13 +595,13 @@ static LangNode_t *GetIf(Language *lang_info, LangNode_t *func_name) {
         if (!number) {
             fprintf(stderr, "SYNTAX_ERROR_IF: no expression if if written.\n");
         }
+
         sign->left = cond;
         cond->parent = sign;
         sign->right = number;
         number->parent = sign;
         cond = sign;
     }
-
 
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationParClose),
         fprintf(stderr, "%s", "SYNTAX_ERROR_IF: expected ')'\n"));
@@ -634,7 +615,6 @@ static LangNode_t *GetIf(Language *lang_info, LangNode_t *func_name) {
     }
 
     LangNode_t *last = first;
-
     while (true) {
         LangNode_t *stmt = GetOp(lang_info, func_name);
         if (!stmt) break;
@@ -645,14 +625,17 @@ static LangNode_t *GetIf(Language *lang_info, LangNode_t *func_name) {
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationBraceClose), 
         fprintf(stderr, "%s", "SYNTAX_ERROR_IF: expected '}'\n"));
 
-    LangNode_t *if_node = NEWOP(kOperationIf, cond, last);
+    if_node->left = cond;
+    cond->parent = if_node;
+    if_node->right = last;
+    last->parent = if_node;
 
     LangNode_t *else_node = GetElse(lang_info, last, func_name);
     if (else_node) {
         if_node->right = else_node;
         else_node->parent = if_node;
     }
-    //printf("if %zu\n", *tokens_pos);
+
     return if_node;
 }
 
@@ -669,10 +652,13 @@ static LangNode_t *GetElse(Language *lang_info, LangNode_t *if_node, LangNode_t 
 
     while (true) {
         LangNode_t *stmt = GetOp(lang_info, func_name);
-        if (!stmt) break;
+        if (!stmt) {
+            break;
+        }
         
-        if (last) last = NEWOP(kOperationThen, last, stmt);
-        else {
+        if (last) {
+            last = NEWOP(kOperationThen, last, stmt);
+        } else {
             last = stmt;
         }
     }
@@ -704,6 +690,7 @@ static LangNode_t *GetWhile(Language *lang_info, LangNode_t *func_name) {
         IsThatOperation(cond_sign, kOperationA) || IsThatOperation(cond_sign, kOperationAE) ||
         IsThatOperation(cond_sign, kOperationE) || IsThatOperation(cond_sign, kOperationNE)) {
         (*lang_info->tokens_pos)++;
+
         LangNode_t *cond_right = GetExpression(lang_info, func_name);
         cond_sign->left = cond_left;
         cond_sign->right = cond_right;
@@ -813,7 +800,6 @@ static LangNode_t *GetString(Language *lang_info, LangNode_t *func_name, ValCate
     LangNode_t *node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (node && node->type == kVariable) {
         (*(lang_info->tokens_pos))++;
-
     } else {
         return NULL;
     }
@@ -832,7 +818,9 @@ static LangNode_t *GetString(Language *lang_info, LangNode_t *func_name, ValCate
     if (!var_info->func_made || !func_info->func_made || strcmp(var_info->func_made, func_info->func_made) != 0) {
         if (val_cat == klvalue && func_info->func_made) {
 
-            if (var_info->func_made) free(var_info->func_made);
+            if (var_info->func_made) {
+                free(var_info->func_made);
+            }
             var_info->func_made = strdup(func_info->func_made);
 
             if (!var_info->func_made) {
@@ -841,7 +829,7 @@ static LangNode_t *GetString(Language *lang_info, LangNode_t *func_name, ValCate
             }
         } else if (var_info->func_made && func_info->func_made) {
             fprintf(stderr, "SYNTAX_ERROR_STRING: usage of undeclared variable %s\n",
-                    var_info->variable_name ? var_info->variable_name : "unknown");
+                var_info->variable_name ? var_info->variable_name : "unknown");
             return NULL;
         }
     }
@@ -917,7 +905,9 @@ static LangNode_t *ParseFunctionArgs(Language *lang_info, size_t *cnt) {
     while (true) {
         LangNode_t *token = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
         if (!token || IsThatOperation(token, kOperationParClose)) {
-            if (IsThatOperation(token, kOperationParClose)) (*(lang_info->tokens_pos))++;
+            if (IsThatOperation(token, kOperationParClose)) {
+                (*(lang_info->tokens_pos))++;
+            }
             break;
         }
         
@@ -929,6 +919,7 @@ static LangNode_t *ParseFunctionArgs(Language *lang_info, size_t *cnt) {
         if (token->type == kVariable || token->type == kNumber || IsThatOperation(token, kOperationGetAddr)) {
             size_t save_pos = *lang_info->tokens_pos;
             (*(lang_info->tokens_pos))++;
+
             if (IsThatOperation(token, kOperationGetAddr)) {
                 LangNode_t *next_token = NULL;
                 CHECK_EXPECTED_TOKEN(next_token, next_token->type == kVariable, 
@@ -977,10 +968,8 @@ static LangNode_t *ParseFunctionBody(Language *lang_info, LangNode_t *func_name)
         } else if (!body_root->right) {
             body_root->right = stmt;
         } else {
-            //fprintf(stderr, "%p\n", stmt);
             body_root = NEWOP(kOperationThen, body_root, stmt);
         }
-        //body_root = !body_root ? stmt : NEWOP(kOperationThen, body_root, stmt);
     }
     
     return body_root;
@@ -1100,7 +1089,7 @@ static LangNode_t *GetArrayAssignment(Language *lang_info, LangNode_t *func_name
 
 }
 
-static LangNode_t *GetArrayElement(Language *lang_info, LangNode_t *func_name) { // TODO
+static LangNode_t *GetArrayElement(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
     assert(func_name);
 

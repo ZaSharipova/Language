@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
-#include <cstdlib>
+#include <stdlib.h>
 #include <ctype.h>
 
 #include "Front-End/Rules.h"
@@ -80,7 +80,6 @@ static void ComputeFuncSizes(LangNode_t *node, VariableArr *Variable_Array) {
     ComputeFuncSizes(node->right, Variable_Array);
 
     if (IsThatOperation(node, kOperationFunction)) {
-
         LangNode_t *func_name = node->left;
         LangNode_t *args_root = node->right ? node->right->left  : NULL;
         LangNode_t *body_root = node->right ? node->right->right : NULL;
@@ -143,7 +142,9 @@ static DifErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *Variable
 }
 
 static int CountArgs(LangNode_t *args_root) {
-    if (!args_root) return 0;
+    if (!args_root) {
+        return 0;
+    }
 
     if (IsThatOperation(args_root, kOperationComma)) {
         return CountArgs(args_root->left) + CountArgs(args_root->right);
@@ -171,9 +172,7 @@ static void ScanInitsInSubtree(LangNode_t *func_name_node, LangNode_t *root, Var
     assert(Variable_Array);
     if (!root) return;
 
-    if (IsThatOperation(root, kOperationIs) &&
-        root->left && root->left->type == kVariable) {
-        
+    if (IsThatOperation(root, kOperationIs) && root->left && root->left->type == kVariable) {
         RegisterInit(func_name_node, root->left, Variable_Array);
     }
 
@@ -193,8 +192,11 @@ static void SkipSpaces(const char *buf, size_t *pos) {
 static DifErrors PrintSyntaxErrorNode(size_t pos, char c) {
     fprintf(stderr, "Syntax error at position %zu: unexpected character ", pos);
 
-    if (c == '\0') fprintf(stderr, "EOF");
-    else fprintf(stderr, "'%c'", c);
+    if (c == '\0') {
+        fprintf(stderr, "EOF");
+    } else {
+        fprintf(stderr, "'%c'", c);
+    }
     fprintf(stderr, "\n");
 
 
@@ -222,13 +224,15 @@ static DifErrors ParseTitle(const char *buffer, size_t *pos, char **out_title) {
     assert(pos);
     assert(out_title);
 
-    if (buffer[*pos] != '(')
+    if (buffer[*pos] != '(') {
         return PrintSyntaxErrorNode(*pos, buffer[*pos]);
+    }
     (*pos)++;
     SkipSpaces(buffer, pos);
 
-    if (buffer[*pos] != '"')
+    if (buffer[*pos] != '"') {
         return PrintSyntaxErrorNode(*pos, buffer[*pos]);
+    }
 
     (*pos)++;
     size_t start = *pos;
@@ -244,7 +248,9 @@ static DifErrors ParseTitle(const char *buffer, size_t *pos, char **out_title) {
     size_t len = *pos - start;
 
     char *title = (char *) calloc (len + 1, 1);
-    if (!title) return kNoMemory;
+    if (!title) {
+        return kNoMemory;
+    }
 
     memcpy(title, buffer + start, len);
     title[len] = '\0';
@@ -269,4 +275,3 @@ static DifErrors ExpectClosingParen(const char *buffer, size_t *pos) {
 
     return kSuccess;
 }
-

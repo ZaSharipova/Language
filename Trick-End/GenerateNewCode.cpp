@@ -355,7 +355,6 @@ static void GenTernary(LangNode_t *node, FILE *out, VariableArr *arr, int indent
     fprintf(out, " %s ", PrintCodeNameFromTable(kOperationIs));
 
     LangNode_t *body = node->left->right;
-
     GenExpr(body->left->right, out, arr);
 
     fprintf(out, " %s ", PrintCodeNameFromTable(kOperationTrueSeparator));

@@ -11,6 +11,11 @@
 #include "Common/LanguageFunctions.h"
 #include "Common/CommonFunctions.h"
 
+#define GEN_OP(op_name, func)               \
+    const char *name = "?";                 \
+    name = PrintCodeNameFromTable(op_name); \
+    func(out, node, arr, name);                                   
+
 static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr);
 static void GenThenChain(LangNode_t *node, FILE *out, VariableArr *arr, int indent);
 static void GenIf(LangNode_t *node, FILE *out, VariableArr *arr, int indent);
@@ -18,6 +23,19 @@ static void GenTernary(LangNode_t *node, FILE *out, VariableArr *arr, int indent
 static void GenWhile(LangNode_t *node, FILE *out, VariableArr *arr, int indent);
 static void GenFunctionDeclare(LangNode_t *node, FILE *out, VariableArr *arr, int indent);
 static void GenFunctionCall(LangNode_t *node, FILE *out, VariableArr *arr, int indent);
+
+static void GenReturn(FILE *out, LangNode_t *node, VariableArr *arr, int indent);
+static void GenWrite(FILE *out, LangNode_t *node, VariableArr *arr, int indent);
+static void GenWriteChar(FILE *out, LangNode_t *node, VariableArr *arr, int indent);
+static void GenRead(FILE *out, LangNode_t *node, VariableArr *arr, int indent);
+static void GenHlt(FILE *out, LangNode_t *node, VariableArr *arr, int indent);
+static void GenArrDecl(FILE *out, LangNode_t *node, VariableArr *arr, int indent);
+
+static void GenUnaryOperation(FILE *out, LangNode_t *node, VariableArr *arr, const char *name);
+static void GenBinaryOperation(FILE *out, LangNode_t *node, VariableArr *arr, const char *name);
+static void GenExprWithPrecedence(LangNode_t *node, OperationTypes parent_op, FILE *out, VariableArr *arr);
+static void GenCondition(FILE *out, LangNode_t *node, VariableArr *arr, const char *name);
+static void GenCall(FILE *out, LangNode_t *node, VariableArr *arr);
 
 #define PrintCodeNameFromTable(type) NAME_TYPES_TABLE[type].name_in_lang
 
@@ -38,7 +56,6 @@ void GenerateCodeFromAST(LangNode_t *node, FILE *out, VariableArr *arr, int inde
 
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Wswitch-enum"
-
         switch (node->value.operation) {
 
             case kOperationIf:
@@ -66,57 +83,32 @@ void GenerateCodeFromAST(LangNode_t *node, FILE *out, VariableArr *arr, int inde
                 return;
 
             case kOperationReturn:
-                PrintIndent(out, indent);
-                fprintf(out, "%s ", PrintCodeNameFromTable(kOperationReturn));
-                if (node->left) {
-                    GenExpr(node->left, out, arr);
-                }
-
-                fprintf(out, "%s\n", PrintCodeNameFromTable(kOperationThen));
+                GenReturn(out, node, arr, indent);
                 return;
 
             case kOperationWrite:
-                PrintIndent(out, indent);
-                fprintf(out, "%s(", PrintCodeNameFromTable(kOperationWrite));
-                GenExpr(node->left, out, arr);
-                fprintf(out, ")");
-                fprintf(out, "%s\n", PrintCodeNameFromTable(kOperationThen));
+                GenWrite(out, node, arr, indent);
                 return;
 
             case kOperationWriteChar:
-                PrintIndent(out, indent);
-                fprintf(out, "%s(", PrintCodeNameFromTable(kOperationWriteChar));
-                GenExpr(node->left, out, arr);
-                fprintf(out, ")");
-                fprintf(out, "%s\n", PrintCodeNameFromTable(kOperationThen));
+                GenWriteChar(out, node, arr, indent);
                 return;
 
             case kOperationRead:
-                PrintIndent(out, indent);
-                fprintf(out, "%s(", PrintCodeNameFromTable(kOperationRead));
-                GenExpr(node->left, out, arr);
-                fprintf(out, ")");
-                fprintf(out, "%s\n", PrintCodeNameFromTable(kOperationThen));
+                GenRead(out, node, arr, indent);
                 return;
 
             case kOperationHLT:
-                PrintIndent(out, indent);
-                fprintf(out, "%s%s\n", PrintCodeNameFromTable(kOperationHLT), PrintCodeNameFromTable(kOperationThen));
+                GenHlt(out, node, arr, indent);
                 return;
 
             case kOperationArrDecl:
-                PrintIndent(out, indent);
-                fprintf(out, "%s %s%s%d%s %s %d%s\n", 
-                    PrintCodeNameFromTable(kOperationArrDecl), arr->var_array[node->left->left->left->value.pos].variable_name, 
-                    PrintCodeNameFromTable(kOperationBracketOpen), (int)node->left->left->right->value.number, 
-                    PrintCodeNameFromTable(kOperationBracketClose), PrintCodeNameFromTable(kOperationIs),  
-                    (int)node->left->right->value.number, PrintCodeNameFromTable(kOperationThen));
+                GenArrDecl(out, node, arr, indent);
                 return;
 
             default:
                 break;
         }
-
         #pragma clang diagnostic pop
     }
 
@@ -125,7 +117,97 @@ void GenerateCodeFromAST(LangNode_t *node, FILE *out, VariableArr *arr, int inde
     fprintf(out, "%s\n", PrintCodeNameFromTable(kOperationThen));
 }
 
+static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr) { //
+    if (!node) return;
+    assert(out);
+    assert(arr);
+
+    switch (node->type) {
+        case kNumber:
+            fprintf(out, "%.0f", node->value.number);
+            return;
+
+        case kVariable:
+            fprintf(out, "%s", arr->var_array[node->value.pos].variable_name);
+            return;
+
+        case kOperation:
+            if (IsThatOperation(node, kOperationArrPos)) {
+                fprintf(out, "%s%s%d%s", 
+                    arr->var_array[node->left->value.pos].variable_name, PrintCodeNameFromTable(kOperationBracketOpen),
+                    (int)node->right->value.number, PrintCodeNameFromTable(kOperationBracketClose));
+                return;
+            }
+            break;
+
+        default:
+            fprintf(out, "UNKNOWN");
+            return;
+    }
+
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wswitch-enum"
+
+    switch (node->value.operation) {
+
+        case kOperationAdd:
+        case kOperationSub:
+        case kOperationMul:
+        case kOperationDiv:
+        case kOperationPow: {
+            GEN_OP(node->value.operation, GenBinaryOperation);
+            return;
+        }
+
+        case kOperationB:
+        case kOperationBE:
+        case kOperationA:
+        case kOperationAE:
+        case kOperationE:
+        case kOperationNE: {
+            GEN_OP(node->value.operation, GenCondition);
+            return;
+        }
+
+        case kOperationIs:
+            GenExpr(node->left, out, arr); //
+            fprintf(out, " %s ", PrintCodeNameFromTable(kOperationIs));
+            GenExpr(node->right, out, arr);
+            return;
+
+        case kOperationCall:
+            GenCall(out, node, arr);
+            return;
+
+        case kOperationComma:
+            GenExpr(node->left, out, arr);
+            fprintf(out, ", ");
+            GenExpr(node->right, out, arr);
+            return;
+
+        case kOperationSin:
+        case kOperationCos:
+        case kOperationTg:
+        case kOperationLn:
+        case kOperationArctg:
+        case kOperationSinh:
+        case kOperationCosh:
+        case kOperationTgh:
+        case kOperationSQRT: {
+            GEN_OP(node->value.operation, GenUnaryOperation);
+            return;
+        }
+        
+        default:
+            fprintf(out, "UNSUPPORTED_OP");
+            return;
+    }
+
+    #pragma clang diagnostic pop
+}
+
 static void GenThenChain(LangNode_t *node, FILE *out, VariableArr *arr, int indent) {
+    assert(node);
     assert(out);
     assert(arr);
 
@@ -145,12 +227,12 @@ static void GenThenChain(LangNode_t *node, FILE *out, VariableArr *arr, int inde
 }
 
 static void GenIf(LangNode_t *node, FILE *out, VariableArr *arr, int indent) {
+    assert(node);
     assert(out);
     assert(arr);
-    assert(node);
 
     LangNode_t *condition = node->left;
-    LangNode_t *body      = node->right;
+    LangNode_t *body = node->right;
 
     LangNode_t *then_branch = NULL;
     LangNode_t *else_branch = NULL;
@@ -194,7 +276,6 @@ static void GenTernary(LangNode_t *node, FILE *out, VariableArr *arr, int indent
     fprintf(out, " %s ", PrintCodeNameFromTable(kOperationIs));
 
     LangNode_t *body = node->left->right;
-
     GenExpr(body->left->right, out, arr);
 
     fprintf(out, " %s ", PrintCodeNameFromTable(kOperationTrueSeparator));
@@ -306,138 +387,142 @@ static int GetOpPrecedence(OperationTypes op) {
     #pragma clang diagnostic pop
 }
 
-static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr) { //
-    if (!node) return;
+static void GenReturn(FILE *out, LangNode_t *node, VariableArr *arr, int indent) {
+    assert(out);
+    assert(node);
+    assert(arr);
+
+    PrintIndent(out, indent);
+    fprintf(out, "%s ", PrintCodeNameFromTable(kOperationReturn));
+    if (node->left) {
+        GenExpr(node->left, out, arr);
+    }
+
+    fprintf(out, "%s\n", PrintCodeNameFromTable(kOperationThen));
+}
+
+static void GenWrite(FILE *out, LangNode_t *node, VariableArr *arr, int indent) {
+    assert(out);
+    assert(node);
+    assert(arr);
+
+    PrintIndent(out, indent);
+    fprintf(out, "%s(", PrintCodeNameFromTable(kOperationWrite));
+    GenExpr(node->left, out, arr);
+    fprintf(out, ")");
+    fprintf(out, "%s\n", PrintCodeNameFromTable(kOperationThen));
+}
+
+static void GenWriteChar(FILE *out, LangNode_t *node, VariableArr *arr, int indent) {
+    assert(out);
+    assert(node);
+    assert(arr);
+
+    PrintIndent(out, indent);
+    fprintf(out, "%s(", PrintCodeNameFromTable(kOperationWriteChar));
+    GenExpr(node->left, out, arr);
+    fprintf(out, ")");
+    fprintf(out, "%s\n", PrintCodeNameFromTable(kOperationThen));
+}
+
+static void GenRead(FILE *out, LangNode_t *node, VariableArr *arr, int indent) {
+    assert(out);
+    assert(node);
+    assert(arr);
+
+    PrintIndent(out, indent);
+    fprintf(out, "%s(", PrintCodeNameFromTable(kOperationRead));
+    GenExpr(node->left, out, arr);
+    fprintf(out, ")");
+    fprintf(out, "%s\n", PrintCodeNameFromTable(kOperationThen));
+}
+
+static void GenHlt(FILE *out, LangNode_t *node, VariableArr *arr, int indent) {
+    assert(out);
+    assert(node);
+    assert(arr);
+
+    PrintIndent(out, indent);
+    fprintf(out, "%s%s\n", PrintCodeNameFromTable(kOperationHLT), PrintCodeNameFromTable(kOperationThen));
+}
+
+static void GenArrDecl(FILE *out, LangNode_t *node, VariableArr *arr, int indent) {
+    assert(out);
+    assert(node);
+    assert(arr);
+
+    PrintIndent(out, indent);
+    fprintf(out, "%s %s%s%d%s %s %d%s\n", 
+        PrintCodeNameFromTable(kOperationArrDecl), arr->var_array[node->left->left->left->value.pos].variable_name, 
+        PrintCodeNameFromTable(kOperationBracketOpen), (int)node->left->left->right->value.number, 
+        PrintCodeNameFromTable(kOperationBracketClose), PrintCodeNameFromTable(kOperationIs),  
+        (int)node->left->right->value.number, PrintCodeNameFromTable(kOperationThen));
+}
+
+static void GenUnaryOperation(FILE *out, LangNode_t *node, VariableArr *arr, const char *name) {
+    assert(out);
+    assert(node);
+    assert(arr);
+    assert(name);
+
+    fprintf(out, "%s(", name);
+    GenExpr(node->left, out, arr);
+    fprintf(out, ")");
+}
+
+static void GenBinaryOperation(FILE *out, LangNode_t *node, VariableArr *arr, const char *name) {
+    assert(out);
+    assert(node);
+    assert(arr);
+    assert(name);
+
+    GenExprWithPrecedence(node->left, node->value.operation, out, arr);
+    fprintf(out, " %s ", name);
+
+    if (node->right && node->right->type == kOperation)  {
+        fprintf(out, "(");
+        GenExpr(node->right, out, arr);
+        fprintf(out, ")");
+    } else {
+        GenExpr(node->right, out, arr);
+    }
+}
+
+static void GenExprWithPrecedence(LangNode_t *node, OperationTypes parent_op, FILE *out, VariableArr *arr) {
+    assert(node);
     assert(out);
     assert(arr);
 
-    switch (node->type) {
-        case kNumber:
-            fprintf(out, "%.0f", node->value.number);
-            return;
-
-        case kVariable:
-            fprintf(out, "%s", arr->var_array[node->value.pos].variable_name);
-            return;
-
-        case kOperation:
-            if (IsThatOperation(node, kOperationArrPos)) {
-                fprintf(out, "%s%s%d%s", 
-                    arr->var_array[node->left->value.pos].variable_name, PrintCodeNameFromTable(kOperationBracketOpen),
-                    (int)node->right->value.number, PrintCodeNameFromTable(kOperationBracketClose));
-                return;
-            }
-            break;
-
-        default:
-            fprintf(out, "UNKNOWN");
-            return;
+    if (node && node->type == kOperation && GetOpPrecedence(node->value.operation) <= GetOpPrecedence(parent_op)) {
+        fprintf(out, "(");
+        GenExpr(node, out, arr);
+        fprintf(out, ")");
+    } else {
+        GenExpr(node, out, arr);
     }
+}
 
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Wswitch-enum"
+static void GenCondition(FILE *out, LangNode_t *node, VariableArr *arr, const char *name) {
+    assert(out);
+    assert(node);
+    assert(arr);
+    assert(name);
 
-    switch (node->value.operation) {
+    GenExpr(node->left, out, arr);
+    fprintf(out, " %s ", name);
+    GenExpr(node->right, out, arr);
+}
 
-        case kOperationAdd:
-        case kOperationSub:
-        case kOperationMul:
-        case kOperationDiv:
-        case kOperationPow: {
-            const char *op = "?";
-            if (node->value.operation == kOperationAdd) op = PrintCodeNameFromTable(kOperationAdd);
-            else if (node->value.operation == kOperationSub) op = PrintCodeNameFromTable(kOperationSub);
-            else if (node->value.operation == kOperationMul) op = PrintCodeNameFromTable(kOperationMul);
-            else if (node->value.operation == kOperationDiv) op = PrintCodeNameFromTable(kOperationDiv);
-            else if (node->value.operation == kOperationPow) op = PrintCodeNameFromTable(kOperationPow);
+static void GenCall(FILE *out, LangNode_t *node, VariableArr *arr) {
+    assert(out);
+    assert(node);
+    assert(arr);
 
-            if (node->left && node->left->type == kOperation &&
-                GetOpPrecedence(node->left->value.operation) < GetOpPrecedence(node->value.operation)) {
-                fprintf(out, "(");
-                GenExpr(node->left, out, arr);
-                fprintf(out, ")");
-                
-            } else {
-                GenExpr(node->left, out, arr);
-            }
-            fprintf(out, " %s ", op);
-            GenExpr(node->right, out, arr);
-            return;
-        }
+    GenExpr(node->left, out, arr);
+    fprintf(out, "(");
 
-        case kOperationB:
-        case kOperationBE:
-        case kOperationA:
-        case kOperationAE:
-        case kOperationE:
-        case kOperationNE: {
-            const char *op = "?";
-            if      (node->value.operation == kOperationB)  op = PrintCodeNameFromTable(kOperationB);
-            else if (node->value.operation == kOperationBE) op = PrintCodeNameFromTable(kOperationBE);
-            else if (node->value.operation == kOperationA)  op = PrintCodeNameFromTable(kOperationA);
-            else if (node->value.operation == kOperationAE) op = PrintCodeNameFromTable(kOperationAE);
-            else if (node->value.operation == kOperationE)  op = PrintCodeNameFromTable(kOperationE);
-            else if (node->value.operation == kOperationNE) op = PrintCodeNameFromTable(kOperationNE);
-
-            //fprintf(out, "(");
-            GenExpr(node->left, out, arr);
-            fprintf(out, " %s ", op);
-            GenExpr(node->right, out, arr);
-            //fprintf(out, ")");
-            return;
-        }
-
-        case kOperationIs:
-            GenExpr(node->left, out, arr);
-            fprintf(out, " %s ", PrintCodeNameFromTable(kOperationIs));
-            GenExpr(node->right, out, arr);
-            return;
-
-        case kOperationCall: //
-            GenExpr(node->left, out, arr);
-            fprintf(out, "(");
-            if (node->right)
-                GenExpr(node->right, out, arr);
-            fprintf(out, ")");
-            return;
-
-        case kOperationComma:
-            GenExpr(node->left, out, arr);
-            fprintf(out, ", ");
-            GenExpr(node->right, out, arr);
-            return;
-
-        case kOperationSin:
-        case kOperationCos:
-        case kOperationTg:
-        case kOperationLn:
-        case kOperationArctg:
-        case kOperationSinh:
-        case kOperationCosh:
-        case kOperationTgh:
-        case kOperationSQRT: {
-            const char *name = "func";
-            if      (node->value.operation == kOperationSin)   name = PrintCodeNameFromTable(kOperationSin);
-            else if (node->value.operation == kOperationCos)   name = PrintCodeNameFromTable(kOperationCos);
-            else if (node->value.operation == kOperationTg)    name = PrintCodeNameFromTable(kOperationTg);
-            else if (node->value.operation == kOperationLn)    name = PrintCodeNameFromTable(kOperationLn);
-            else if (node->value.operation == kOperationArctg) name = PrintCodeNameFromTable(kOperationArctg);
-            else if (node->value.operation == kOperationSinh)  name = PrintCodeNameFromTable(kOperationSinh);
-            else if (node->value.operation == kOperationCosh)  name = PrintCodeNameFromTable(kOperationCosh);
-            else if (node->value.operation == kOperationTgh)   name = PrintCodeNameFromTable(kOperationTgh);
-            else if (node->value.operation == kOperationSQRT)  name = PrintCodeNameFromTable(kOperationSQRT);
-
-            fprintf(out, "%s(", name);
-            GenExpr(node->left, out, arr);
-            fprintf(out, ")");
-            return;
-        }
-
-        
-        default:
-            fprintf(out, "UNSUPPORTED_OP");
-            return;
+    if (node->right) {
+        GenExpr(node->right, out, arr);
     }
-
-    #pragma clang diagnostic pop
+    fprintf(out, ")");
 }

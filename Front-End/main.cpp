@@ -17,12 +17,12 @@ int main(int argc, char *argv[]) {
 
     if (argc < 4) {
         fprintf(stderr,
-                "Usage: %s <mode> <input_file> <output_file>\n"
-                "Modes:\n"
-                "  tree-asm\n"
-                "  code-asm\n"
-                "  code-tree\n",
-                argv[0]);
+            "Usage: %s <mode> <input_file> <output_file>\n"
+            "Modes:\n"
+            "  tree-asm\n"
+            "  code-asm\n"
+            "  code-tree\n",
+            argv[0]);
         return 1;
     }
 
@@ -43,7 +43,6 @@ int main(int argc, char *argv[]) {
     Language lang_info = {&root, NULL, NULL, &Variable_Array};
 
     if (strcmp(mode, "tree-asm") == 0) {
-
         FILE_OPEN_AND_CHECK(ast_file, filename_in, "r", lang_info.arr, lang_info.root);
 
         FileInfo info = {};
@@ -72,7 +71,7 @@ int main(int argc, char *argv[]) {
 
     else if (strcmp(mode, "code-asm") == 0) {
         Stack_Info tokens = {};
-        StackCtor(&tokens, 100, stderr);
+        StackCtor(&tokens, 16, stderr);
         lang_info.tokens = &tokens;
         CHECK_ERROR_RETURN(ReadInfix(&lang_info, &dump_info, filename_in), lang_info.arr, lang_info.root, &tokens);
 
@@ -83,7 +82,6 @@ int main(int argc, char *argv[]) {
         PrintProgram(asm_file, root.root, &Variable_Array, &ram_base, &asm_info);
         fclose(asm_file);
 
-        //TreeDtor(lang_info.root);
         StackDtor(&tokens, stderr);
     }
 
@@ -93,9 +91,8 @@ int main(int argc, char *argv[]) {
         lang_info.tokens = &tokens;
         CHECK_ERROR_RETURN(ReadInfix(&lang_info, &dump_info, filename_in), lang_info.arr, lang_info.root, &tokens);
 
-
         FILE_OPEN_AND_CHECK(ast_file, filename_out, "w", lang_info.arr, lang_info.root);
-        PrintAST(root.root, ast_file, &Variable_Array, 0); //
+        PrintAST(root.root, ast_file, &Variable_Array, 0);
         fclose(ast_file);
 
         StackDtor(&tokens, stderr);
@@ -107,7 +104,6 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    //TreeDtor(lang_info.root);
     DtorVariableArray(&Variable_Array);
     return 0;
 }

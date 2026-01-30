@@ -152,11 +152,10 @@ static void WriteOperationNode(FILE *file, const LangNode_t *node) {
     assert(node);
     
     fprintf(file, DOT_INDENT "\"%p\" [label=\"{Parent: %p \\n | Addr: %p \\n | Type: %s", 
-            (void *)node, (void *)node->parent, (void *)node, GetNodeTypeString(node->type));
+        (void *)node, (void *)node->parent, (void *)node, GetNodeTypeString(node->type));
     fprintf(file, " | Value: %s | {Left: %p | Right: %p}}\" shape=Mrecord color=black fillcolor=%s, style=filled];\n", 
-            PrintExpressionType(node).operation_name, (void *)node->left, (void *)node->right, PrintExpressionType(node).color);
+        PrintExpressionType(node).operation_name, (void *)node->left, (void *)node->right, PrintExpressionType(node).color);
 }
-
 
 static void WriteUnknownNode(FILE *file, const LangNode_t *node) {
     assert(file);
@@ -201,92 +200,92 @@ static GraphOperation PrintExpressionType(const LangNode_t *node) {
     assert(node);
 
     switch (node->value.operation) {
-        case (kOperationAdd):
+        case kOperationAdd:
             return {"ADD", "plum"};
-        case (kOperationSub):
+        case kOperationSub:
             return {"SUB", "orchid3"};
-        case (kOperationMul):
+        case kOperationMul:
             return {"MUL", "salmon1"};
-        case (kOperationDiv):
+        case kOperationDiv:
             return {"DIV", "skyblue"};
-        case (kOperationPow):
+        case kOperationPow:
             return {"POW", "darkseagreen3"};
-        case (kOperationSin):
+        case kOperationSin:
             return {"SIN", "khaki3"};
-        case (kOperationSQRT):
+        case kOperationSQRT:
             return {"SQRT", "khaki3"};
-        case (kOperationCos):
+        case kOperationCos:
             return {"COS", "cornsilk3"};
-        case (kOperationTg):
+        case kOperationTg:
             return {"TAN", "tan"};
-        case (kOperationLn):
+        case kOperationLn:
             return {"LOG", "cadetblue1"};
-        case (kOperationArctg):
+        case kOperationArctg:
             return {"ARCTG", "lightgoldenrod"};
-        case (kOperationSinh):
+        case kOperationSinh:
             return {"SH", "lemonchiffon"};
-        case (kOperationCosh):
+        case kOperationCosh:
             return {"CH", "lightpink"};
-        case (kOperationTgh):
+        case kOperationTgh:
             return {"TH", "lightskyblue3"};
-        case (kOperationIs):
+        case kOperationIs:
             return {"=", "darkseagreen3"};
-        case (kOperationIf):
+        case kOperationIf:
             return {"if", "navajowhite1"};
-        case (kOperationElse):
+        case kOperationElse:
             return {"else", "navajowhite1"};
-        case (kOperationThen):
+        case kOperationThen:
             return {";", "pink"};
-        case (kOperationWhile):
+        case kOperationWhile:
             return {"while", "rosybrown"};
-        case (kOperationFunction):
+        case kOperationFunction:
             return {"func declare", "skyblue"};
-        case (kOperationCall):
+        case kOperationCall:
             return {"call func", "slategray1"};
-        case (kOperationComma):
+        case kOperationComma:
             return {",", "thistle"};
-        case (kOperationWrite):
+        case kOperationWrite:
             return {"write", "tan"};
-        case (kOperationWriteChar):
+        case kOperationWriteChar:
             return {"write char", "cadetblue1"};
-        case (kOperationRead):
+        case kOperationRead:
             return {"read", " tan"};
-        case (kOperationReturn):
+        case kOperationReturn:
             return {"return", "tan"};
-        case (kOperationB):
+        case kOperationB:
             return {"B", "lightgoldenrod"};
-        case (kOperationBE):
+        case kOperationBE:
             return {"BEQ", "lightgoldenrod"};
-        case (kOperationA):
+        case kOperationA:
             return {"A", "lightgoldenrod"};
-        case (kOperationAE):
+        case kOperationAE:
             return {"AEQ", "lightgoldenrod"};
-        case (kOperationE):
+        case kOperationE:
             return {"E", "lightgoldenrod"};
-        case (kOperationNE):
+        case kOperationNE:
             return {"NE", "lightgoldenrod"};
-        case (kOperationTernary):
+        case kOperationTernary:
             return {"ternary", "hotpink2"};
-        case (kOperationHLT):
+        case kOperationHLT:
             return {"HLT", "lightsalmon3"};
-        case (kOperationArrDecl):
+        case kOperationArrDecl:
             return {"arr declare", "lightgoldenrod3"};
-        case (kOperationArrPos):
+        case kOperationArrPos:
             return {"arr info", "lightsteelblue"};
-        case (kOperationCallAddr):
+        case kOperationCallAddr:
             return {"call addr", "mediumseagreen"};
-        case (kOperationGetAddr):
+        case kOperationGetAddr:
             return {"get addr", "x11maroon"};
 
-        case (kOperationTrueSeparator):
-        case (kOperationFalseSeparator):
-        case (kOperationParOpen):
-        case (kOperationParClose):
-        case (kOperationBraceOpen):
-        case (kOperationBraceClose):
-        case (kOperationBracketOpen):
-        case (kOperationBracketClose):
-        case (kOperationNone):
+        case kOperationTrueSeparator:
+        case kOperationFalseSeparator:
+        case kOperationParOpen:
+        case kOperationParClose:
+        case kOperationBraceOpen:
+        case kOperationBraceClose:
+        case kOperationBracketOpen:
+        case kOperationBracketClose:
+        case kOperationNone:
         default: return {"red", "red"};
     }
 }

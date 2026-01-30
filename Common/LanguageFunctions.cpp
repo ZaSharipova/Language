@@ -7,7 +7,7 @@
 
 #include <stdio.h>
 #include <assert.h>
-#include <cstdlib>
+#include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 
@@ -51,7 +51,9 @@ DifErrors NodeCtor(LangNode_t **node, Value *value) {
 
 DifErrors DeleteNode(LangRoot *root, LangNode_t *node) {
     assert(root);
-    if (!node) return kSuccess;
+    if (!node) {
+        return kSuccess;
+    }
 
     root->size--;
 
@@ -165,23 +167,26 @@ LangNode_t *NewNode(Language *lang_info, DifTypes type, Value value, LangNode_t 
     new_node->type = type;
 
     switch (type) {
-    case kNumber:
-        new_node->value.number = value.number;
-        break;
-    case kVariable: {
-        new_node->value = value;
-    
-        break;
-    }
-    case kOperation:
-        new_node->value.operation = value.operation;
-        new_node->left = left;
-        new_node->right = right;
+        case kNumber:
+            new_node->value.number = value.number;
+            break;
+        case kVariable: {
+            new_node->value = value;
+            break;
+        }
+        case kOperation:
+            new_node->value.operation = value.operation;
+            new_node->left = left;
+            new_node->right = right;
 
-        if (left)  left->parent  = new_node;
-        if (right) right->parent = new_node;
+            if (left) {
+                left->parent  = new_node;
+            }
+            if (right) {
+                right->parent = new_node;
+            }
 
-        break;
+            break;
     }
 
     if (StackPush(lang_info->tokens, new_node, stderr) != kSuccess) {
@@ -233,6 +238,8 @@ LangNode_t *NewVariable(Language *lang_info, char *variable, VariableArr *Variab
 }
 
 static void PrintIndent(FILE *file, int indent) {
+    assert(file);
+    
     for (int i = 0; i < indent; i++) {
         fputc('\t', file);
     }

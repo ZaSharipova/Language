@@ -21,14 +21,16 @@ DifErrors StackCtor(Stack_Info *stk, ssize_t capacity, FILE *open_log_file) {
     stk->la_size = 0;
 
     stk->data = (LangNode_t **) calloc ((size_t)capacity, sizeof(LangNode_t *));
-    if (!stk->data)
+    if (!stk->data) {
         return kNoMemory;
+    }
 
     return kSuccess;
 }
 
 DifErrors StackPush(Stack_Info *stk, LangNode_t *value, FILE *open_log_file) {
     assert(stk);
+    assert(value);
     assert(open_log_file);
 
     Realloc_Mode realloc_type = CheckSize(stk->size, &stk->capacity);
@@ -89,6 +91,7 @@ DifErrors StackRealloc(Stack_Info *stk, FILE *open_log_file, Realloc_Mode reallo
     } 
 
     stk->data = new_data;
+
     return kSuccess;
 }
 
@@ -100,10 +103,7 @@ DifErrors StackDtor(Stack_Info *stk, FILE *open_log_file) {
         LangNode_t **nodes = (LangNode_t**)stk->data;
         
         for (size_t i = 0; i < (size_t)stk->size; ++i) {
-            if (nodes[i] != NULL) {
-                // if (nodes[i]->type == kVariable) {
-                //     free(nodes[i])
-                // }
+            if (nodes[i]) {
                 free(nodes[i]);
                 nodes[i] = NULL;
             }
@@ -126,6 +126,5 @@ LangNode_t *GetStackElem(Stack_Info *stk, size_t pos) {
         return NULL;
     }
 
-    //fprintf(stderr, "UUUU %zu\n", stk->data[pos]->type);
     return stk->data[pos];
 }

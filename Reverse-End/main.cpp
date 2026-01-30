@@ -27,9 +27,7 @@ int main(int argc, char *argv[]) {
     LangRootCtor(&root);
 
     CHECK_ERROR_RETURN(InitArrOfVariable(&Variable_Array, 10), &Variable_Array, &root);
-
     INIT_DUMP_INFO(dump_info);
-    
     FILE_OPEN_AND_CHECK(ast_file, tree_file, "r");
 
     FileInfo info = {};
