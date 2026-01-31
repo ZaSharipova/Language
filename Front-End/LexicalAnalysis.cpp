@@ -19,7 +19,7 @@ static bool ParseNumberToken(Language *lang_info, const char **string, size_t *c
 static bool ParseStringToken(Language *lang_info, const char **string, size_t *cnt);
 
 #define NEWN(num) NewNode(lang_info, kNumber, ((Value){ .number = (num)}), NULL, NULL)
-#define NEWV(name) NewVariable(lang_info, name, Variable_Array)
+#define NEWV(name) NewVariable(lang_info, name)
 #define NEWOP(op, left, right) NewNode(lang_info, kOperation, (Value){ .operation = (op)}, left, right) 
 
 #define CodeNameFromTable(type) NAME_TYPES_TABLE[type].name_in_lang
@@ -48,11 +48,9 @@ static bool ParseStringToken(Language *lang_info, const char **string, size_t *c
         continue;                                                         \
     }
 
-size_t CheckAndReturn(Language *lang_info, const char **string, Stack_Info *tokens, VariableArr *Variable_Array) {
+size_t CheckAndReturn(Language *lang_info, const char **string) {
     assert(lang_info);
     assert(string);
-    assert(tokens);
-    assert(Variable_Array);
 
     size_t cnt = 0;
     LangNode_t *node = NULL;
@@ -125,7 +123,7 @@ size_t CheckAndReturn(Language *lang_info, const char **string, Stack_Info *toke
     // for (size_t i = 0; i < Variable_Array->size; i++) {
     //     fprintf(stderr, "%s %d\n\n", Variable_Array->var_array[i].variable_name, Variable_Array->var_array[i].variable_value);
     // }
-    tokens->la_size = cnt;
+    lang_info->tokens->la_size = cnt;
     return cnt;
 }
 
@@ -206,7 +204,7 @@ static bool ParseNumberToken(Language *lang_info, const char **string, size_t *c
     do {
         value = 10 * value + (**string - '0');
         (*string)++;
-        
+
     } while ('0' <= **string && **string <= '9');
 
     if (has_minus) {
@@ -226,8 +224,6 @@ static bool ParseStringToken(Language *lang_info, const char **string, size_t *c
     assert(lang_info);
     assert(string);
     assert(cnt);
-    
-    VariableArr *Variable_Array = lang_info->arr;
 
     if (!(isalnum(**string) || **string == '_'))
         return false;

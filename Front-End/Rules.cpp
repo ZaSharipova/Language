@@ -81,14 +81,14 @@ DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filena
     assert(dump_info);
     assert(filename);
 
-    FILE_OPEN_AND_CHECK(file, filename, "r");
+    FILE_OPEN_AND_CHECK(file, filename, "r", NULL, NULL, NULL);
 
     FileInfo Info = {};
     DoBufRead(file, filename, &Info);
     fclose(file);
 
     const char *temp_buf_ptr = Info.buf_ptr;
-    CheckAndReturn(lang_info, &temp_buf_ptr, lang_info->tokens, lang_info->arr);
+    CheckAndReturn(lang_info, &temp_buf_ptr);
     free(Info.buf_ptr);
 
     size_t tokens_pos = 0;
@@ -264,7 +264,7 @@ LangNode_t *GetOp(Language *lang_info, LangNode_t *func_name) {
 }
 
 #define NEWN(num) NewNode(lang_info, kNumber, ((Value){ .number = (num)}), NULL, NULL)
-#define NEWV(name) NewVariable(lang_info, name, Variable_Array)
+#define NEWV(name) NewVariable(lang_info, name)
 #define ADD_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationAdd}, left, right)
 #define SUB_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationSub}, left, right)
 #define MUL_(left, right) NewNode(root, kOperation, (Value){ .operation = kOperationMul}, left, right)
@@ -842,7 +842,6 @@ static LangNode_t *GetTernary(Language *lang_info, LangNode_t *func_name) {
     assert(func_name);
     
     size_t save_pos = *lang_info->tokens_pos;
-    VariableArr *Variable_Array = lang_info->arr;
     
     LangNode_t *assign_op = GetAssignmentLValue(lang_info, func_name);
 

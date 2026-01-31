@@ -55,18 +55,18 @@ DifErrors ParseNodeFromString(const char *buffer, size_t *pos, LangNode_t *paren
     }
 
     LangNode_t *left = NULL;
-    CHECK_ERROR_RETURN(ParseNodeFromString(buffer, pos, node, &left, Variable_Array));
+    CHECK_ERROR_RETURN(ParseNodeFromString(buffer, pos, node, &left, Variable_Array), NULL, NULL, NULL);
     node->left = left;
 
     LangNode_t *right = NULL;
-    CHECK_ERROR_RETURN(ParseNodeFromString(buffer, pos, node, &right, Variable_Array));
+    CHECK_ERROR_RETURN(ParseNodeFromString(buffer, pos, node, &right, Variable_Array), NULL, NULL, NULL);
     node->right = right;
 
     if (node->type == kOperation && node->value.operation == kOperationFunction) {
         ComputeFuncSizes(node, Variable_Array);
     }
 
-    CHECK_ERROR_RETURN(ExpectClosingParen(buffer, pos));
+    CHECK_ERROR_RETURN(ExpectClosingParen(buffer, pos), NULL, NULL, NULL);
 
     *node_to_add = node;
     return kSuccess;

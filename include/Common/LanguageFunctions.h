@@ -14,7 +14,7 @@ LangNode_t *NewNode(Language *lang_info, DifTypes type, Value value, LangNode_t 
 DifErrors InitArrOfVariable(VariableArr *arr, size_t capacity);
 DifErrors ResizeArray(VariableArr *arr);
 DifErrors DtorVariableArray(VariableArr *arr);
-LangNode_t *NewVariable(Language *lang_info, char *variable, VariableArr *VariableArr);
+LangNode_t *NewVariable(Language *lang_info, char *variable);
 
 DifErrors PrintAST(LangNode_t *node, FILE *file, VariableArr *arr, int indent);
 

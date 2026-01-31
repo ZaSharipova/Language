@@ -8,6 +8,8 @@
 
 #include "Common/Enums.h"
 #include "Common/Structs.h"
+#include "Common/StackFunctions.h"
+#include "Common/LanguageFunctions.h"
 
 bool IsThatOperation(LangNode_t *node, OperationTypes type) {
     if (node && node->type == kOperation && node->value.operation == type) {
@@ -70,4 +72,10 @@ void DoBufRead(FILE *file, const char *filename, FileInfo *Info) {
 
     Info->buf_ptr = ReadToBuf(filename, file, Info->filesize);
     assert(Info->buf_ptr != NULL);
+}
+
+void CleanupOnFileError(void *arg1, void *arg2, void *arg3) {
+    if (arg1 != NULL) StackDtor((Stack_Info *)arg1, stderr);
+    if (arg2 != NULL) DtorVariableArray((VariableArr *)arg2);
+    if (arg3 != NULL) TreeDtor((LangRoot *)arg3);
 }

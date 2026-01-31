@@ -6,31 +6,27 @@
 
 #include "Common/Enums.h"
 #include "Common/Structs.h"
+#include "Common/CommonFunctions.h"
 
+void CleanupOnFileError(void *arg1, void *arg2, void *arg3);
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Warray-bounds"
-#define CHECK_ERROR_RETURN(cond, ...)                                                         \
+#define CHECK_ERROR_RETURN(cond, arg1, arg2, arg3)                                            \
     do {                                                                                      \
         err = (cond);                                                                         \
         if (err != kSuccess) {                                                                \
-            void *args[] = {__VA_ARGS__};                                                     \
-            int arg_count = sizeof(args) / sizeof(args[0]);                                   \
-            if (arg_count >= 1 && args[0] != NULL) DtorVariableArray((VariableArr *)args[0]); \
-            if (arg_count >= 2 && args[1] != NULL) TreeDtor((LangRoot *)args[1]);             \
+            CleanupOnFileError(arg1, arg2, arg3);                                             \
             return err;                                                                       \
         }                                                                                     \
     } while (0)
 #pragma GCC diagnostic pop
 
-#define FILE_OPEN_AND_CHECK(file, filename, mode, ...) \
-    FILE *file = fopen(filename, mode);                                                   \
-    if (!file) {                                                                          \
-        perror("Error opening file");                                                     \
-        void *args[] = {__VA_ARGS__};                                                     \
-        int arg_count = sizeof(args)/sizeof(args[0]);                                     \
-        if (arg_count >= 1 && args[0] != NULL) DtorVariableArray((VariableArr *)args[0]); \
-        if (arg_count >= 2 && args[1] != NULL) TreeDtor((LangRoot *)args[1]);             \
-        return kErrorOpening;                                                             \
+#define FILE_OPEN_AND_CHECK(file, filename, mode, arg1, arg2, arg3)       \
+    FILE *file = fopen(filename, mode);                                   \
+    if (!file) {                                                          \
+        perror("Error opening file");                                     \
+        CleanupOnFileError(arg1, arg2, arg3);                             \
+        return kErrorOpening;                                             \
     }
 
 #define INIT_DUMP_INFO(name)                                       \

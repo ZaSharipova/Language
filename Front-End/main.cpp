@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
 
     DifErrors err = kSuccess;
     VariableArr Variable_Array = {};
-    CHECK_ERROR_RETURN(InitArrOfVariable(&Variable_Array, 16), &Variable_Array, &root);
+    CHECK_ERROR_RETURN(InitArrOfVariable(&Variable_Array, 16), NULL, &Variable_Array, &root);
 
     INIT_DUMP_INFO(dump_info);
     dump_info.tree = &root;
@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
     Language lang_info = {&root, NULL, NULL, &Variable_Array};
 
     if (strcmp(mode, "tree-asm") == 0) {
-        FILE_OPEN_AND_CHECK(ast_file, filename_in, "r", lang_info.arr, lang_info.root);
+        FILE_OPEN_AND_CHECK(ast_file, filename_in, "r", NULL, lang_info.arr, lang_info.root);
 
         FileInfo info = {};
         DoBufRead(ast_file, filename_in, &info);
@@ -52,14 +52,14 @@ int main(int argc, char *argv[]) {
         size_t pos = 0;
         LangNode_t *tree = NULL;
 
-        CHECK_ERROR_RETURN(ParseNodeFromString(info.buf_ptr, &pos, NULL, &tree, &Variable_Array), lang_info.arr, lang_info.root);
+        CHECK_ERROR_RETURN(ParseNodeFromString(info.buf_ptr, &pos, NULL, &tree, &Variable_Array), NULL, lang_info.arr, lang_info.root);
 
         lang_info.root->root = tree;
         dump_info.tree = lang_info.root;
 
         DoTreeInGraphviz(lang_info.root->root, &dump_info, &Variable_Array);
 
-        FILE_OPEN_AND_CHECK(asm_file, filename_out, "w", &Variable_Array, lang_info.root->root, lang_info.arr, lang_info.root);
+        FILE_OPEN_AND_CHECK(asm_file, filename_out, "w", NULL, lang_info.arr, lang_info.root);
 
         int ram_base = 0;
         AsmInfo asm_info = {};
@@ -75,7 +75,7 @@ int main(int argc, char *argv[]) {
         lang_info.tokens = &tokens;
         CHECK_ERROR_RETURN(ReadInfix(&lang_info, &dump_info, filename_in), lang_info.arr, lang_info.root, &tokens);
 
-        FILE_OPEN_AND_CHECK(asm_file, filename_out, "w", lang_info.arr, lang_info.root);
+        FILE_OPEN_AND_CHECK(asm_file, filename_out, "w", NULL, lang_info.arr, lang_info.root);
 
         int ram_base = 0;
         AsmInfo asm_info = {};
@@ -89,9 +89,9 @@ int main(int argc, char *argv[]) {
         Stack_Info tokens = {};
         StackCtor(&tokens, 1, stderr);
         lang_info.tokens = &tokens;
-        CHECK_ERROR_RETURN(ReadInfix(&lang_info, &dump_info, filename_in), lang_info.arr, lang_info.root, &tokens);
+        CHECK_ERROR_RETURN(ReadInfix(&lang_info, &dump_info, filename_in), &tokens, lang_info.arr, NULL);
 
-        FILE_OPEN_AND_CHECK(ast_file, filename_out, "w", lang_info.arr, lang_info.root);
+        FILE_OPEN_AND_CHECK(ast_file, filename_out, "w", &tokens, lang_info.arr, NULL);
         PrintAST(root.root, ast_file, &Variable_Array, 0);
         fclose(ast_file);
 

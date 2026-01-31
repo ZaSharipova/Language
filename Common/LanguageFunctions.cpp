@@ -196,11 +196,11 @@ LangNode_t *NewNode(Language *lang_info, DifTypes type, Value value, LangNode_t 
     return new_node;
 }
 
-LangNode_t *NewVariable(Language *lang_info, char *variable, VariableArr *VariableArr) {
+LangNode_t *NewVariable(Language *lang_info, char *variable) {
     assert(lang_info);
     assert(variable);
-    assert(VariableArr);
 
+    VariableArr *VariableArr = lang_info->arr;
     LangNode_t *new_node = NULL;
     NodeCtor(&new_node, NULL);
 
@@ -239,7 +239,7 @@ LangNode_t *NewVariable(Language *lang_info, char *variable, VariableArr *Variab
 
 static void PrintIndent(FILE *file, int indent) {
     assert(file);
-    
+
     for (int i = 0; i < indent; i++) {
         fputc('\t', file);
     }
