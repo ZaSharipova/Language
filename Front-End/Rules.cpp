@@ -57,6 +57,7 @@ static LangNode_t *GetPrintf(Language *lang_info);
 static LangNode_t *GetScanf(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetUnaryFunc(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetHLT(Language *lang_info);
+static LangNode_t *GetDraw(Language *lang_info);
 
 static LangNode_t *GetExpression(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetTerm(Language *lang_info, LangNode_t *func_name);
@@ -234,6 +235,7 @@ LangNode_t *GetOp(Language *lang_info, LangNode_t *func_name) {
     TRY_PARSE_RETURN(stmt, GetWhile (lang_info, func_name));
     TRY_PARSE_RETURN(stmt, GetIf    (lang_info, func_name));
     TRY_PARSE_RETURN(stmt, GetHLT   (lang_info));
+    TRY_PARSE_RETURN(stmt, GetDraw  (lang_info));
 
     LangNode_t *seq = NULL;
 
@@ -986,6 +988,18 @@ static LangNode_t *GetHLT(Language *lang_info) {
     return name;
 }
 
+static LangNode_t *GetDraw(Language *lang_info) {
+    assert(lang_info);
+
+    size_t save_pos = *(lang_info->tokens_pos);
+    LangNode_t *name = NULL, *tok = NULL;
+
+    CHECK_EXPECTED_TOKEN(name, IsThatOperation(name, kOperationDraw), );
+    CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationThen), );
+
+    return name;
+}
+
 static LangNode_t *GetAssignmentLValue(Language *lang_info, LangNode_t *func_name) {
     assert(lang_info);
     assert(func_name);
@@ -1044,8 +1058,8 @@ static LangNode_t *GetArrayAssignment(Language *lang_info, LangNode_t *func_name
     LangNode_t *bracket_node = NULL;
     CHECK_EXPECTED_TOKEN(bracket_node, IsThatOperation(bracket_node, kOperationBracketOpen), );
 
-    LangNode_t *number = GetNumber(lang_info);
-    if (!number) {
+    LangNode_t *pos_node = GetTerm(lang_info, func_name);;
+    if (!pos_node) {
         fprintf(stderr, "SYNTAX_ERROR_ARRAY: no position or size of array.\n");
         return NULL;
     }
@@ -1063,15 +1077,15 @@ static LangNode_t *GetArrayAssignment(Language *lang_info, LangNode_t *func_name
         return NULL;
     }
     
-    is_node->left = NEWOP(kOperationArrPos, maybe_var, number);
+    is_node->left = NEWOP(kOperationArrPos, maybe_var, pos_node);
 
     if (IsThatOperation(declare_node, kOperationArrDecl)) {
         declare_node->left = is_node;
         is_node->parent = declare_node;
 
         is_node->right = rvalue_node; // TODO: doesn't have to be only 0
-        lang_info->arr->var_array[maybe_var->value.pos].variable_value = (int)number->value.number;
-        lang_info->arr->var_array[func_name->value.pos].variable_value += (int)number->value.number; // TODO
+        lang_info->arr->var_array[maybe_var->value.pos].variable_value = (int)pos_node->value.number;
+        lang_info->arr->var_array[func_name->value.pos].variable_value += (int)pos_node->value.number; // TODO
 
         return declare_node;
     }
@@ -1079,7 +1093,7 @@ static LangNode_t *GetArrayAssignment(Language *lang_info, LangNode_t *func_name
     rvalue_node->parent = is_node;
 
     if (lang_info->arr->var_array[maybe_var->value.pos].variable_value == POISON 
-        || lang_info->arr->var_array[maybe_var->value.pos].variable_value <= number->value.number) {
+        || lang_info->arr->var_array[maybe_var->value.pos].variable_value <= pos_node->value.number) {
             fprintf(stderr, "SYNTAX_ERROR_ARRAY: usage of undeclared array or index out of range.\n");
         return NULL;
     }

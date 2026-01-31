@@ -287,6 +287,10 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
                     break;
                 }
 
+                case kOperationDraw:
+                    FPRINTF("DRAW");
+                    break;
+
                 default:
                     PrintExpr(file, stmt, arr, ram_base, param_count, asm_info, indent);
                     break;

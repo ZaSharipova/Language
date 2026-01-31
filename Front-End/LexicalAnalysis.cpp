@@ -103,6 +103,7 @@ size_t CheckAndReturn(Language *lang_info, const char **string) {
         CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationFunction),  kOperationFunction);
         CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationReturn),    kOperationReturn);
         CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationHLT),       kOperationHLT);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationDraw),      kOperationDraw);
 
         if (ParseNumberToken(lang_info, string, &cnt)) {
             continue;

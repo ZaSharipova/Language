@@ -79,6 +79,8 @@ enum OperationTypes {
     kOperationCallAddr          = 44,
     kOperationGetAddr           = 45,
 
+    kOperationDraw              = 46,
+
     kOperationNone              = -1,
 };
 

@@ -154,6 +154,8 @@ static const LangTable NAME_TYPES_TABLE [] = {
     {"&",           "&",                kOperationCallAddr},
     {"$",           "$",                kOperationGetAddr},
 
+    {"draw",        "draw",             kOperationDraw},
+
     {"",             "",                kOperationNone},
 };
 static const size_t OP_TABLE_SIZE = sizeof(NAME_TYPES_TABLE) / sizeof(NAME_TYPES_TABLE[0]);
