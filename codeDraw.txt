@@ -7,15 +7,23 @@ incantatio adepio_maximus() |>
     augurio(centrum_x)~~
     augurio(centrum_y)~~
 
+    check_appr(radius)~~
+    
+    radius_quadratus magica radius multiplico radius~~
+    
+    check_and_print(centrum_x, centrum_y, radius_quadratus)~~
+<|
+
+incantatio check_appr(radius) |>
     si (radius superior 16) |>
         printc(18)~~
         printc(81)~~
         printc(81)~~
         exit~~
     <|
-    
-    radius_quadratus magica radius multiplico radius~~
-    
+<|
+
+incantatio check_and_print(centrum_x, centrum_y, radius_quadratus) |>
     y magica 0~~
     perpetuum (y inferior 32) |>
         x magica 0~~
@@ -33,6 +41,7 @@ incantatio adepio_maximus() |>
             <|
             x magica x augeo 1~~
         <|
+
         printc(10)~~
         y magica y augeo 1~~
     <|
