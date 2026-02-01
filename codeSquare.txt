@@ -11,7 +11,7 @@ incantatio adepio_maximus() |>
     d magica discriminant(a, b, c)~~
     findroot1(a, b, d)~~
 
-    si (d != 0) |> 
+    si (d non_aequalis 0) |> 
         findroot2(a, b, d)~~
     <|
 <|

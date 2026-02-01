@@ -71,8 +71,8 @@ size_t CheckAndReturn(Language *lang_info, const char **string) {
 
         CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationBE),   kOperationBE);
         CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationAE),   kOperationAE);
-        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationE),    kOperationE);
         CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationNE),   kOperationNE);
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationE),    kOperationE);
 
         CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationB),    kOperationB);
         CHECK_STROKE_AND_PUSH(CodeNameFromTable(kOperationA),    kOperationA);

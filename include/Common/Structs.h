@@ -127,7 +127,7 @@ static const LangTable NAME_TYPES_TABLE [] = {
     {"superior",     ">",               kOperationA},
     {"superior_aut", ">=",              kOperationAE},
     {"aequalis",     "==",              kOperationE},
-    {"!=",           "!=",              kOperationNE},
+    {"non_aequalis", "!=",              kOperationNE},
 
     {"sqrt",         "sqrt",            kOperationSQRT},
 

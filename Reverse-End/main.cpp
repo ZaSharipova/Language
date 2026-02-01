@@ -26,9 +26,9 @@ int main(int argc, char *argv[]) {
     LangRoot root = {};
     LangRootCtor(&root);
 
-    CHECK_ERROR_RETURN(InitArrOfVariable(&Variable_Array, 10), &Variable_Array, &root);
+    CHECK_ERROR_RETURN(InitArrOfVariable(&Variable_Array, 10), &Variable_Array, &root, NULL);
     INIT_DUMP_INFO(dump_info);
-    FILE_OPEN_AND_CHECK(ast_file, tree_file, "r");
+    FILE_OPEN_AND_CHECK(ast_file, tree_file, "r", NULL, NULL, NULL);
 
     FileInfo info = {};
     DoBufRead(ast_file, tree_file, &info);
@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
     size_t pos = 0;
     LangNode_t *tree = NULL;
 
-    CHECK_ERROR_RETURN(ParseNodeFromString(info.buf_ptr, &pos, NULL, &tree, &Variable_Array), &Variable_Array, &tree);
+    CHECK_ERROR_RETURN(ParseNodeFromString(info.buf_ptr, &pos, NULL, &tree, &Variable_Array), &Variable_Array, &tree, NULL);
 
     // fprintf(stderr, "%zu\n\n", variable_array.size);
     // for (size_t i = 0; i < variable_array.size; i++) {
@@ -50,7 +50,7 @@ int main(int argc, char *argv[]) {
 
     DoTreeInGraphviz(root.root, &dump_info, &Variable_Array);
 
-    FILE_OPEN_AND_CHECK(code_out, code_file, "w", &Variable_Array, &root);
+    FILE_OPEN_AND_CHECK(code_out, code_file, "w", &Variable_Array, &root, NULL);
     GenerateCodeFromAST(root.root, code_out, &Variable_Array, 0);
     fclose(code_out);
     
