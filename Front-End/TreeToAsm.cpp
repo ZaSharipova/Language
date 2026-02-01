@@ -233,7 +233,7 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
                 case kOperationCallAddr:
                     PrintAddressOf(file, stmt->left, arr, param_count, asm_info, indent);
                     break;
-
+                    
                 case kOperationGetAddr:
                     PrintDereference(file, stmt->left, arr, param_count, asm_info, indent);
                     break;
@@ -244,6 +244,21 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
                     break;
 
                 case kOperationIs:
+                    if (IsThatOperation(stmt->left, kOperationArrPos)) {
+
+                        PrintExpr(file, stmt->right, arr, ram_base, param_count, asm_info, indent);
+
+                        FPRINTF("PUSHR RAX");
+                        FPRINTF("PUSH %d", (-1) * param_count + arr->var_array[stmt->left->left->value.pos].pos_in_code);
+                        PrintExpr(file, stmt->left->right, arr, ram_base, param_count, asm_info, indent);
+                        FPRINTF("ADD");
+                        FPRINTF("ADD");
+                        FPRINTF("POPR RCX");
+
+
+                        FPRINTF("POPM [RCX]");
+                        break;
+                    }
                     PrintExpr(file, stmt->right, arr, ram_base, param_count, asm_info, indent);
                     if (IsThatOperation(stmt->left, kOperationGetAddr)) {
                         PrintAddressAssignment(file, stmt, arr, ram_base, param_count, asm_info, indent);
@@ -354,13 +369,13 @@ static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_ba
                     break;
 
                 case kOperationArrPos:
-                    FPRINTF("PUSH 0");
                     FPRINTF("PUSHR RAX");
-                    FPRINTF("PUSH %d", (-1) * param_count + arr->var_array[expr->value.pos].pos_in_code + (int)expr->right->value.number);
-
+                    FPRINTF("PUSH %d", (-1) * param_count + arr->var_array[expr->left->value.pos].pos_in_code);
+                    //FPRINTF("PUSH %d", (-1) * param_count + FindVarPos(arr, expr->right, asm_info));
+                    PrintExpr(file, expr->right, arr, ram_base, param_count, asm_info, indent);
                     FPRINTF("ADD");
                     FPRINTF("POPR RCX");
-                    FPRINTF("POPM [RCX]\n");
+                    FPRINTF("PUSHM [RCX]\n"); 
 
                 default:
                     break;
@@ -471,7 +486,7 @@ static void PrintArrDeclare(FILE *file, LangNode_t *stmt, VariableArr *arr, int 
     assert(arr);
     assert(asm_info);
 
-    arr->var_array[stmt->value.pos].pos_in_code = asm_info->counter;
+    arr->var_array[stmt->left->left->left->value.pos].pos_in_code = asm_info->counter;
 
     for (size_t i = 0; i < stmt->left->left->right->value.number; i++) {
         FPRINTF("PUSH 0");

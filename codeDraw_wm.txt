@@ -33,7 +33,7 @@ incantatio check_and_print(centrum_x, centrum_y, radius_quadratus) |>
             dx magica x minuo centrum_x~~
             dy magica y minuo centrum_y~~
             distantia_quadrata magica (dx multiplico dx) augeo (dy multiplico dy)~~
-            t magica 32 multiplico x augeo y augeo 3~~
+            t magica 32 multiplico y augeo x~~
             si (distantia_quadrata inferior_aut radius_quadratus) |>
                 array[t] magica 1~~
             <| altius |>
