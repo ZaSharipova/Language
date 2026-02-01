@@ -148,7 +148,7 @@ static const LangTable NAME_TYPES_TABLE [] = {
     {"[",            "[",               kOperationBracketOpen},
     {"]",            "]",               kOperationBracketClose},
 
-    {"",             "NULL",            kOperationArrPos},
+    {"",             "arr pos",         kOperationArrPos},
     {"voco",         "declare array",   kOperationArrDecl},
 
     {"&",           "&",                kOperationCallAddr},

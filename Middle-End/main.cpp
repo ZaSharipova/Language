@@ -23,13 +23,13 @@ int main(int argc, char *argv[]) {
 
     VariableArr Variable_Array = {};
     DifErrors err = kSuccess;
-    CHECK_ERROR_RETURN(InitArrOfVariable(&Variable_Array, 16), &Variable_Array, &root);
+    CHECK_ERROR_RETURN(InitArrOfVariable(&Variable_Array, 16), &Variable_Array, &root, NULL);
 
     INIT_DUMP_INFO(dump_info);
     dump_info.tree = &root;
     //Language lang_info = {&root, NULL, NULL, &Variable_Array};
 
-    FILE_OPEN_AND_CHECK(ast_file_read, tree_file, "r", &Variable_Array, &root);
+    FILE_OPEN_AND_CHECK(ast_file_read, tree_file, "r", &Variable_Array, &root, NULL);
     
     FileInfo info = {};
     DoBufRead(ast_file_read, tree_file, &info);
@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
     
     LangNode_t *root_node = NULL;
     size_t pos = 0;
-    CHECK_ERROR_RETURN(ParseNodeFromString(info.buf_ptr, &pos, NULL, &root_node, &Variable_Array), &Variable_Array, &root);
+    CHECK_ERROR_RETURN(ParseNodeFromString(info.buf_ptr, &pos, NULL, &root_node, &Variable_Array), &Variable_Array, &root, NULL);
     root.root = root_node;
     free(info.buf_ptr);
     
@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
     Language lang_info = {&root, NULL, NULL, &Variable_Array};
     root.root = OptimiseTree(&lang_info, root.root, &Variable_Array);
     
-    FILE_OPEN_AND_CHECK(ast_file_write, tree_file, "w", &Variable_Array, &root);
+    FILE_OPEN_AND_CHECK(ast_file_write, tree_file, "w", &Variable_Array, &root, NULL);
     PrintAST(root.root, ast_file_write, &Variable_Array, 0);
     fclose(ast_file_write);
     

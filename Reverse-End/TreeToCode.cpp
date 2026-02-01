@@ -29,6 +29,7 @@ static void GenWrite(FILE *out, LangNode_t *node, VariableArr *arr, int indent);
 static void GenWriteChar(FILE *out, LangNode_t *node, VariableArr *arr, int indent);
 static void GenRead(FILE *out, LangNode_t *node, VariableArr *arr, int indent);
 static void GenHlt(FILE *out, LangNode_t *node, VariableArr *arr, int indent);
+static void GenDraw(FILE *out, LangNode_t *node, VariableArr *arr, int indent);
 static void GenArrDecl(FILE *out, LangNode_t *node, VariableArr *arr, int indent);
 
 static void GenUnaryOperation(FILE *out, LangNode_t *node, VariableArr *arr, const char *name);
@@ -100,6 +101,10 @@ void GenerateCodeFromAST(LangNode_t *node, FILE *out, VariableArr *arr, int inde
 
             case kOperationHLT:
                 GenHlt(out, node, arr, indent);
+                return;
+
+            case kOperationDraw:
+                GenDraw(out, node, arr, indent);
                 return;
 
             case kOperationArrDecl:
@@ -444,6 +449,15 @@ static void GenHlt(FILE *out, LangNode_t *node, VariableArr *arr, int indent) {
 
     PrintIndent(out, indent);
     fprintf(out, "%s%s\n", PrintCodeNameFromTable(kOperationHLT), PrintCodeNameFromTable(kOperationThen));
+}
+
+static void GenDraw(FILE *out, LangNode_t *node, VariableArr *arr, int indent) {
+    assert(out);
+    assert(node);
+    assert(arr);
+
+    PrintIndent(out, indent);
+    fprintf(out, "%s%s\n", PrintCodeNameFromTable(kOperationDraw), PrintCodeNameFromTable(kOperationThen));
 }
 
 static void GenArrDecl(FILE *out, LangNode_t *node, VariableArr *arr, int indent) {

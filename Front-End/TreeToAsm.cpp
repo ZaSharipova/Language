@@ -12,7 +12,7 @@
 
 #define FPRINTF(fmt, ...)                                       \
     do {                                                        \
-        for (int k = 0; k < indent; k++) fprintf(file, "\t"); \
+        for (int k = 0; k < indent; k++) fprintf(file, "\t");   \
         fprintf(file, fmt "\n", ##__VA_ARGS__);                 \
     } while(0)
 
@@ -50,6 +50,7 @@ static void PrintIfToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram
 static void PrintWhileToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
 static void PrintReturn(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
 
+static void PrintIsForArray(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
 static void PrintArrDeclare(FILE *file, LangNode_t *stmt, VariableArr *arr, int param_count, AsmInfo *asm_info, int indent);
 static void PrintAddressOf(FILE *file, LangNode_t *var_node, VariableArr *arr, int param_count, AsmInfo *asm_info, int indent);
 static void PrintDereference(FILE *file, LangNode_t *ptr_node, VariableArr *arr, int param_count, AsmInfo *asm_info, int indent);
@@ -245,18 +246,7 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
 
                 case kOperationIs:
                     if (IsThatOperation(stmt->left, kOperationArrPos)) {
-
-                        PrintExpr(file, stmt->right, arr, ram_base, param_count, asm_info, indent);
-
-                        FPRINTF("PUSHR RAX");
-                        FPRINTF("PUSH %d", (-1) * param_count + arr->var_array[stmt->left->left->value.pos].pos_in_code);
-                        PrintExpr(file, stmt->left->right, arr, ram_base, param_count, asm_info, indent);
-                        FPRINTF("ADD");
-                        FPRINTF("ADD");
-                        FPRINTF("POPR RCX");
-
-
-                        FPRINTF("POPM [RCX]");
+                        PrintIsForArray(file, stmt, arr, ram_base, param_count, asm_info, indent);
                         break;
                     }
                     PrintExpr(file, stmt->right, arr, ram_base, param_count, asm_info, indent);
@@ -297,7 +287,7 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
                     PrintStatement(file, stmt->left->left, arr, ram_base, param_count, asm_info, indent);
                 }  break;
 
-                case kOperationArrDecl: { // TODO: check 
+                case kOperationArrDecl: {
                     PrintArrDeclare(file, stmt, arr, param_count, asm_info, indent);
                     break;
                 }
@@ -537,4 +527,21 @@ static void PrintAddressAssignment(FILE *file, LangNode_t *deref_node, VariableA
     
     FPRINTF("POPR RCX");
     FPRINTF("POPM [RCX]\n");
+}
+
+static void PrintIsForArray(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent) {
+    assert(file);
+    assert(stmt);
+    assert(arr);
+    assert(asm_info);
+
+    PrintExpr(file, stmt->right, arr, ram_base, param_count, asm_info, indent);
+    FPRINTF("PUSHR RAX");
+    FPRINTF("PUSH %d", (-1) * param_count + arr->var_array[stmt->left->left->value.pos].pos_in_code);
+
+    PrintExpr(file, stmt->left->right, arr, ram_base, param_count, asm_info, indent);
+    FPRINTF("ADD");
+    FPRINTF("ADD");
+    FPRINTF("POPR RCX");
+    FPRINTF("POPM [RCX]");
 }

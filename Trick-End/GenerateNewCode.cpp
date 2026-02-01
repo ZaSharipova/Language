@@ -440,7 +440,7 @@ static const char *magic_suffixes[] = {
 };
 
 static const char *magic_connectors[] = {
-    "_of_", "_", "", "-"
+    "_of_", "_", ""
 };
 
 static bool RandSpace(void) {

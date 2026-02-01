@@ -276,6 +276,8 @@ static GraphOperation PrintExpressionType(const LangNode_t *node) {
             return {"call addr", "mediumseagreen"};
         case kOperationGetAddr:
             return {"get addr", "x11maroon"};
+        case kOperationDraw:
+            return {"draw", "grey"};
 
         case kOperationTrueSeparator:
         case kOperationFalseSeparator:
