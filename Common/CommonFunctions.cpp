@@ -19,6 +19,16 @@ bool IsThatOperation(LangNode_t *node, OperationTypes type) {
     return false;
 }
 
+bool IsThisNodeType(LangNode_t *node, NodeTypes type) {
+    assert(node);
+
+    if (node && node->type == type) {
+        return true;
+    }
+
+    return false;
+}
+
 static long long SizeOfFile(const char *filename) {
     assert(filename);
 

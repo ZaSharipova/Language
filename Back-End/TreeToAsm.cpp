@@ -130,24 +130,19 @@ static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int 
             check_node = node->left;
         }
 
-        if (arr->var_array[check_node->value.pos].variable_name 
+        if (arr->var_array[check_node->value.pos].variable_name && arr->var_array[i].variable_name
                 && strcmp(arr->var_array[i].variable_name, arr->var_array[check_node->value.pos].variable_name) == 0) {
 
             if (arr->var_array[i].pos_in_code == -1) {
                 var_idx = arr->var_array[i].pos_in_code = asm_info->counter++;
-                FPRINTF("PUSHR RAX");
-                FPRINTF("PUSH %d", (-1) * param_count + arr->var_array[check_node->value.pos].pos_in_code);
-                FPRINTF("ADD");
-                FPRINTF("POPR RCX");
-                FPRINTF("POPM [RCX]\n");
             } else {
                 var_idx = arr->var_array[i].pos_in_code;
-                FPRINTF("PUSHR RAX");
-                FPRINTF("PUSH %d", (-1) * param_count + var_idx);
-                FPRINTF( "ADD");
-                FPRINTF("POPR RCX");
-                FPRINTF("POPM [RCX]\n");
             }
+            FPRINTF("PUSHR RAX");
+            FPRINTF("PUSH %d", (-1) * param_count + var_idx);
+            FPRINTF( "ADD");
+            FPRINTF("POPR RCX");
+            FPRINTF("POPM [RCX]\n");
             break;
         }
     }

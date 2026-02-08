@@ -157,7 +157,7 @@ LangErrors DtorVariableArray(VariableArr *arr) {
     return kSuccess;
 }
 
-LangNode_t *NewNode(Language *lang_info, DifTypes type, Value value, LangNode_t *left, LangNode_t *right) {
+LangNode_t *NewNode(Language *lang_info, NodeTypes type, Value value, LangNode_t *left, LangNode_t *right) {
     assert(lang_info);
 
     LangNode_t *new_node = NULL;

@@ -40,11 +40,11 @@ incantatio findroot2(a, b, d) |>
 <|
 
 incantatio verifydis(d) |> 
-    si(d inferior 0)|> 
+    si (d inferior 0)|> 
         revelatio(0)~~
         doout()~~
     <| altius |> 
-        si(d aequalis 0)|> 
+        si (d aequalis 0)|> 
             revelatio(1)~~
         <| altius |> 
             revelatio(2)~~

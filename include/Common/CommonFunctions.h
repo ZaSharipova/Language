@@ -55,6 +55,7 @@ void CleanupOnFileError(void *arg1, void *arg2, void *arg3);
 
 LangErrors ReadTreeAndParse(Language *lang_info, DumpInfo *dump_info, const char *filename_in);
 bool IsThatOperation(LangNode_t *node, OperationTypes type);
+bool IsThisNodeType(LangNode_t *node, NodeTypes type);
 void DoBufRead(FILE *file, const char *filename, FileInfo *Info);
 
 #endif //COMMON_FUNCTIONS_H_

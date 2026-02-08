@@ -11,7 +11,7 @@
 #define MAX_COMMAND_SIZE 50
 #define DOT_INDENT "   "
 
-static const char *GetNodeTypeString(DifTypes type);
+static const char *GetNodeTypeString(NodeTypes type);
 static void GenerateGraphImage(DumpInfo *info);
 static void WriteDotNode(FILE *file, const LangNode_t *node, bool flag, VariableArr *arr);
 static GraphOperation PrintExpressionType(const LangNode_t *node);
@@ -175,7 +175,7 @@ static void WriteNodeConnection(FILE *file, const LangNode_t *from_node, const L
     fprintf(file, DOT_INDENT "\"%p\" -> \"%p\";\n", (void *)from_node, (void *)to_node);
 }
 
-static const char *GetNodeTypeString(DifTypes type) {
+static const char *GetNodeTypeString(NodeTypes type) {
     switch(type) {
         case kNumber:    return "NUM";
         case kVariable:  return "VAR";

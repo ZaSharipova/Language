@@ -33,7 +33,7 @@ struct FileInfo {
 };
 
 struct LangNode_t {
-    DifTypes type;
+    NodeTypes type;
     union Value value;
     LangNode_t *parent;
     LangNode_t *left;

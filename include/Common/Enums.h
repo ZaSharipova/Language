@@ -19,7 +19,7 @@ enum LangErrors {
     kErrorOpening,
 };
 
-enum DifTypes {
+enum NodeTypes {
     kOperation,
     kVariable,
     kNumber,
@@ -110,6 +110,11 @@ enum VariableModes {
 enum ValCategory {
     klvalue,
     krvalue,
+};
+
+enum ChildNode {
+    kleft,
+    kright,
 };
 
 #endif //ENUMS_H_
