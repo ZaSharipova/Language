@@ -263,7 +263,7 @@ static GraphOperation PrintExpressionType(const LangNode_t *node) {
         case kOperationE:
             return {"E", "lightgoldenrod"};
         case kOperationNE:
-            return {"NE", "lightgoldenrod"};
+            return {"NE", "lightgoldenrod"};  
         case kOperationTernary:
             return {"ternary", "hotpink2"};
         case kOperationHLT:

@@ -6,7 +6,7 @@
 
 #define MAIN "adepio_maximus"
 
-enum DifErrors {
+enum LangErrors {
     kSuccess,
     kErrorStat,
     kSyntaxError,
@@ -49,12 +49,12 @@ enum OperationTypes {
     kOperationCall              = 20,
     kOperationReturn            = 21,
 
-    kOperationB                 = 22,
-    kOperationBE                = 23,
-    kOperationA                 = 24,
-    kOperationAE                = 25,
-    kOperationE                 = 26,
-    kOperationNE                = 27,
+    kOperationBE                = 22,
+    kOperationB                 = 23,
+    kOperationAE                = 24,
+    kOperationA                 = 25,
+    kOperationNE                = 26,
+    kOperationE                 = 27,
     
     kOperationSQRT              = 28,
 
@@ -81,7 +81,7 @@ enum OperationTypes {
 
     kOperationDraw              = 46,
 
-    kOperationNone              = -1,
+    kOperationNone              = 47,
 };
 
 enum DiffModes {

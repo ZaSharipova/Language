@@ -58,7 +58,7 @@ typedef struct DumpInfo {
     size_t graph_counter;
     bool flag_new;
 
-    enum DifErrors error;
+    enum LangErrors error;
 } DumpInfo;
 
 typedef struct {
@@ -119,15 +119,15 @@ static const LangTable NAME_TYPES_TABLE [] = {
     {"~~",           ";",               kOperationThen},
     {",",            ",",               kOperationComma},
     {"incantatio",   "func",            kOperationFunction},
-    {"",             "call",            kOperationCall},
+    {"call",         "call",            kOperationCall},
     {"reporto",      "return",          kOperationReturn},
 
-    {"inferior",     "<",               kOperationB},
     {"inferior_aut", "<=",              kOperationBE},
-    {"superior",     ">",               kOperationA},
+    {"inferior",     "<",               kOperationB},
     {"superior_aut", ">=",              kOperationAE},
-    {"aequalis",     "==",              kOperationE},
+    {"superior",     ">",               kOperationA},
     {"non_aequalis", "!=",              kOperationNE},
+    {"aequalis",     "==",              kOperationE},
 
     {"sqrt",         "sqrt",            kOperationSQRT},
 
@@ -143,12 +143,12 @@ static const LangTable NAME_TYPES_TABLE [] = {
 
     {"?",            "?",               kOperationTrueSeparator},
     {":",            ":",               kOperationFalseSeparator},
-    {"",             "ternary",         kOperationTernary},
+    {"ternary",      "ternary",         kOperationTernary},
 
     {"[",            "[",               kOperationBracketOpen},
     {"]",            "]",               kOperationBracketClose},
 
-    {"",             "arr pos",         kOperationArrPos},
+    {"pos",          "arr pos",         kOperationArrPos},
     {"voco",         "declare array",   kOperationArrDecl},
 
     {"&",           "&",                kOperationCallAddr},
@@ -156,7 +156,7 @@ static const LangTable NAME_TYPES_TABLE [] = {
 
     {"draw",        "draw",             kOperationDraw},
 
-    {"",             "",                kOperationNone},
+    {"NULL",         "NULL",            kOperationNone},
 };
 static const size_t OP_TABLE_SIZE = sizeof(NAME_TYPES_TABLE) / sizeof(NAME_TYPES_TABLE[0]);
 

@@ -8,7 +8,7 @@
 
 static Realloc_Mode CheckSize(ssize_t size, ssize_t *capacity);
 
-DifErrors StackCtor(Stack_Info *stk, ssize_t capacity, FILE *open_log_file) {
+LangErrors StackCtor(Stack_Info *stk, ssize_t capacity, FILE *open_log_file) {
     assert(stk);
     assert(open_log_file);
 
@@ -28,7 +28,7 @@ DifErrors StackCtor(Stack_Info *stk, ssize_t capacity, FILE *open_log_file) {
     return kSuccess;
 }
 
-DifErrors StackPush(Stack_Info *stk, LangNode_t *value, FILE *open_log_file) {
+LangErrors StackPush(Stack_Info *stk, LangNode_t *value, FILE *open_log_file) {
     assert(stk);
     assert(value);
     assert(open_log_file);
@@ -42,7 +42,7 @@ DifErrors StackPush(Stack_Info *stk, LangNode_t *value, FILE *open_log_file) {
     return kSuccess;
 }
 
-DifErrors StackPop(Stack_Info *stk, LangNode_t **value, FILE *open_log_file) {
+LangErrors StackPop(Stack_Info *stk, LangNode_t **value, FILE *open_log_file) {
     assert(stk);
     assert(value);
     assert(open_log_file);
@@ -73,7 +73,7 @@ static Realloc_Mode CheckSize(ssize_t size, ssize_t *capacity) {
     }
 }
 
-DifErrors StackRealloc(Stack_Info *stk, FILE *open_log_file, Realloc_Mode realloc_type) {
+LangErrors StackRealloc(Stack_Info *stk, FILE *open_log_file, Realloc_Mode realloc_type) {
     assert(stk);
     assert(open_log_file);
 
@@ -95,12 +95,12 @@ DifErrors StackRealloc(Stack_Info *stk, FILE *open_log_file, Realloc_Mode reallo
     return kSuccess;
 }
 
-DifErrors StackDtor(Stack_Info *stk, FILE *open_log_file) {
+LangErrors StackDtor(Stack_Info *stk, FILE *open_log_file) {
     assert(stk);
     assert(open_log_file);
 
     if (stk->data != NULL) {
-        LangNode_t **nodes = (LangNode_t**)stk->data;
+        LangNode_t **nodes = (LangNode_t **)stk->data;
         
         for (size_t i = 0; i < (size_t)stk->size; ++i) {
             if (nodes[i]) {

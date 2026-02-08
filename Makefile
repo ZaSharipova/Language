@@ -1,11 +1,9 @@
-
 CXX = g++
 MODE ?= debug
 
 UNAME_S := $(shell uname -s)
 
 SANITIZERS =
-
 ifeq ($(MODE),debug)
 	SANITIZERS = -fsanitize=address,undefined
 endif
@@ -51,14 +49,7 @@ FRONT_OBJS   = $(FRONT_SRCS:Front-End/%.cpp=$(OBJ_FRONT)/%.o)
 MIDDLE_OBJS  = $(MIDDLE_SRCS:Middle-End/%.cpp=$(OBJ_MIDDLE)/%.o)
 BACK_OBJS    = $(BACK_SRCS:Back-End/%.cpp=$(OBJ_BACK)/%.o)
 REVERSE_OBJS = $(REVERSE_SRCS:Reverse-End/%.cpp=$(OBJ_REVERSE)/%.o)
-RULES_OBJ    = $(OBJ_FRONT)/Rules.o $(OBJ_FRONT)/LexicalAnalysis.o 
-TRICK_OBJS  = $(TRICK_SRCS:Trick-End/%.cpp=$(OBJ_TRICK)/%.o) $(RULES_OBJ)
-
-FRONT_OBJS_NO_MAIN   = $(filter-out $(OBJ_FRONT)/main.o, $(FRONT_OBJS))
-MIDDLE_OBJS_NO_MAIN  = $(filter-out $(OBJ_MIDDLE)/main.o, $(MIDDLE_OBJS))
-BACK_OBJS_NO_MAIN    = $(filter-out $(OBJ_BACK)/main.o, $(BACK_OBJS))
-REVERSE_OBJS_NO_MAIN = $(filter-out $(OBJ_REVERSE)/main.o, $(REVERSE_OBJS))
-TRICK_OBJS_NO_MAIN   = $(filter-out $(OBJ_TRICK)/main.o, $(TRICK_OBJS))
+TRICK_OBJS   = $(TRICK_SRCS:Trick-End/%.cpp=$(OBJ_TRICK)/%.o)
 
 FRONT   = $(BIN)/front
 MIDDLE  = $(BIN)/middle
@@ -90,7 +81,7 @@ $(REVERSE): $(REVERSE_OBJS) $(COMMON_OBJS)
 	@mkdir -p $(BIN)
 	@$(CXX) $^ -o $@ $(LDFLAGS)
 
-$(TRICK): $(TRICK_OBJS) $(COMMON_OBJS) $()
+$(TRICK): $(TRICK_OBJS) $(COMMON_OBJS)
 	@mkdir -p $(BIN)
 	@$(CXX) $^ -o $@ $(LDFLAGS)
 
@@ -126,22 +117,4 @@ rebuild: clean all
 debug: all
 	./$(REVERSE)
 
-leaks-front:
-	$(MAKE) MODE=leak clean front
-	leaks --atExit -- ./$(FRONT)
-
-leaks-middle:
-	$(MAKE) MODE=leak clean middle
-	leaks --atExit -- ./$(MIDDLE)
-
-leaks-back:
-	$(MAKE) MODE=leak clean back
-	leaks --atExit -- ./$(BACK)
-
-leaks-reverse:
-	$(MAKE) MODE=leak clean reverse
-	leaks --atExit -- ./$(REVERSE)
-
-.PHONY: all front middle back reverse \
-        clean rebuild debug \
-        leaks-front leaks-middle leaks-back leaks-reverse
+.PHONY: all front middle back reverse trick clean rebuild debug

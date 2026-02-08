@@ -17,7 +17,7 @@ static const char *ConvertEnumToOperation(LangNode_t *node, VariableArr *arr);
 
 size_t DEFAULT_SIZE = 60;
 
-DifErrors LangRootCtor(LangRoot *root) {
+LangErrors LangRootCtor(LangRoot *root) {
     assert(root);
 
     root->root = NULL;
@@ -26,7 +26,7 @@ DifErrors LangRootCtor(LangRoot *root) {
     return kSuccess;
 }
 
-DifErrors NodeCtor(LangNode_t **node, Value *value) {
+LangErrors NodeCtor(LangNode_t **node, Value *value) {
     assert(node);
 
     *node = (LangNode_t *) calloc (1, sizeof(LangNode_t));
@@ -49,7 +49,7 @@ DifErrors NodeCtor(LangNode_t **node, Value *value) {
     return kSuccess;
 }
 
-DifErrors DeleteNode(LangRoot *root, LangNode_t *node) {
+LangErrors DeleteNode(LangRoot *root, LangNode_t *node) {
     assert(root);
     if (!node) {
         return kSuccess;
@@ -72,7 +72,7 @@ DifErrors DeleteNode(LangRoot *root, LangNode_t *node) {
     return kSuccess;
 }
 
-DifErrors TreeDtor(LangRoot *tree) {
+LangErrors TreeDtor(LangRoot *tree) {
     if (!tree) {
         return kSuccess;
     }
@@ -85,7 +85,7 @@ DifErrors TreeDtor(LangRoot *tree) {
     return kSuccess;
 }
 
-DifErrors InitArrOfVariable(VariableArr *arr, size_t capacity) {
+LangErrors InitArrOfVariable(VariableArr *arr, size_t capacity) {
     assert(arr);
 
     arr->capacity = capacity;
@@ -108,7 +108,7 @@ DifErrors InitArrOfVariable(VariableArr *arr, size_t capacity) {
     return kSuccess;
 }
 
-DifErrors ResizeArray(VariableArr *arr)  {
+LangErrors ResizeArray(VariableArr *arr)  {
     assert(arr);
 
     if (arr->size + 2 > arr->capacity) {
@@ -139,7 +139,7 @@ DifErrors ResizeArray(VariableArr *arr)  {
     return kSuccess;
 }
 
-DifErrors DtorVariableArray(VariableArr *arr) {
+LangErrors DtorVariableArray(VariableArr *arr) {
     if (!arr || !arr->var_array) {
         return kSuccess;
     }
@@ -245,7 +245,7 @@ static void PrintIndent(FILE *file, int indent) {
     }
 }
 
-DifErrors PrintAST(LangNode_t *node, FILE *file, VariableArr *arr, int indent) {
+LangErrors PrintAST(LangNode_t *node, FILE *file, VariableArr *arr, int indent) {
     assert(file);
     assert(arr);
 
@@ -295,7 +295,6 @@ static const char *ConvertEnumToOperation(LangNode_t *node, VariableArr *arr) {
     if ((size_t)node->value.operation < OP_TABLE_SIZE) {
         return NAME_TYPES_TABLE[node->value.operation].name_in_tree;
     }
-
     
     fprintf(stderr, "Error while trying to convert enum to operation, because the number of operation is more than nametable size.\n");
     return NULL;

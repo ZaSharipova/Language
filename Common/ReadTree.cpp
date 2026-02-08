@@ -14,10 +14,10 @@
 #include "Common/CommonFunctions.h"
 #include "Common/StackFunctions.h"
 
-static DifErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *Variable_Array);
-static DifErrors ParseTitle(const char *buffer, size_t *pos, char **out_title);
-static DifErrors ParseMaybeNil(const char *buffer, size_t *pos, LangNode_t **out);
-static DifErrors ExpectClosingParen(const char *buffer, size_t *pos);
+static LangErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *Variable_Array);
+static LangErrors ParseTitle(const char *buffer, size_t *pos, char **out_title);
+static LangErrors ParseMaybeNil(const char *buffer, size_t *pos, LangNode_t **out);
+static LangErrors ExpectClosingParen(const char *buffer, size_t *pos);
 
 static int CountArgs(LangNode_t *args_root);
 static void RegisterInit(LangNode_t *func_name_node, LangNode_t *var_node, VariableArr *Variable_Array);
@@ -25,15 +25,15 @@ static void ScanInitsInSubtree(LangNode_t *func_name_node, LangNode_t *root, Var
 static void ComputeFuncSizes(LangNode_t *node, VariableArr *Variable_Array);
 
 static void SkipSpaces(const char *buf, size_t *pos);
-static DifErrors PrintSyntaxErrorNode(size_t pos, char c);
+static LangErrors PrintSyntaxErrorNode(size_t pos, char c);
 
-DifErrors ParseNodeFromString(const char *buffer, size_t *pos, LangNode_t *parent, LangNode_t **node_to_add, VariableArr *Variable_Array) {
+LangErrors ParseNodeFromString(const char *buffer, size_t *pos, LangNode_t *parent, LangNode_t **node_to_add, VariableArr *Variable_Array) {
     assert(buffer);
     assert(pos);
     assert(node_to_add);
     assert(Variable_Array);
 
-    DifErrors err = ParseMaybeNil(buffer, pos, node_to_add);
+    LangErrors err = ParseMaybeNil(buffer, pos, node_to_add);
     if (err == kSuccess) {
         return kSuccess;
     }
@@ -62,7 +62,7 @@ DifErrors ParseNodeFromString(const char *buffer, size_t *pos, LangNode_t *paren
     CHECK_ERROR_RETURN(ParseNodeFromString(buffer, pos, node, &right, Variable_Array), NULL, NULL, NULL);
     node->right = right;
 
-    if (node->type == kOperation && node->value.operation == kOperationFunction) {
+    if (IsThatOperation(node, kOperationFunction)) {
         ComputeFuncSizes(node, Variable_Array);
     }
 
@@ -90,7 +90,7 @@ static void ComputeFuncSizes(LangNode_t *node, VariableArr *Variable_Array) {
     }
 }
 
-static DifErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *Variable_Array) {
+static LangErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *Variable_Array) {
     assert(title);
     assert(node);
     assert(Variable_Array);
@@ -189,7 +189,7 @@ static void SkipSpaces(const char *buf, size_t *pos) {
     }
 }
 
-static DifErrors PrintSyntaxErrorNode(size_t pos, char c) {
+static LangErrors PrintSyntaxErrorNode(size_t pos, char c) {
     fprintf(stderr, "Syntax error at position %zu: unexpected character ", pos);
 
     if (c == '\0') {
@@ -203,7 +203,7 @@ static DifErrors PrintSyntaxErrorNode(size_t pos, char c) {
     return kSyntaxError;
 }
 
-static DifErrors ParseMaybeNil(const char *buffer, size_t *pos, LangNode_t **out) {
+static LangErrors ParseMaybeNil(const char *buffer, size_t *pos, LangNode_t **out) {
     assert(buffer);
     assert(pos);
     assert(out);
@@ -219,7 +219,7 @@ static DifErrors ParseMaybeNil(const char *buffer, size_t *pos, LangNode_t **out
     return kFailure;
 }
 
-static DifErrors ParseTitle(const char *buffer, size_t *pos, char **out_title) {
+static LangErrors ParseTitle(const char *buffer, size_t *pos, char **out_title) {
     assert(buffer);
     assert(pos);
     assert(out_title);
@@ -262,7 +262,7 @@ static DifErrors ParseTitle(const char *buffer, size_t *pos, char **out_title) {
     return kSuccess;
 }
 
-static DifErrors ExpectClosingParen(const char *buffer, size_t *pos) {
+static LangErrors ExpectClosingParen(const char *buffer, size_t *pos) {
     assert(buffer);
     assert(pos);
 

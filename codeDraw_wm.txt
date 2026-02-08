@@ -7,14 +7,14 @@ incantatio adepio_maximus() |>
     augurio(centrum_x)~~
     augurio(centrum_y)~~
 
-    check_appr(radius)~~
+    verify_appr(radius)~~
     
     radius_quadratus magica radius multiplico radius~~
     
-    check_and_print(centrum_x, centrum_y, radius_quadratus)~~
+    verify_and_print(centrum_x, centrum_y, radius_quadratus)~~
 <|
 
-incantatio check_appr(radius) |>
+incantatio verify_appr(radius) |>
     si (radius superior 16) |>
         printc(18)~~
         printc(81)~~
@@ -23,7 +23,7 @@ incantatio check_appr(radius) |>
     <|
 <|
 
-incantatio check_and_print(centrum_x, centrum_y, radius_quadratus) |>
+incantatio verify_and_print(centrum_x, centrum_y, radius_quadratus) |>
     voco array[1024] magica 0~~
 
     y magica 0~~

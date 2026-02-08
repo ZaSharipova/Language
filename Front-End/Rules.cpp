@@ -48,7 +48,6 @@ static LangNode_t *GetOp(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetFunctionDeclare(Language *lang_info);
 static LangNode_t *GetFunctionCall(Language *lang_info);
 
-
 static LangNode_t *GetWhile(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetIf(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetElse(Language *lang_info, LangNode_t *if_node, LangNode_t *func_name);
@@ -77,7 +76,9 @@ static LangNode_t *GetArrayAssignment(Language *lang_info, LangNode_t *func_name
 static LangNode_t *GetAssignmentLValue(Language *lang_info, LangNode_t *func_name);
 static bool CheckAndSetFunctionArgsNumber(Language *lang_info, LangNode_t *name_token, size_t cnt);
 
-DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filename) {
+static void ConnectParentAndChild(LangNode_t *parent, LangNode_t *child, bool left_flag);
+
+LangErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filename) {
     assert(lang_info);
     assert(dump_info);
     assert(filename);
@@ -121,7 +122,7 @@ DifErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filena
    PRIMARY :: = ( E ) | N | S
 */
 
-static LangNode_t *GetGoal(Language *lang_info) {
+static LangNode_t *GetGoal(Language *lang_info) { //
     assert(lang_info);
 
     LangNode_t *first = NULL;
@@ -158,8 +159,7 @@ static LangNode_t *GetReturn(Language *lang_info, LangNode_t *func_name) {
     }
     (*lang_info->tokens_pos)++; 
 
-    return_node->left = node;
-    node->parent = return_node;
+    ConnectParentAndChild(return_node, node, true);
     return return_node;
 }
 
@@ -187,8 +187,7 @@ static LangNode_t *GetScanf(Language *lang_info, LangNode_t *func_name) {
     CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationThen), 
         fprintf(stderr, "SYNTAX_ERROR_SCANF: no ';'.\n"));
 
-    read_node->left = node;
-    node->parent = read_node;
+    ConnectParentAndChild(read_node, node, true); 
     return read_node;
 }
 
@@ -238,7 +237,6 @@ LangNode_t *GetOp(Language *lang_info, LangNode_t *func_name) {
     TRY_PARSE_RETURN(stmt, GetDraw  (lang_info));
 
     LangNode_t *seq = NULL;
-
     while (true) {
         save_pos = *lang_info->tokens_pos;
         
@@ -293,8 +291,9 @@ static LangNode_t *GetPrintf(Language *lang_info) {
 
         CHECK_EXPECTED_TOKEN(par, IsThatOperation(par, kOperationParClose), );
 
-        print_node->left = printf_arg;
-        printf_arg->parent = print_node;
+        ConnectParentAndChild(print_node, printf_arg, true);
+        // print_node->left = printf_arg;
+        // printf_arg->parent = print_node;
         (*lang_info->tokens_pos)++; 
         return print_node;
     }
@@ -328,8 +327,9 @@ static LangNode_t *GetFunctionDeclare(Language *lang_info) {
     CHECK_EXPECTED_TOKEN(token, IsThatOperation(token, kOperationBraceClose),
         fprintf(stderr, "SYNTAX_ERROR_FUNC: expected '}' at end of function body %zu.\n", *(lang_info->tokens_pos)));
 
-    func_node->left = func_name;
-    func_name->parent = func_node;
+    ConnectParentAndChild(func_node, func_name, true);
+    // func_node->left = func_name;
+    // func_name->parent = func_node;
     func_node->right = NEWOP(kOperationThen, args_root, body_root); //
 
     return func_node;
@@ -483,7 +483,7 @@ static LangNode_t *GetPrimary(Language *lang_info, LangNode_t *func_name) {
             return NULL;
         }
         
-        node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
+        node = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos)); // TODO: 
         if (IsThatOperation(node, kOperationParClose)) {
             (*lang_info->tokens_pos)++; 
         } else {
@@ -897,7 +897,7 @@ static LangNode_t *GetTernary(Language *lang_info, LangNode_t *func_name) {
 #undef DIV_
 #undef POW_
 
-static LangNode_t *ParseFunctionArgs(Language *lang_info, size_t *cnt) {
+static LangNode_t *ParseFunctionArgs(Language *lang_info, size_t *cnt) { //TODO: рекурсия
     assert(lang_info);
     assert(cnt);
 
@@ -1141,6 +1141,7 @@ static bool CheckAndSetFunctionArgsNumber(Language *lang_info, LangNode_t *name_
     assert(lang_info);
     assert(name_token);
 
+
     VariableInfo *variable = &lang_info->arr->var_array[name_token->value.pos];
     
     if (variable->params_number != (int)cnt) {
@@ -1154,4 +1155,16 @@ static bool CheckAndSetFunctionArgsNumber(Language *lang_info, LangNode_t *name_
     }
     
     return true;
+}
+
+static void ConnectParentAndChild(LangNode_t *parent, LangNode_t *child, bool left_flag) {
+    assert(parent);
+    assert(child);
+
+    child->parent = parent;
+    if (left_flag) {
+        parent->left = child;
+    } else {
+        parent->right = child;
+    }
 }

@@ -24,7 +24,7 @@ incantatio nulla(a, b, c) |>
 
 incantatio discriminant(a, b, c) |> 
     d magica b multiplico b minuo 4 multiplico a multiplico c~~
-    checkdis(d)~~
+    verifydis(d)~~
     d magica sqrt(d)~~
     reporto d~~
 <|
@@ -39,7 +39,7 @@ incantatio findroot2(a, b, d) |>
     revelatio(root2)~~
 <|
 
-incantatio checkdis(d) |> 
+incantatio verifydis(d) |> 
     si(d inferior 0)|> 
         revelatio(0)~~
         doout()~~
@@ -54,7 +54,7 @@ incantatio checkdis(d) |>
 
 incantatio dolinear(b, c) |> 
     si(b aequalis 0)|> 
-        checkc(c)~~
+        verifyc(c)~~
     <| altius |> 
         revelatio(1)~~
         x magica ((-1) multiplico c) divido b~~
@@ -63,7 +63,7 @@ incantatio dolinear(b, c) |>
     <|
 <|
 
-incantatio checkc(c) |> 
+incantatio verifyc(c) |> 
     si(c aequalis 0)|> 
         revelatio(12345678)~~
         doout()~~
