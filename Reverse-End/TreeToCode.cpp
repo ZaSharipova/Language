@@ -54,7 +54,6 @@ void GenerateCodeFromAST(LangNode_t *node, FILE *out, VariableArr *arr, int inde
     if (!node) return;
 
     if (node->type == kOperation) {
-
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Wswitch-enum"
         switch (node->value.operation) {

@@ -108,7 +108,7 @@ static LangNode_t *ParseAddrToken(Language *lang_info, LangNode_t *token);
 static bool CheckAndSetFunctionArgsNumber(Language *lang_info, LangNode_t *name_token, size_t cnt);
 static LangNode_t *CheckArrayPos(VariableArr *arr, LangNode_t *maybe_var, LangNode_t *number);
 static LangNode_t *ParseSimpleAssignment(Language *lang_info, LangNode_t *func_name);
-
+static bool CheckCompareSign(LangNode_t *sign);
 static void ConnectParentAndChild(LangNode_t *parent, LangNode_t *child, ChildNode node_type);
 
 LangErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filename) {
@@ -537,8 +537,7 @@ static LangNode_t *GetCondition(Language *lang_info, LangNode_t *func_name) {
         fprintf(stderr, "SYNTAX_ERROR_IF/WHILE: expected condition\n"););
 
     LangNode_t *sign = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
-    if (IsThatOperation(sign, kOperationBE) || IsThatOperation(sign, kOperationB) || IsThatOperation(sign, kOperationAE) 
-            || IsThatOperation(sign, kOperationA) || IsThatOperation(sign, kOperationE) || IsThatOperation(sign, kOperationNE)) {
+    if (CheckCompareSign(sign)) {
         (*lang_info->tokens_pos)++;
         TRY_PARSE_FUNC_AND_RETURN_NULL(number, GetExpression(lang_info, func_name), 
             fprintf(stderr, "SYNTAX_ERROR_IF/WHILE: no expression in if written.\n"););
@@ -656,10 +655,12 @@ static bool SyncFuncMade(VariableArr *arr, size_t var_pos, size_t func_pos, ValC
 
     if (!var_info->func_made || !func_info->func_made || strcmp(var_info->func_made, func_info->func_made) != 0) {
         if (val_cat == klvalue && func_info->func_made) {
-            if (var_info->func_made) free(var_info->func_made);
+            if (var_info->func_made) {
+                free(var_info->func_made);
+            }
             var_info->func_made = strdup(func_info->func_made);
             if (!var_info->func_made) {
-                perror("strdup failed");
+                fprintf(stderr, "Error making strdup.\n");
                 return false;
             }
 
@@ -995,6 +996,13 @@ static LangNode_t *ParseSimpleAssignment(Language *lang_info, LangNode_t *func_n
     return assign_op;
 }
 
+static bool CheckCompareSign(LangNode_t *sign) {
+    if (sign && (IsThatOperation(sign, kOperationBE) || IsThatOperation(sign, kOperationB) || IsThatOperation(sign, kOperationAE) 
+            || IsThatOperation(sign, kOperationA) || IsThatOperation(sign, kOperationE) || IsThatOperation(sign, kOperationNE))) {
+        return true;
+    }
 
+    return false;
+}
 DEFINE_SIMPLE_COMMAND_PARSER(GetHLT,  kOperationHLT)
 DEFINE_SIMPLE_COMMAND_PARSER(GetDraw, kOperationDraw)

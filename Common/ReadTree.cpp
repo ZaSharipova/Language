@@ -27,6 +27,10 @@ static void ComputeFuncSizes(LangNode_t *node, VariableArr *Variable_Array);
 static void SkipSpaces(const char *buf, size_t *pos);
 static LangErrors PrintSyntaxErrorNode(size_t pos, char c);
 
+static LangErrors TrySetOperation(Lang_t title, LangNode_t *node);
+static LangErrors TrySetNumber(Lang_t title, LangNode_t *node);
+static LangErrors TrySetVariable(Lang_t title, LangNode_t *node, VariableArr *Variable_Array);
+
 LangErrors ParseNodeFromString(const char *buffer, size_t *pos, LangNode_t *parent, LangNode_t **node_to_add, VariableArr *Variable_Array) {
     assert(buffer);
     assert(pos);
@@ -95,6 +99,23 @@ static LangErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *Variabl
     assert(node);
     assert(Variable_Array);
     
+    LangErrors is_operation = TrySetOperation(title, node);
+    if (is_operation == kSuccess) {
+        return kSuccess;
+    }
+
+    LangErrors is_num = TrySetNumber(title, node);
+    if (is_num == kSuccess) {
+        return kSuccess;
+    }
+
+    node->type = kVariable;
+    return TrySetVariable(title, node, Variable_Array);
+}
+
+static LangErrors TrySetOperation(Lang_t title, LangNode_t *node) {
+    assert(node);
+
     for (size_t i = 0; i < OP_TABLE_SIZE; i++) {
         if (strcmp(NAME_TYPES_TABLE[i].name_in_tree, title) == 0) {
             node->type = kOperation;
@@ -102,6 +123,12 @@ static LangErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *Variabl
             return kSuccess;
         }
     }
+    return kFailure;
+}
+
+static LangErrors TrySetNumber(Lang_t title, LangNode_t *node) {
+    assert(title);
+    assert(node);
 
     bool is_num = true;
     for (size_t k = 0; title[k]; k++) {
@@ -117,7 +144,12 @@ static LangErrors CheckType(Lang_t title, LangNode_t *node, VariableArr *Variabl
         return kSuccess;
     }
 
-    node->type = kVariable;
+    return kFailure;
+}
+
+static LangErrors TrySetVariable(Lang_t title, LangNode_t *node, VariableArr *Variable_Array) {
+    assert(node);
+    assert(Variable_Array);
 
     for (size_t j = 0; j < Variable_Array->size; j++) {
         if (strcmp(Variable_Array->var_array[j].variable_name, title) == 0) {

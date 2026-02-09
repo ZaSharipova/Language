@@ -40,11 +40,13 @@ static const char *ChooseCompareMode(LangNode_t *node);
 
 static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, int *ram_base, AsmInfo *asm_info, int indent);
 static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
+static void PrintExprOperationCase(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
 static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int param_count, AsmInfo *asm_info, int indent);
 static int  FindVarPos(VariableArr *arr, LangNode_t *node, AsmInfo *asm_info);
 static void PushParamsToStack(FILE *file, LangNode_t *args_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
 static void PushParamsToRam(FILE *file, LangNode_t *args_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
 static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
+static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent); 
 
 static void PrintIfToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
 static void PrintWhileToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
@@ -55,6 +57,7 @@ static void PrintArrDeclare(FILE *file, LangNode_t *stmt, VariableArr *arr, int 
 static void PrintAddressOf(FILE *file, LangNode_t *var_node, VariableArr *arr, int param_count, AsmInfo *asm_info, int indent);
 static void PrintDereference(FILE *file, LangNode_t *ptr_node, VariableArr *arr, int param_count, AsmInfo *asm_info, int indent);
 static void PrintAddressAssignment(FILE *file, LangNode_t *deref_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
+static void CountValueWithParamCount(FILE *file, int shift, const char *add_sub, const char *reg, int indent);
 
 void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base, AsmInfo *asm_info) {
     assert(file);
@@ -93,20 +96,12 @@ static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, i
     FPRINTF_LABEL(":%s", arr->var_array[func_node->left->value.pos].variable_name);
     param_count = arr->var_array[func_node->left->value.pos].variable_value;
 
-    FPRINTF("PUSHR RAX");
-    FPRINTF("PUSH %d", param_count);
-    FPRINTF("ADD");
-    FPRINTF("POPR RAX\n");
-
+    CountValueWithParamCount(file, param_count, "ADD", "RAX\n", indent);
     PushParamsToRam(file, args, arr, *ram_base, param_count, asm_info, indent);
 
     *ram_base += param_count;
     PrintStatement(file, func_node->right->right, arr, *ram_base, param_count, asm_info, indent);
-
-    FPRINTF("PUSHR RAX");
-    FPRINTF("PUSH %d", param_count);
-    FPRINTF("SUB");
-    FPRINTF("POPR RAX\n");
+    CountValueWithParamCount(file, param_count, "SUB", "RAX\n", indent);
     *ram_base -= param_count;
 
     if (strcmp(MAIN, arr->var_array[func_node->left->value.pos].variable_name) != 0) {
@@ -138,10 +133,7 @@ static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int 
             } else {
                 var_idx = arr->var_array[i].pos_in_code;
             }
-            FPRINTF("PUSHR RAX");
-            FPRINTF("PUSH %d", (-1) * param_count + var_idx);
-            FPRINTF( "ADD");
-            FPRINTF("POPR RCX");
+            CountValueWithParamCount(file, (-1) * param_count + var_idx, "ADD", "RCX", indent);
             FPRINTF("POPM [RCX]\n");
             break;
         }
@@ -219,83 +211,7 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
 
     switch (stmt->type) {
         case kOperation:
-            #pragma clang diagnostic push
-            #pragma clang diagnostic ignored "-Wswitch-enum"
-            switch (stmt->value.operation) {
-                case kOperationHLT:
-                    FPRINTF("HLT\n");
-                    break;
-
-                case kOperationCallAddr:
-                    PrintAddressOf(file, stmt->left, arr, param_count, asm_info, indent);
-                    break;
-                    
-                case kOperationGetAddr:
-                    PrintDereference(file, stmt->left, arr, param_count, asm_info, indent);
-                    break;
-
-                case kOperationCall:
-                    PushParamsToStack(file, stmt->right, arr, ram_base, param_count, asm_info, indent);
-                    FPRINTF("CALL :%s\n", arr->var_array[stmt->left->value.pos].variable_name);
-                    break;
-
-                case kOperationIs:
-                    if (IsThatOperation(stmt->left, kOperationArrPos)) {
-                        PrintIsForArray(file, stmt, arr, ram_base, param_count, asm_info, indent);
-                        break;
-                    }
-                    PrintExpr(file, stmt->right, arr, ram_base, param_count, asm_info, indent);
-                    if (IsThatOperation(stmt->left, kOperationGetAddr)) {
-                        PrintAddressAssignment(file, stmt, arr, ram_base, param_count, asm_info, indent);
-                        break;
-                    }
-                    PrintStatement(file, stmt->left, arr, ram_base, param_count, asm_info, indent);
-                    break;
-
-                case kOperationReturn:
-                    PrintReturn(file, stmt, arr, ram_base, param_count, asm_info, indent);
-                    break;
-
-                CASE_UNARY_OP(stmt, Write, OUT);
-                CASE_UNARY_OP(stmt, WriteChar, OUTC);
-
-                case kOperationRead:
-                    FPRINTF("IN\n");
-                    FindVarPosPopMN(file, arr, stmt->left, param_count, asm_info, indent);
-                    break;
-
-                case kOperationThen:
-                    PrintStatement(file, stmt->left, arr, ram_base, param_count, asm_info, indent);
-                    PrintStatement(file, stmt->right, arr, ram_base, param_count, asm_info, indent);
-                    break;
-
-                case kOperationIf: 
-                    PrintIfToAsm(file, stmt, arr, ram_base, param_count, asm_info, indent);
-                    break;
-
-                case kOperationWhile:
-                    PrintWhileToAsm(file, stmt, arr, ram_base, param_count, asm_info, indent);
-                    break;
-
-                case kOperationTernary: {
-                    PrintStatement(file, stmt->left->right, arr, ram_base, param_count, asm_info, indent);
-                    PrintStatement(file, stmt->left->left, arr, ram_base, param_count, asm_info, indent);
-                }  break;
-
-                case kOperationArrDecl: {
-                    PrintArrDeclare(file, stmt, arr, param_count, asm_info, indent);
-                    break;
-                }
-
-                case kOperationDraw:
-                    FPRINTF("DRAW");
-                    break;
-
-                default:
-                    PrintExpr(file, stmt, arr, ram_base, param_count, asm_info, indent);
-                    break;
-            }
-            #pragma clang diagnostic pop
+            PrintStatementOperationCase(file, stmt, arr, ram_base, param_count, asm_info, indent);
             break;
 
         case kVariable:
@@ -320,53 +236,15 @@ static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_ba
 
     switch (expr->type) {
         case kNumber:
-        FPRINTF("PUSH %.0f", expr->value.number);
-        break;
-        case kVariable: {
-            int var_idx = FindVarPos(arr, expr, asm_info);
-            FPRINTF("PUSHR RAX");
-            FPRINTF("PUSH %d", (-1) * param_count + var_idx);
-            FPRINTF("ADD");
-            FPRINTF("POPR RCX");
-            FPRINTF("PUSHM [RCX]\n");
-        } break;
-        case kOperation:
-            #pragma clang diagnostic push
-            #pragma clang diagnostic ignored "-Wswitch-enum"
-            switch (expr->value.operation) {
-                case kOperationCallAddr:
-                    PrintAddressOf(file, expr->left, arr, param_count, asm_info, indent);
-                    break;
-
-                case kOperationGetAddr:
-                    PrintDereference(file, expr->left, arr, param_count, asm_info, indent);
-                    break;
-
-                CASE_UNARY_OP(expr, SQRT, SQRT);
-                CASE_BINARY_OP(expr, Add, ADD);
-                CASE_BINARY_OP(expr, Sub, SUB);
-                CASE_BINARY_OP(expr, Mul, MUL);
-                CASE_BINARY_OP(expr, Div, DIV);
-
-                case kOperationCall:
-                    PushParamsToStack(file, expr->right, arr, ram_base, param_count, asm_info, indent);
-                    FPRINTF("CALL :%s\n", arr->var_array[expr->left->value.pos].variable_name);
-                    break;
-
-                case kOperationArrPos:
-                    FPRINTF("PUSHR RAX");
-                    FPRINTF("PUSH %d", (-1) * param_count + arr->var_array[expr->left->value.pos].pos_in_code);
-                    //FPRINTF("PUSH %d", (-1) * param_count + FindVarPos(arr, expr->right, asm_info));
-                    PrintExpr(file, expr->right, arr, ram_base, param_count, asm_info, indent);
-                    FPRINTF("ADD");
-                    FPRINTF("POPR RCX");
-                    FPRINTF("PUSHM [RCX]\n"); 
-
-                default:
-                    break;
-            }
+            FPRINTF("PUSH %.0f", expr->value.number);
             break;
-            #pragma clang diagnostic pop
+        case kVariable:
+            CountValueWithParamCount(file, (-1) * param_count + FindVarPos(arr, expr, asm_info), "ADD", "RCX", indent);
+            FPRINTF("PUSHM [RCX]\n");
+            break;
+        case kOperation:
+            PrintExprOperationCase(file, expr, arr, ram_base, param_count, asm_info, indent);
+            break;
     }
 }
 
@@ -444,7 +322,6 @@ static void PrintWhileToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int 
     PrintExpr(file, stmt->left->right, arr, ram_base, param_count, asm_info, indent);
 
     FPRINTF("%s :while_end_%d", ChooseCompareMode(stmt->left), end_label);
-
     PrintStatement(file, stmt->right, arr, ram_base, param_count, asm_info, indent + 1);
 
     FPRINTF("JMP :while_start_%d", start_label);
@@ -458,10 +335,8 @@ static void PrintReturn(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_
     assert(asm_info);
 
     PrintExpr(file, stmt->left, arr, ram_base, param_count, asm_info, indent);
-    FPRINTF("PUSHR RAX");
-    FPRINTF("PUSH %d", param_count);
-    FPRINTF("SUB");
-    FPRINTF("POPR RAX");
+    CountValueWithParamCount(file, param_count, "SUB", "RAX\n", indent);
+
     FPRINTF("RET\n");
 }
 
@@ -475,11 +350,7 @@ static void PrintArrDeclare(FILE *file, LangNode_t *stmt, VariableArr *arr, int 
 
     for (size_t i = 0; i < stmt->left->left->right->value.number; i++) {
         FPRINTF("PUSH 0");
-        FPRINTF("PUSHR RAX");
-        FPRINTF("PUSH %d", (-1) * param_count + asm_info->counter + (int)i);
-
-        FPRINTF("ADD");
-        FPRINTF("POPR RCX");
+        CountValueWithParamCount(file, (-1) * param_count + asm_info->counter + (int)i, "ADD", "RCX", indent);
         FPRINTF("POPM [RCX]\n");
     }
 
@@ -491,12 +362,10 @@ static void PrintAddressOf(FILE *file, LangNode_t *var_node, VariableArr *arr, i
     assert(var_node);
     assert(arr);
     assert(asm_info);
-
     assert(var_node->type == kVariable);
     
-    int var_idx = FindVarPos(arr, var_node, asm_info);
     FPRINTF("PUSHR RAX");
-    FPRINTF("PUSH %d", (-1) * param_count + var_idx);
+    FPRINTF("PUSH %d", (-1) * param_count + FindVarPos(arr, var_node, asm_info));
     FPRINTF("ADD");
 }
 
@@ -507,7 +376,6 @@ static void PrintDereference(FILE *file, LangNode_t *ptr_node, VariableArr *arr,
     assert(asm_info);
 
     PrintAddressOf(file, ptr_node, arr, param_count, asm_info, indent);
-
     FPRINTF("POPR RCX");
     FPRINTF("PUSHM [RCX]");
 }
@@ -519,7 +387,6 @@ static void PrintAddressAssignment(FILE *file, LangNode_t *deref_node, VariableA
     assert(asm_info);
 
     PrintExpr(file, deref_node->left, arr, ram_base, param_count, asm_info, indent);
-    
     FPRINTF("POPR RCX");
     FPRINTF("POPM [RCX]\n");
 }
@@ -532,11 +399,148 @@ static void PrintIsForArray(FILE *file, LangNode_t *stmt, VariableArr *arr, int 
 
     PrintExpr(file, stmt->right, arr, ram_base, param_count, asm_info, indent);
     FPRINTF("PUSHR RAX");
-    FPRINTF("PUSH %d", (-1) * param_count + arr->var_array[stmt->left->left->value.pos].pos_in_code);
+    FPRINTF("PUSH %d", (-1) * param_count + FindVarPos(arr, stmt->left->left, asm_info));
 
     PrintExpr(file, stmt->left->right, arr, ram_base, param_count, asm_info, indent);
     FPRINTF("ADD");
     FPRINTF("ADD");
     FPRINTF("POPR RCX");
     FPRINTF("POPM [RCX]");
+}
+
+static void CountValueWithParamCount(FILE *file, int shift, const char *add_sub, const char *reg, int indent) {
+    assert(add_sub);
+    assert(reg);
+
+    FPRINTF("PUSHR RAX");
+    FPRINTF("PUSH %d", shift);
+    FPRINTF("%s", add_sub);
+    FPRINTF("POPR %s", reg);
+}
+
+static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent) {
+    assert(file);
+    assert(arr);
+    assert(asm_info);
+    if (!stmt) return;
+
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wswitch-enum"
+    switch (stmt->value.operation) {
+        case kOperationHLT:
+            FPRINTF("HLT\n");
+            break;
+
+        case kOperationCallAddr:
+            PrintAddressOf(file, stmt->left, arr, param_count, asm_info, indent);
+            break;
+            
+        case kOperationGetAddr:
+            PrintDereference(file, stmt->left, arr, param_count, asm_info, indent);
+            break;
+
+        case kOperationCall:
+            PushParamsToStack(file, stmt->right, arr, ram_base, param_count, asm_info, indent);
+            FPRINTF("CALL :%s\n", arr->var_array[stmt->left->value.pos].variable_name);
+            break;
+
+        case kOperationIs:
+            if (IsThatOperation(stmt->left, kOperationArrPos)) {
+                PrintIsForArray(file, stmt, arr, ram_base, param_count, asm_info, indent);
+                break;
+            }
+            PrintExpr(file, stmt->right, arr, ram_base, param_count, asm_info, indent);
+            if (IsThatOperation(stmt->left, kOperationGetAddr)) {
+                PrintAddressAssignment(file, stmt, arr, ram_base, param_count, asm_info, indent);
+                break;
+            }
+            PrintStatement(file, stmt->left, arr, ram_base, param_count, asm_info, indent);
+            break;
+
+        case kOperationReturn:
+            PrintReturn(file, stmt, arr, ram_base, param_count, asm_info, indent);
+            break;
+
+        CASE_UNARY_OP(stmt, Write, OUT);
+        CASE_UNARY_OP(stmt, WriteChar, OUTC);
+
+        case kOperationRead:
+            FPRINTF("IN\n");
+            FindVarPosPopMN(file, arr, stmt->left, param_count, asm_info, indent);
+            break;
+
+        case kOperationThen:
+            PrintStatement(file, stmt->left, arr, ram_base, param_count, asm_info, indent);
+            PrintStatement(file, stmt->right, arr, ram_base, param_count, asm_info, indent);
+            break;
+
+        case kOperationIf: 
+            PrintIfToAsm(file, stmt, arr, ram_base, param_count, asm_info, indent);
+            break;
+
+        case kOperationWhile:
+            PrintWhileToAsm(file, stmt, arr, ram_base, param_count, asm_info, indent);
+            break;
+
+        case kOperationTernary: {
+            PrintStatement(file, stmt->left->right, arr, ram_base, param_count, asm_info, indent);
+            PrintStatement(file, stmt->left->left, arr, ram_base, param_count, asm_info, indent);
+        }  break;
+
+        case kOperationArrDecl: {
+            PrintArrDeclare(file, stmt, arr, param_count, asm_info, indent);
+            break;
+        }
+
+        case kOperationDraw:
+            FPRINTF("DRAW");
+            break;
+
+        default:
+            PrintExpr(file, stmt, arr, ram_base, param_count, asm_info, indent);
+            break;
+    }
+    #pragma clang diagnostic pop
+}
+
+static void PrintExprOperationCase(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent) {
+    assert(file);
+    assert(expr);
+    assert(arr);
+    assert(asm_info);
+
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wswitch-enum"
+    switch (expr->value.operation) {
+        case kOperationCallAddr:
+            PrintAddressOf(file, expr->left, arr, param_count, asm_info, indent);
+            break;
+
+        case kOperationGetAddr:
+            PrintDereference(file, expr->left, arr, param_count, asm_info, indent);
+            break;
+
+        CASE_UNARY_OP(expr, SQRT, SQRT);
+        CASE_BINARY_OP(expr, Add, ADD);
+        CASE_BINARY_OP(expr, Sub, SUB);
+        CASE_BINARY_OP(expr, Mul, MUL);
+        CASE_BINARY_OP(expr, Div, DIV);
+
+        case kOperationCall:
+            PushParamsToStack(file, expr->right, arr, ram_base, param_count, asm_info, indent);
+            FPRINTF("CALL :%s\n", arr->var_array[expr->left->value.pos].variable_name);
+            break;
+
+        case kOperationArrPos:
+            FPRINTF("PUSHR RAX");
+            FPRINTF("PUSH %d", (-1) * param_count + FindVarPos(arr, expr->left, asm_info));
+            PrintExpr(file, expr->right, arr, ram_base, param_count, asm_info, indent);
+            FPRINTF("ADD");
+            FPRINTF("POPR RCX");
+            FPRINTF("PUSHM [RCX]\n"); 
+
+        default:
+            break;
+    }
+    #pragma clang diagnostic pop
 }

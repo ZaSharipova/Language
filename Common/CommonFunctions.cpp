@@ -68,7 +68,6 @@ static char *ReadToBuf(const char *filename, FILE *file, size_t filesize) {
     }
 
     buf_out[j] = '\0';
-
     free(buf_in);
 
     return buf_out;

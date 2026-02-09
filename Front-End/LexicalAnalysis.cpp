@@ -12,6 +12,8 @@
 #include "Common/LanguageFunctions.h"
 #include "Front-End/Rules.h"
 
+
+static bool TryParseOperation(Language *lang_info, const char **string, bool *flag_found);
 static bool SkipComment(const char **string);
 static void SkipSpaces(const char **string);
 static void SkipEmptyLines(const char **string);
@@ -64,15 +66,7 @@ size_t CheckAndReturn(Language *lang_info, const char **string) {
             continue;
         }
 
-        for (size_t i = 0; i < OP_TABLE_SIZE; i++) {
-            CHECK_STROKE_AND_PUSH(CodeNameFromTable((OperationTypes)i),  (OperationTypes)i, flag_found);
-            if (flag_found) {
-                //printf("%d\n", i);
-                break;
-            }
-        }
-
-        if (flag_found) {
+        if (TryParseOperation(lang_info, string, &flag_found)) {
             flag_found = false;
             continue;
         }
@@ -98,6 +92,23 @@ size_t CheckAndReturn(Language *lang_info, const char **string) {
     // }
 
     return lang_info->tokens->la_size;
+}
+
+static bool TryParseOperation(Language *lang_info, const char **string, bool *flag_found) {
+    assert(lang_info);
+    assert(string);
+    assert(flag_found);
+
+    *flag_found = false;
+    LangNode_t *node = NULL;
+
+    for (size_t i = 0; i < OP_TABLE_SIZE; i++) {
+        CHECK_STROKE_AND_PUSH(CodeNameFromTable((OperationTypes)i), (OperationTypes)i, *flag_found);
+        if (*flag_found) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static bool SkipComment(const char **string) {
@@ -208,12 +219,18 @@ static bool ParseStringToken(Language *lang_info, const char **string) {
     }
 
     char *name = (char *) calloc (len + 1, 1);
+    if (!name) {
+        fprintf(stderr, "Error making new name in calloc.\n");
+        return false;
+    }
+
     strncpy(name, name_start, len);
     name[len] = '\0';
 
     LangNode_t *node = NEWV(name); 
     if (!node) {
         fprintf(stderr, "Error making new variable.\n");
+        return false;
     }
 
     lang_info->tokens->la_size ++;
