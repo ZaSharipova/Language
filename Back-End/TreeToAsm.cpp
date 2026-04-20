@@ -22,16 +22,16 @@
     } while(0)
 
 
-#define CASE_BINARY_OP(node, op_name, asm_op)                                       \
+#define CASE_BINARY_OP(node, op_name, asm_op, comment)                                       \
     case kOperation##op_name:                                                       \
-        PrintExpr(file, node->left, arr, ram_base, param_count, asm_info, indent);  \
-        PrintExpr(file, node->right, arr, ram_base, param_count, asm_info, indent); \
+        PrintExpr(file, node->left, arr, ram_base, param_count, asm_info, indent, comment);  \
+        PrintExpr(file, node->right, arr, ram_base, param_count, asm_info, indent, NULL); \
         FPRINTF(#asm_op "\n");                                                      \
         break
 
-#define CASE_UNARY_OP(node, op_name, asm_op)                                        \
+#define CASE_UNARY_OP(node, op_name, asm_op, comment)                                        \
     case kOperation##op_name:                                                       \
-        PrintExpr(file, node->left, arr, ram_base, param_count, asm_info, indent);  \
+        PrintExpr(file, node->left, arr, ram_base, param_count, asm_info, indent, comment);  \
         FPRINTF(#asm_op "\n");                                                      \
         break
 
@@ -39,25 +39,25 @@ static void CleanPositions(VariableArr *arr);
 static const char *ChooseCompareMode(LangNode_t *node);
 
 static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, int *ram_base, AsmInfo *asm_info, int indent);
-static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
-static void PrintExprOperationCase(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
+static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent, const char *comment);
+static void PrintExprOperationCase(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent, const char *comment);
 static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int param_count, AsmInfo *asm_info, int indent);
 static int  FindVarPos(VariableArr *arr, LangNode_t *node, AsmInfo *asm_info);
 static void PushParamsToStack(FILE *file, LangNode_t *args_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
 static void PushParamsToRam(FILE *file, LangNode_t *args_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
-static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
-static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent); 
+static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent, const char *comment);
+static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent, const char *comment); 
 
 static void PrintIfToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
 static void PrintWhileToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
-static void PrintReturn(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
+static void PrintReturn(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent, const char *comment);
 
 static void PrintIsForArray(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
 static void PrintArrDeclare(FILE *file, LangNode_t *stmt, VariableArr *arr, int param_count, AsmInfo *asm_info, int indent);
-static void PrintAddressOf(FILE *file, LangNode_t *var_node, VariableArr *arr, int param_count, AsmInfo *asm_info, int indent);
-static void PrintDereference(FILE *file, LangNode_t *ptr_node, VariableArr *arr, int param_count, AsmInfo *asm_info, int indent);
+static void PrintAddressOf(FILE *file, LangNode_t *var_node, VariableArr *arr, int param_count, AsmInfo *asm_info, int indent, const char *comment);
+static void PrintDereference(FILE *file, LangNode_t *ptr_node, VariableArr *arr, int param_count, AsmInfo *asm_info, int indent, const char *comment);
 static void PrintAddressAssignment(FILE *file, LangNode_t *deref_node, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent);
-static void CountValueWithParamCount(FILE *file, int shift, const char *add_sub, const char *reg, int indent);
+static void CountValueWithParamCount(FILE *file, int shift, const char *add_sub, const char *reg, int indent, const char *comment);
 
 void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base, AsmInfo *asm_info) {
     assert(file);
@@ -96,12 +96,12 @@ static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, i
     FPRINTF_LABEL(":%s", arr->var_array[func_node->left->value.pos].variable_name);
     param_count = arr->var_array[func_node->left->value.pos].variable_value;
 
-    CountValueWithParamCount(file, param_count, "ADD", "RAX\n", indent);
+    CountValueWithParamCount(file, param_count, "ADD", "RAX\n", indent, "pushing parameters");
     PushParamsToRam(file, args, arr, *ram_base, param_count, asm_info, indent);
 
     *ram_base += param_count;
-    PrintStatement(file, func_node->right->right, arr, *ram_base, param_count, asm_info, indent);
-    CountValueWithParamCount(file, param_count, "SUB", "RAX\n", indent);
+    PrintStatement(file, func_node->right->right, arr, *ram_base, param_count, asm_info, indent, "printing statement");
+    CountValueWithParamCount(file, param_count, "SUB", "RAX\n", indent, "pushing parameters");
     *ram_base -= param_count;
 
     if (strcmp(MAIN, arr->var_array[func_node->left->value.pos].variable_name) != 0) {
@@ -133,7 +133,7 @@ static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, int 
             } else {
                 var_idx = arr->var_array[i].pos_in_code;
             }
-            CountValueWithParamCount(file, (-1) * param_count + var_idx, "ADD", "RCX", indent);
+            CountValueWithParamCount(file, (-1) * param_count + var_idx, "ADD", "RCX", indent, "counting pos for popm");
             FPRINTF("POPM [RCX]\n");
             break;
         }
@@ -172,7 +172,7 @@ static void PushParamsToStack(FILE *file, LangNode_t *args_node, VariableArr *ar
     if (!args_node) return;
 
     if (!IsThatOperation(args_node, kOperationComma)) {
-        PrintExpr(file, args_node, arr, ram_base, param_count, asm_info, indent);
+        PrintExpr(file, args_node, arr, ram_base, param_count, asm_info, indent, "counting expression in order to push params to stack");
         return;
     }
 
@@ -203,7 +203,7 @@ void PushParamsToRam(FILE *file, LangNode_t *args_node, VariableArr *arr, int ra
     }
 }
 
-static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent) {
+static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent, const char *comment) {
     assert(file);
     assert(arr);
     assert(asm_info);
@@ -211,7 +211,7 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
 
     switch (stmt->type) {
         case kOperation:
-            PrintStatementOperationCase(file, stmt, arr, ram_base, param_count, asm_info, indent);
+            PrintStatementOperationCase(file, stmt, arr, ram_base, param_count, asm_info, indent, comment);
             break;
 
         case kVariable:
@@ -228,7 +228,8 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, int r
     }
 }
 
-static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent) {
+static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count, 
+        AsmInfo *asm_info, int indent, const char *comment) {
     assert(file);
     assert(arr);
     assert(asm_info);
@@ -238,12 +239,15 @@ static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_ba
         case kNumber:
             FPRINTF("PUSH %.0f", expr->value.number);
             break;
+
         case kVariable:
-            CountValueWithParamCount(file, (-1) * param_count + FindVarPos(arr, expr, asm_info), "ADD", "RCX", indent);
+            CountValueWithParamCount(file, (-1) * param_count + FindVarPos(arr, expr, asm_info), "ADD", "RCX", 
+                indent, "finding pos for variable");
             FPRINTF("PUSHM [RCX]\n");
             break;
+
         case kOperation:
-            PrintExprOperationCase(file, expr, arr, ram_base, param_count, asm_info, indent);
+            PrintExprOperationCase(file, expr, arr, ram_base, param_count, asm_info, indent, comment);
             break;
     }
 }
@@ -275,6 +279,14 @@ static const char *ChooseCompareMode(LangNode_t *node) {
     #pragma clang diagnostic pop
 }
 
+// cond
+// jne 
+// // true
+// jmp :end_if
+// :else
+// false
+// :end_if
+
 static void PrintIfToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent) {
     assert(file);
     assert(stmt);
@@ -283,8 +295,8 @@ static void PrintIfToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram
 
     LangNode_t *condition = stmt->left;
 
-    PrintExpr(file, condition->left, arr, ram_base, param_count, asm_info, indent);
-    PrintExpr(file, condition->right, arr, ram_base, param_count, asm_info, indent);
+    PrintExpr(file, condition->left, arr, ram_base, param_count, asm_info, indent, "if condition left part");
+    PrintExpr(file, condition->right, arr, ram_base, param_count, asm_info, indent, "if condition right part");
 
     int this_if = asm_info->label_if++;
     int this_else = asm_info->label_else++;
@@ -292,16 +304,16 @@ static void PrintIfToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram
     FPRINTF("%s :else_%d", ChooseCompareMode(condition), this_else);
 
     if (IsThatOperation(stmt->right, kOperationElse)) {
-        PrintStatement(file, stmt->right->left, arr, ram_base, param_count, asm_info, indent + 1);
+        PrintStatement(file, stmt->right->left, arr, ram_base, param_count, asm_info, indent + 1, "if");
         FPRINTF( "JMP :end_if_%d", this_if);
     } else {
-        PrintStatement(file, stmt->right, arr, ram_base, param_count, asm_info, indent + 1);
+        PrintStatement(file, stmt->right, arr, ram_base, param_count, asm_info, indent + 1, "if");
         FPRINTF("JMP :end_if_%d", this_if);
     }
 
     FPRINTF_LABEL("\n:else_%d", this_else);
     if (IsThatOperation(stmt->right, kOperationElse)) {
-        PrintStatement(file, stmt->right->right, arr, ram_base, param_count, asm_info, indent);
+        PrintStatement(file, stmt->right->right, arr, ram_base, param_count, asm_info, indent, "else");
     }
 
     FPRINTF_LABEL(":end_if_%d", this_if);
@@ -318,24 +330,24 @@ static void PrintWhileToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, int 
 
     FPRINTF_LABEL("\n:while_start_%d", start_label);
 
-    PrintExpr(file, stmt->left->left, arr, ram_base, param_count, asm_info, indent);
-    PrintExpr(file, stmt->left->right, arr, ram_base, param_count, asm_info, indent);
+    PrintExpr(file, stmt->left->left, arr, ram_base, param_count, asm_info, indent, "condition");
+    PrintExpr(file, stmt->left->right, arr, ram_base, param_count, asm_info, indent, "while body");
 
     FPRINTF("%s :while_end_%d", ChooseCompareMode(stmt->left), end_label);
-    PrintStatement(file, stmt->right, arr, ram_base, param_count, asm_info, indent + 1);
+    PrintStatement(file, stmt->right, arr, ram_base, param_count, asm_info, indent + 1, "while body 2.0");
 
     FPRINTF("JMP :while_start_%d", start_label);
     FPRINTF_LABEL("\n:while_end_%d", end_label);
 }
 
-static void PrintReturn(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent) {
+static void PrintReturn(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent, const char *comment) {
     assert(file);
     assert(stmt);
     assert(arr);
     assert(asm_info);
 
-    PrintExpr(file, stmt->left, arr, ram_base, param_count, asm_info, indent);
-    CountValueWithParamCount(file, param_count, "SUB", "RAX\n", indent);
+    PrintExpr(file, stmt->left, arr, ram_base, param_count, asm_info, indent, comment);
+    CountValueWithParamCount(file, param_count, "SUB", "RAX\n", indent, "counting pos for return");
 
     FPRINTF("RET\n");
 }
@@ -348,34 +360,36 @@ static void PrintArrDeclare(FILE *file, LangNode_t *stmt, VariableArr *arr, int 
 
     arr->var_array[stmt->left->left->left->value.pos].pos_in_code = asm_info->counter;
 
+    FPRINTF(";declaring array");
     for (size_t i = 0; i < stmt->left->left->right->value.number; i++) {
         FPRINTF("PUSH 0");
-        CountValueWithParamCount(file, (-1) * param_count + asm_info->counter + (int)i, "ADD", "RCX", indent);
+        CountValueWithParamCount(file, (-1) * param_count + asm_info->counter + (int)i, "ADD", "RCX", 
+            indent, "counting pos for declaring array");
         FPRINTF("POPM [RCX]\n");
     }
 
     asm_info->counter += (int)stmt->left->left->right->value.number;
 }
 
-static void PrintAddressOf(FILE *file, LangNode_t *var_node, VariableArr *arr, int param_count, AsmInfo *asm_info, int indent) {
+static void PrintAddressOf(FILE *file, LangNode_t *var_node, VariableArr *arr, int param_count, AsmInfo *asm_info, int indent, const char *comment) {
     assert(file);
     assert(var_node);
     assert(arr);
     assert(asm_info);
     assert(var_node->type == kVariable);
     
-    FPRINTF("PUSHR RAX");
+    FPRINTF("PUSHR RAX ;%s", comment);
     FPRINTF("PUSH %d", (-1) * param_count + FindVarPos(arr, var_node, asm_info));
     FPRINTF("ADD");
 }
 
-static void PrintDereference(FILE *file, LangNode_t *ptr_node, VariableArr *arr, int param_count, AsmInfo *asm_info, int indent) {
+static void PrintDereference(FILE *file, LangNode_t *ptr_node, VariableArr *arr, int param_count, AsmInfo *asm_info, int indent, const char *comment) {
     assert(file);
     assert(ptr_node);
     assert(arr);
     assert(asm_info);
 
-    PrintAddressOf(file, ptr_node, arr, param_count, asm_info, indent);
+    PrintAddressOf(file, ptr_node, arr, param_count, asm_info, indent, comment);
     FPRINTF("POPR RCX");
     FPRINTF("PUSHM [RCX]");
 }
@@ -386,7 +400,7 @@ static void PrintAddressAssignment(FILE *file, LangNode_t *deref_node, VariableA
     assert(arr);
     assert(asm_info);
 
-    PrintExpr(file, deref_node->left, arr, ram_base, param_count, asm_info, indent);
+    PrintExpr(file, deref_node->left, arr, ram_base, param_count, asm_info, indent, "address assignment");
     FPRINTF("POPR RCX");
     FPRINTF("POPM [RCX]\n");
 }
@@ -397,28 +411,29 @@ static void PrintIsForArray(FILE *file, LangNode_t *stmt, VariableArr *arr, int 
     assert(arr);
     assert(asm_info);
 
-    PrintExpr(file, stmt->right, arr, ram_base, param_count, asm_info, indent);
+    PrintExpr(file, stmt->right, arr, ram_base, param_count, asm_info, indent, "expr for array is");
     FPRINTF("PUSHR RAX");
     FPRINTF("PUSH %d", (-1) * param_count + FindVarPos(arr, stmt->left->left, asm_info));
 
-    PrintExpr(file, stmt->left->right, arr, ram_base, param_count, asm_info, indent);
+    PrintExpr(file, stmt->left->right, arr, ram_base, param_count, asm_info, indent,  "arr pos for array is");
     FPRINTF("ADD");
     FPRINTF("ADD");
     FPRINTF("POPR RCX");
     FPRINTF("POPM [RCX]");
 }
 
-static void CountValueWithParamCount(FILE *file, int shift, const char *add_sub, const char *reg, int indent) {
+static void CountValueWithParamCount(FILE *file, int shift, const char *add_sub, const char *reg, int indent, const char *comment) {
     assert(add_sub);
     assert(reg);
 
-    FPRINTF("PUSHR RAX");
+    FPRINTF("PUSHR RAX ;%s", comment ? comment : "");
     FPRINTF("PUSH %d", shift);
     FPRINTF("%s", add_sub);
     FPRINTF("POPR %s", reg);
 }
 
-static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent) {
+static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableArr *arr, int ram_base, int param_count, 
+        AsmInfo *asm_info, int indent, const char *comment) {
     assert(file);
     assert(arr);
     assert(asm_info);
@@ -432,11 +447,11 @@ static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableAr
             break;
 
         case kOperationCallAddr:
-            PrintAddressOf(file, stmt->left, arr, param_count, asm_info, indent);
+            PrintAddressOf(file, stmt->left, arr, param_count, asm_info, indent, comment);
             break;
             
         case kOperationGetAddr:
-            PrintDereference(file, stmt->left, arr, param_count, asm_info, indent);
+            PrintDereference(file, stmt->left, arr, param_count, asm_info, indent, comment);
             break;
 
         case kOperationCall:
@@ -449,20 +464,20 @@ static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableAr
                 PrintIsForArray(file, stmt, arr, ram_base, param_count, asm_info, indent);
                 break;
             }
-            PrintExpr(file, stmt->right, arr, ram_base, param_count, asm_info, indent);
+            PrintExpr(file, stmt->right, arr, ram_base, param_count, asm_info, indent, comment);
             if (IsThatOperation(stmt->left, kOperationGetAddr)) {
                 PrintAddressAssignment(file, stmt, arr, ram_base, param_count, asm_info, indent);
                 break;
             }
-            PrintStatement(file, stmt->left, arr, ram_base, param_count, asm_info, indent);
+            PrintStatement(file, stmt->left, arr, ram_base, param_count, asm_info, indent, "is left part");
             break;
 
         case kOperationReturn:
-            PrintReturn(file, stmt, arr, ram_base, param_count, asm_info, indent);
+            PrintReturn(file, stmt, arr, ram_base, param_count, asm_info, indent, "return");
             break;
 
-        CASE_UNARY_OP(stmt, Write, OUT);
-        CASE_UNARY_OP(stmt, WriteChar, OUTC);
+        CASE_UNARY_OP(stmt, Write, OUT, comment);
+        CASE_UNARY_OP(stmt, WriteChar, OUTC, comment);
 
         case kOperationRead:
             FPRINTF("IN\n");
@@ -470,8 +485,8 @@ static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableAr
             break;
 
         case kOperationThen:
-            PrintStatement(file, stmt->left, arr, ram_base, param_count, asm_info, indent);
-            PrintStatement(file, stmt->right, arr, ram_base, param_count, asm_info, indent);
+            PrintStatement(file, stmt->left, arr, ram_base, param_count, asm_info, indent, "then left");
+            PrintStatement(file, stmt->right, arr, ram_base, param_count, asm_info, indent, "then right");
             break;
 
         case kOperationIf: 
@@ -483,8 +498,8 @@ static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableAr
             break;
 
         case kOperationTernary: {
-            PrintStatement(file, stmt->left->right, arr, ram_base, param_count, asm_info, indent);
-            PrintStatement(file, stmt->left->left, arr, ram_base, param_count, asm_info, indent);
+            PrintStatement(file, stmt->left->right, arr, ram_base, param_count, asm_info, indent, "ternary");
+            PrintStatement(file, stmt->left->left, arr, ram_base, param_count, asm_info, indent, "ternary");
         }  break;
 
         case kOperationArrDecl: {
@@ -497,13 +512,13 @@ static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableAr
             break;
 
         default:
-            PrintExpr(file, stmt, arr, ram_base, param_count, asm_info, indent);
+            PrintExpr(file, stmt, arr, ram_base, param_count, asm_info, indent, comment);
             break;
     }
     #pragma clang diagnostic pop
 }
 
-static void PrintExprOperationCase(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent) {
+static void PrintExprOperationCase(FILE *file, LangNode_t *expr, VariableArr *arr, int ram_base, int param_count, AsmInfo *asm_info, int indent, const char *comment) {
     assert(file);
     assert(expr);
     assert(arr);
@@ -513,18 +528,18 @@ static void PrintExprOperationCase(FILE *file, LangNode_t *expr, VariableArr *ar
     #pragma clang diagnostic ignored "-Wswitch-enum"
     switch (expr->value.operation) {
         case kOperationCallAddr:
-            PrintAddressOf(file, expr->left, arr, param_count, asm_info, indent);
+            PrintAddressOf(file, expr->left, arr, param_count, asm_info, indent, comment);
             break;
 
         case kOperationGetAddr:
-            PrintDereference(file, expr->left, arr, param_count, asm_info, indent);
+            PrintDereference(file, expr->left, arr, param_count, asm_info, indent, comment);
             break;
 
-        CASE_UNARY_OP(expr, SQRT, SQRT);
-        CASE_BINARY_OP(expr, Add, ADD);
-        CASE_BINARY_OP(expr, Sub, SUB);
-        CASE_BINARY_OP(expr, Mul, MUL);
-        CASE_BINARY_OP(expr, Div, DIV);
+        CASE_UNARY_OP(expr, SQRT, SQRT, comment);
+        CASE_BINARY_OP(expr, Add, ADD, comment);
+        CASE_BINARY_OP(expr, Sub, SUB, comment);
+        CASE_BINARY_OP(expr, Mul, MUL, comment);
+        CASE_BINARY_OP(expr, Div, DIV, comment);
 
         case kOperationCall:
             PushParamsToStack(file, expr->right, arr, ram_base, param_count, asm_info, indent);
@@ -532,9 +547,9 @@ static void PrintExprOperationCase(FILE *file, LangNode_t *expr, VariableArr *ar
             break;
 
         case kOperationArrPos:
-            FPRINTF("PUSHR RAX");
+            FPRINTF("PUSHR RAX ;%s", "finding array pos");
             FPRINTF("PUSH %d", (-1) * param_count + FindVarPos(arr, expr->left, asm_info));
-            PrintExpr(file, expr->right, arr, ram_base, param_count, asm_info, indent);
+            PrintExpr(file, expr->right, arr, ram_base, param_count, asm_info, indent, comment);
             FPRINTF("ADD");
             FPRINTF("POPR RCX");
             FPRINTF("PUSHM [RCX]\n"); 

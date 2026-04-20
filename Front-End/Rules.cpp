@@ -42,7 +42,7 @@
         (*lang_info->tokens_pos)++;                                              \
     } while (0)
 
-#define TRY_PARSE_FUNC_AND_RETURN_NULL(result, call, error_handler) \
+#define TRY_PARSE_FUNC_AND_RETURN_NULL(result, call, error_handler)       \
     LangNode_t *result = NULL;                                            \
     do {                                                                  \
         (result) = (call);                                                \
@@ -778,7 +778,7 @@ static LangNode_t *ParseBody(Language *lang_info, LangNode_t *func_name) {
         } else if (!body_root->right && IsThatOperation(body_root, kOperationThen)) {
             body_root->right = stmt;
         } else {
-            body_root = NEWOP(kOperationThen, body_root, stmt);
+            body_root = NEWOP(kOperationThen, body_root, stmt); //
         }
     }
     
@@ -812,7 +812,7 @@ static LangNode_t *GetAssignmentLValue(Language *lang_info, LangNode_t *func_nam
     (*lang_info->tokens_pos)++;
 
     if (!lang_info->arr->var_array[maybe_var->value.pos].func_made 
-            || strcmp(lang_info->arr->var_array[maybe_var->value.pos].func_made, lang_info->arr->var_array[func_name->value.pos].variable_name) != 0) {
+            || strcmp(lang_info->arr->var_array[maybe_var->value.pos].func_made, lang_info->arr->var_array[func_name->value.pos].variable_name) != 0) { //
         if (lang_info->arr->var_array[maybe_var->value.pos].func_made) {
             free(lang_info->arr->var_array[maybe_var->value.pos].func_made);
         }
@@ -1004,5 +1004,6 @@ static bool CheckCompareSign(LangNode_t *sign) {
 
     return false;
 }
+
 DEFINE_SIMPLE_COMMAND_PARSER(GetHLT,  kOperationHLT)
 DEFINE_SIMPLE_COMMAND_PARSER(GetDraw, kOperationDraw)

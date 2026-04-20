@@ -16,7 +16,7 @@ int main(int argc, char *argv[]) {
     (void)argc;
 
     const char *filename_in = argv[1];
-    const char *filename_out= argv[2];
+    const char *filename_out = argv[2];
 
     INIT_EVERYTHING(root, Variable_Array, lang_info, tokens_no, dump_info);
 
