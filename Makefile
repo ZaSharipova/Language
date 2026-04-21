@@ -34,6 +34,7 @@ OBJ_COMMON  = $(BUILD)/common
 OBJ_FRONT   = $(BUILD)/front
 OBJ_MIDDLE  = $(BUILD)/middle
 OBJ_BACK    = $(BUILD)/back
+OBJ_BACK_X	= $(BUILD)/back_x
 OBJ_REVERSE = $(BUILD)/reverse
 OBJ_TRICK   = $(BUILD)/trick
 
@@ -41,6 +42,7 @@ COMMON_SRCS  = $(wildcard Common/*.cpp)
 FRONT_SRCS   = $(wildcard Front-End/*.cpp)
 MIDDLE_SRCS  = $(wildcard Middle-End/*.cpp)
 BACK_SRCS    = $(wildcard Back-End/*.cpp)
+BACK_SRCS_X  = $(wildcard Back-End_x86_64/*.cpp)
 REVERSE_SRCS = $(wildcard Reverse-End/*.cpp)
 TRICK_SRCS   = $(wildcard Trick-End/*.cpp)
 
@@ -48,12 +50,14 @@ COMMON_OBJS  = $(COMMON_SRCS:Common/%.cpp=$(OBJ_COMMON)/%.o)
 FRONT_OBJS   = $(FRONT_SRCS:Front-End/%.cpp=$(OBJ_FRONT)/%.o)
 MIDDLE_OBJS  = $(MIDDLE_SRCS:Middle-End/%.cpp=$(OBJ_MIDDLE)/%.o)
 BACK_OBJS    = $(BACK_SRCS:Back-End/%.cpp=$(OBJ_BACK)/%.o)
+BACK_X_OBJS  = $(BACK_SRCS_X:Back-End_x86_64/%.cpp=$(OBJ_BACK_X)/%.o)
 REVERSE_OBJS = $(REVERSE_SRCS:Reverse-End/%.cpp=$(OBJ_REVERSE)/%.o)
 TRICK_OBJS   = $(TRICK_SRCS:Trick-End/%.cpp=$(OBJ_TRICK)/%.o)
 
 FRONT   = $(BIN)/front
 MIDDLE  = $(BIN)/middle
 BACK    = $(BIN)/back
+BACK_X 	= $(BIN)/back_x
 REVERSE = $(BIN)/reverse
 TRICK   = $(BIN)/trick
 
@@ -62,6 +66,7 @@ all: front middle back reverse
 front: $(FRONT)
 middle: $(MIDDLE)
 back: $(BACK)
+back_x: $(BACK_X)
 reverse: $(REVERSE)
 trick: $(TRICK)
 
@@ -74,6 +79,10 @@ $(MIDDLE): $(MIDDLE_OBJS) $(COMMON_OBJS)
 	@$(CXX) $^ -o $@ $(LDFLAGS)
 
 $(BACK): $(BACK_OBJS) $(COMMON_OBJS)
+	@mkdir -p $(BIN)
+	@$(CXX) $^ -o $@ $(LDFLAGS)
+
+$(BACK_X): $(BACK_X_OBJS) $(COMMON_OBJS)
 	@mkdir -p $(BIN)
 	@$(CXX) $^ -o $@ $(LDFLAGS)
 
@@ -101,6 +110,10 @@ $(OBJ_BACK)/%.o: Back-End/%.cpp
 	@mkdir -p $(OBJ_BACK)
 	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
+$(OBJ_BACK_X)/%.o: Back-End_x86_64/%.cpp
+	@mkdir -p $(OBJ_BACK_X)
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
+
 $(OBJ_REVERSE)/%.o: Reverse-End/%.cpp
 	@mkdir -p $(OBJ_REVERSE)
 	@$(CXX) $(CXXFLAGS) -c $< -o $@
@@ -117,4 +130,4 @@ rebuild: clean all
 debug: all
 	./$(REVERSE)
 
-.PHONY: all front middle back reverse trick clean rebuild debug
+.PHONY: all front middle back reverse trick clean rebuild debug back_x
