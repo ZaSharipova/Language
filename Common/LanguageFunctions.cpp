@@ -42,8 +42,8 @@ LangErrors NodeCtor(LangNode_t **node, Value *value) {
         (*node)->value.number = 0;
     }
     
-    (*node)->left =  NULL;
-    (*node)->right =  NULL;
+    (*node)->left = NULL;
+    (*node)->right = NULL;
     (*node)->parent = NULL;
 
     return kSuccess;
@@ -186,6 +186,9 @@ LangNode_t *NewNode(Language *lang_info, NodeTypes type, Value value, LangNode_t
                 right->parent = new_node;
             }
 
+            break;
+        default:
+            printf("Mismatch of node->type.\n");
             break;
     }
 

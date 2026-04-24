@@ -301,8 +301,8 @@ static double EvaluateExpression(LangNode_t *node, VariableArr *arr) {
         return arr->var_array[node->value.pos].variable_value;
     }
 
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Wswitch-enum"
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wswitch-enum"
     switch (node->value.operation) {
     case (kOperationAdd):
         return EvaluateExpression(node->left, arr) +
@@ -346,5 +346,5 @@ static double EvaluateExpression(LangNode_t *node, VariableArr *arr) {
         fprintf(stderr, "Unknown operation: %d.\n", node->value.operation);
         return 0;
     }
-    #pragma clang diagnostic pop
+    #pragma GCC diagnostic pop
 }

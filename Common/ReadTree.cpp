@@ -194,6 +194,7 @@ static void RegisterInit(LangNode_t *func_name_node, LangNode_t *var_node, Varia
     VariableInfo *var_vi  = &Variable_Array->var_array[var_node->value.pos];
 
     if (!var_vi->func_made || strcmp(var_vi->func_made, func_vi->variable_name) != 0) {
+        if (var_vi->func_made) free(var_vi->func_made);
         var_vi->func_made = strdup(func_vi->variable_name);
         func_vi->variable_value++;
     }

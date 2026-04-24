@@ -19,9 +19,7 @@ int main(int argc, char *argv[]) {
     const char *filename_out = argv[2];
 
     INIT_EVERYTHING(root, Variable_Array, lang_info, tokens_no, dump_info);
-
     CHECK_ERROR_RETURN(ReadTreeAndParse(&lang_info, &dump_info, filename_in), NULL, NULL, NULL); //TODO: наоборот
-
     DoTreeInGraphviz(lang_info.root->root, &dump_info, &Variable_Array);
 
     CHECK_ERROR_RETURN(PrintAsm(&lang_info, filename_out), NULL, NULL, NULL);

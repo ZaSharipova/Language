@@ -54,8 +54,8 @@ void GenerateCodeFromAST(LangNode_t *node, FILE *out, VariableArr *arr, int inde
     if (!node) return;
 
     if (node->type == kOperation) {
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Wswitch-enum"
+        #pragma GCC diagnostic push
+        #pragma GCC diagnostic ignored "-Wswitch-enum"
         switch (node->value.operation) {
 
             case kOperationIf:
@@ -113,7 +113,7 @@ void GenerateCodeFromAST(LangNode_t *node, FILE *out, VariableArr *arr, int inde
             default:
                 break;
         }
-        #pragma clang diagnostic pop
+        #pragma GCC diagnostic pop
     }
 
     PrintIndent(out, indent);
@@ -149,8 +149,8 @@ static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr) { //
             return;
     }
 
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Wswitch-enum"
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wswitch-enum"
 
     switch (node->value.operation) {
 
@@ -207,7 +207,7 @@ static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr) { //
             return;
     }
 
-    #pragma clang diagnostic pop
+    #pragma GCC diagnostic pop
 }
 
 static void GenThenChain(LangNode_t *node, FILE *out, VariableArr *arr, int indent) {
@@ -370,8 +370,8 @@ static void GenFunctionCall(LangNode_t *node, FILE *out, VariableArr *arr, int i
 
 static int GetOpPrecedence(OperationTypes op) {
 
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Wswitch-enum"
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wswitch-enum"
 
     switch (op) {
         case kOperationPow:     return 4;
@@ -388,7 +388,7 @@ static int GetOpPrecedence(OperationTypes op) {
         default:                return 0;
     }
 
-    #pragma clang diagnostic pop
+    #pragma GCC diagnostic pop
 }
 
 static void GenReturn(FILE *out, LangNode_t *node, VariableArr *arr, int indent) {

@@ -31,7 +31,7 @@ static bool ParseStringToken(Language *lang_info, const char **string);
         node = NEWOP(op_type, NULL, NULL);                             \
         if (!node) {                                                   \
             fprintf(stderr, "Error making new variable.\n");           \
-            return NULL;                                               \
+            return 1;                                                  \
         }                                                              \
         lang_info->tokens->la_size ++;                                 \
         (*string)++;                                                   \
@@ -47,7 +47,7 @@ static bool ParseStringToken(Language *lang_info, const char **string);
         }                                                                 \
         lang_info->tokens->la_size ++;                                    \
         (*string) += strlen(line_to_check);                               \
-        flag_found = true; \
+        flag_found = true;                                                \
     }
 
 size_t CheckAndReturn(Language *lang_info, const char **string) {

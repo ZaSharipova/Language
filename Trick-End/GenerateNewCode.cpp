@@ -56,8 +56,8 @@ void GenerateNewCodeFromAST(LangNode_t *node, FILE *out, VariableArr *arr, int i
     if (!node) return;
 
     if (node->type == kOperation) {
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Wswitch-enum"
+        #pragma GCC diagnostic push
+        #pragma GCC diagnostic ignored "-Wswitch-enum"
 
         switch (node->value.operation) {
             case kOperationIf:
@@ -154,7 +154,7 @@ void GenerateNewCodeFromAST(LangNode_t *node, FILE *out, VariableArr *arr, int i
             default:
                 break;
         }
-        #pragma clang diagnostic pop
+        #pragma GCC diagnostic pop
     }
 
     PrintIndent(out, indent);
@@ -269,8 +269,8 @@ static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr) {
             return;
     }
 
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Wswitch-enum"
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wswitch-enum"
     switch (node->value.operation) {
 
         case kOperationAdd:
@@ -342,7 +342,7 @@ static void GenExpr(LangNode_t *node, FILE *out, VariableArr *arr) {
             fprintf(out, "UNSUPPORTED_OP");
             return;
     }
-    #pragma clang diagnostic pop
+    #pragma GCC diagnostic pop
 }
 
 static void GenTernary(LangNode_t *node, FILE *out, VariableArr *arr, int indent) {

@@ -9,6 +9,9 @@
 #include "Back-End/TreeToAsm.h"
 
 #include <assert.h>
+#define START_ASM(asm_file)                     \
+    fprintf(asm_file, "JMP :adepio_maximus\n"); \
+    fprintf(asm_file, "HLT\n\n");               \
 
 LangErrors PrintAsm(Language *lang_info, const char *filename_out) {
     assert(lang_info);
@@ -18,8 +21,9 @@ LangErrors PrintAsm(Language *lang_info, const char *filename_out) {
     int ram_base = 0;
     AsmInfo asm_info = {};
 
-    fprintf(asm_file, "JMP :adepio_maximus\n");
-    fprintf(asm_file, "HLT\n\n");
+    START_ASM(asm_file);
+    // fprintf(asm_file, "JMP :adepio_maximus\n");
+    // fprintf(asm_file, "HLT\n\n");
     PrintProgram(asm_file, lang_info->root->root, lang_info->arr, &ram_base, &asm_info);
     fclose(asm_file);
 

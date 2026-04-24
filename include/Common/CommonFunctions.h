@@ -20,7 +20,7 @@ void CleanupOnFileError(void *arg1, void *arg2, void *arg3);
                                                                                               \
     Language lang_info = {&root, NULL, NULL, &Variable_Array};                                \
     Stack_Info token = {};                                                                    \
-    if (strcmp(#token, "tokens_no") != 1) {                                                   \
+    if (strcmp(#token, "tokens_no") != 0) {                                                   \
         CHECK_ERROR_RETURN(StackCtor(&token, 1, stderr),  NULL, &Variable_Array, &root);      \
         lang_info.tokens = &token;                                                            \
     }                                                                                         \

@@ -8,7 +8,7 @@
 #include "Common/Structs.h"
 
 #define FILE_OUT "output.txt"
-#define MAX_COMMAND_SIZE 50
+#define MAX_COMMAND_SIZE 256
 #define DOT_INDENT "   "
 
 static const char *GetNodeTypeString(NodeTypes type);
@@ -64,7 +64,7 @@ static void WriteRootNode(FILE *file, const LangNode_t *root) {
 
     if (root->parent == NULL) {
         fprintf(file, DOT_INDENT "\"1\" [label=\"ROOT\", shape=rect, fillcolor=pink];\n");
-        fprintf(file, DOT_INDENT "\"1\" -> \"%p\";\n\n", (void *)root);
+        fprintf(file, DOT_INDENT "\"1\" -> \"%p\";\n\n", root);
     } else {
         fprintf(file, DOT_INDENT "// Tree with parent node\n");
     }
@@ -115,12 +115,12 @@ static void WriteNumberNode(FILE *file, const LangNode_t *node) {
     assert(node);
 
     const char *color = "dodgerblue";
-    fprintf(file, DOT_INDENT "\"%p\" [label=\"", (void *)node);
-    fprintf(file, "Parent: %p\\n", (void *)node->parent);
-    fprintf(file, "Addr: %p\\n", (void *)node);
+    fprintf(file, DOT_INDENT "\"%p\" [label=\"", node);
+    fprintf(file, "Parent: %p\\n", node->parent);
+    fprintf(file, "Addr: %p\\n", node);
     fprintf(file, "Type: %s\\n", GetNodeTypeString(node->type));
     fprintf(file, "Value: %.2lf\\n", node->value.number);
-    fprintf(file, "Left: %p | Right: %p\"", (void *)node->left, (void *)node->right);
+    fprintf(file, "Left: %p | Right: %p\"", node->left, node->right);
     fprintf(file, " shape=egg color=black fillcolor=%s", color);
     fprintf(file, " style=filled width=4 height=1.5 fixedsize=true];\n");
 }
@@ -131,9 +131,9 @@ static void WriteVariableNode(FILE *file, const LangNode_t *node, VariableArr *a
     assert(arr);
 
     const char *color = "gold";
-    fprintf(file, DOT_INDENT "\"%p\" [label=\"", (void *)node);
-    fprintf(file, "Parent: %p\\n", (void *)node->parent);
-    fprintf(file, "Addr: %p\\n", (void *)node);
+    fprintf(file, DOT_INDENT "\"%p\" [label=\"", node);
+    fprintf(file, "Parent: %p\\n", node->parent);
+    fprintf(file, "Addr: %p\\n", node);
     fprintf(file, "Type: %s\\n", GetNodeTypeString(node->type));
     
     if (node->value.pos < arr->size) {
@@ -142,7 +142,7 @@ static void WriteVariableNode(FILE *file, const LangNode_t *node, VariableArr *a
         fprintf(file, "Value: INVALID_POS[%zu]\\n", node->value.pos);
     }
     
-    fprintf(file, "Left: %p | Right: %p\"", (void *)node->left, (void *)node->right);
+    fprintf(file, "Left: %p | Right: %p\"", node->left, node->right);
     fprintf(file, " shape=octagon color=black fillcolor=%s", color);
     fprintf(file, " style=filled width=4 height=1.5 fixedsize=true];\n");
 }
@@ -152,18 +152,18 @@ static void WriteOperationNode(FILE *file, const LangNode_t *node) {
     assert(node);
     
     fprintf(file, DOT_INDENT "\"%p\" [label=\"{Parent: %p \\n | Addr: %p \\n | Type: %s", 
-        (void *)node, (void *)node->parent, (void *)node, GetNodeTypeString(node->type));
+        node, node->parent, node, GetNodeTypeString(node->type));
     fprintf(file, " | Value: %s | {Left: %p | Right: %p}}\" shape=Mrecord color=black fillcolor=%s, style=filled];\n", 
-        PrintExpressionType(node).operation_name, (void *)node->left, (void *)node->right, PrintExpressionType(node).color);
+        PrintExpressionType(node).operation_name, node->left, node->right, PrintExpressionType(node).color);
 }
 
 static void WriteUnknownNode(FILE *file, const LangNode_t *node) {
     assert(file);
     assert(node);
 
-    fprintf(file, DOT_INDENT "\"%p\" [label=\"UNKNOWN NODE\\n", (void *)node);
+    fprintf(file, DOT_INDENT "\"%p\" [label=\"UNKNOWN NODE\\n", node);
     fprintf(file, "Type: %d\\n", node->type);
-    fprintf(file, "Addr: %p\"", (void *)node);
+    fprintf(file, "Addr: %p\"", node);
     fprintf(file, " shape=ellipse color=red fillcolor=red style=filled];\n");
 }
 
@@ -172,7 +172,7 @@ static void WriteNodeConnection(FILE *file, const LangNode_t *from_node, const L
     assert(from_node);
     assert(to_node);
 
-    fprintf(file, DOT_INDENT "\"%p\" -> \"%p\";\n", (void *)from_node, (void *)to_node);
+    fprintf(file, DOT_INDENT "\"%p\" -> \"%p\";\n", from_node, to_node);
 }
 
 static const char *GetNodeTypeString(NodeTypes type) {
