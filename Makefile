@@ -60,6 +60,7 @@ BACK    = $(BIN)/back
 BACK_X 	= $(BIN)/back_x
 REVERSE = $(BIN)/reverse
 TRICK   = $(BIN)/trick
+ALL_BACK_X = $(BIN)/all_back_x
 
 all: front middle back reverse
 
@@ -69,6 +70,7 @@ back: $(BACK)
 back_x: $(BACK_X)
 reverse: $(REVERSE)
 trick: $(TRICK)
+all_back_x: $(ALL_BACK_X)
 
 $(FRONT): $(FRONT_OBJS) $(COMMON_OBJS)
 	@mkdir -p $(BIN)
@@ -85,6 +87,13 @@ $(BACK): $(BACK_OBJS) $(COMMON_OBJS)
 $(BACK_X): $(BACK_X_OBJS) $(COMMON_OBJS)
 	@mkdir -p $(BIN)
 	@$(CXX) $^ -o $@ $(LDFLAGS)
+
+$(ALL_BACK_X): $(BACK_X_OBJS) $(COMMON_OBJS)
+	@mkdir -p $(BIN)
+	@$(CXX) $^ -o $@ $(LDFLAGS)
+	./build/bin/back_x ast.txt asm.asm
+	nasm -f elf64 asm.asm -o asm.o
+	gcc -no-pie asm.o MyScanf.o MyPrintf.o -o asm
 
 $(REVERSE): $(REVERSE_OBJS) $(COMMON_OBJS)
 	@mkdir -p $(BIN)

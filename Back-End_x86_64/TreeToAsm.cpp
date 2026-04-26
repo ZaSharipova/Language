@@ -34,6 +34,18 @@ typedef struct {
         fprintf(file, "; " fmt "\n", ##__VA_ARGS__);                      \
     } while (0)
 
+#define EMIT_BLANK()                            \
+    do {                                        \
+        fprintf(file, "\n");                    \
+    } while (0)
+
+#define EMIT_SECTION(title)                                               \
+    do {                                                                  \
+        fprintf(file, "\n");                                              \
+        for (int k = 0; k < sub_info->indent; k++) fprintf(file, "\t");   \
+        fprintf(file, "; --- %s ---\n", title);                           \
+    } while (0)
+
 #define EMIT_VAR_ADDR(shift)                                    \
     do {                                                        \
         EMIT("lea rcx, [rel ram]");                             \
@@ -80,6 +92,7 @@ static void PrintAddressAssignment(FILE *file, LangNode_t *deref_node, VariableA
 static void EmitPrologue(FILE *file, SubAsmInfo *sub_info) {
     assert(file);
 
+    EMIT_SECTION("prologue");
     EMIT("push rbp");
     EMIT("mov rbp, rsp");
     EMIT("push r12");
@@ -90,13 +103,13 @@ static void EmitPrologue(FILE *file, SubAsmInfo *sub_info) {
 static void EmitEpilogue(FILE *file, SubAsmInfo *sub_info) {
     assert(file);
 
+    EMIT_SECTION("epilogue");
     EMIT("lea rsp, [rbp - %d]", CALLEE_SAVED_SIZE);
     EMIT("pop rbx");
     EMIT("pop r13");
     EMIT("pop r12");
     EMIT("pop rbp");
 }
-
 
 void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base, AsmInfo *asm_info) {
     assert(file);
@@ -108,16 +121,22 @@ void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base,
     static int header_printed = 0;
     if (!header_printed) {
         header_printed = 1;
+
+        fprintf(file, ";---------------------------------------------\n");
+        fprintf(file, "; Generated assembly\n");
+        fprintf(file, ";---------------------------------------------\n\n");
+
         fprintf(file, "default rel\n\n");
+
         fprintf(file, "section .data\n");
-        fprintf(file, "\tfmt_int: db \"%%lld\", 10, 0\n");
-        fprintf(file, "\tfmt_scan: db \"%%lld\", 0\n");
+        fprintf(file, "\tfmt_int:  db \"%%d\", 10, 0\n");
         fprintf(file, "\tfmt_char: db \"%%c\", 0\n\n");
+
         fprintf(file, "section .bss\n");
-        fprintf(file, "\tram: resq 65536\n");
-        fprintf(file, "\tscan_buf: resq 1\n\n");
+        fprintf(file, "\tram: resq 65536\n\n");
+
         fprintf(file, "section .text\n");
-        fprintf(file, "\textern printf, scanf, exit\n");
+        fprintf(file, "\textern my_printf, my_scanf, exit\n");
         fprintf(file, "\tglobal main\n\n");
     }
 
@@ -151,6 +170,10 @@ static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, i
     const char *func_name = arr->var_array[func_node->left->value.pos].variable_name;
     int is_main = (strcmp(MAIN, func_name) == 0);
 
+    fprintf(file, ";---------------------------------------------\n");
+    fprintf(file, "; function: %s\n", func_name);
+    fprintf(file, ";---------------------------------------------\n");
+
     if (is_main) {
         EMIT_LABEL("main:");
     }
@@ -162,6 +185,8 @@ static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, i
     EmitPrologue(file, sub_info);
 
     if (is_main) {
+        EMIT_BLANK();
+        EMIT_COMMENT("r12 = ram base pointer (starts at 0 for main)");
         EMIT("xor r12d, r12d");
     }
 
@@ -169,28 +194,35 @@ static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, i
     sub_info->param_count = param_count;
 
     if (param_count > 0) {
+        EMIT_BLANK();
+        EMIT_COMMENT("reserve %d slot(s) for parameters", param_count);
         EMIT("add r12, %d", param_count);
     }
 
     int frame_off = 16;
-    sub_info->comment = "pushing parameters";
-    PushParamsToRam(file, args, arr, asm_info, sub_info, &frame_off);
+    if (args) {
+        EMIT_SECTION("load parameters from stack frame");
+        PushParamsToRam(file, args, arr, asm_info, sub_info, &frame_off);
+    }
 
     *ram_base += param_count;
     sub_info->ram_base = *ram_base;
-    sub_info->comment = "body";
+
+    EMIT_SECTION("function body");
     PrintStatement(file, func_node->right->right, arr, asm_info, sub_info);
     *ram_base -= param_count;
 
     EmitEpilogue(file, sub_info);
 
     if (is_main) {
+        EMIT_BLANK();
+        EMIT_COMMENT("exit(0)");
         EMIT("xor edi, edi");
         EMIT("call exit");
     } else {
         EMIT("ret");
     }
-    fprintf(file, "\n");
+    fprintf(file, "\n\n");
 }
 
 static int FindVarPos(VariableArr *arr, LangNode_t *node, AsmInfo *asm_info) {
@@ -208,6 +240,7 @@ static int FindVarPos(VariableArr *arr, LangNode_t *node, AsmInfo *asm_info) {
             }
         }
     }
+
     return var_idx;
 }
 
@@ -215,6 +248,7 @@ static int ResolveVarShift(VariableArr *arr, LangNode_t *node, AsmInfo *asm_info
     assert(arr);
     assert(node);
     assert(asm_info);
+    assert(sub_info);
 
     LangNode_t *check = node;
     if (IsThatOperation(node, kOperationGetAddr) || IsThatOperation(node, kOperationCallAddr)) {
@@ -246,6 +280,7 @@ static void StoreParamFromFrame(FILE *file, VariableArr *arr, LangNode_t *node, 
     assert(arr);
     assert(node);
     assert(asm_info);
+    assert(sub_info);
 
     int shift = ResolveVarShift(arr, node, asm_info, sub_info);
     EMIT_COMMENT("param [rbp+%d] -> ram[r12%+d]", frame_off, shift);
@@ -259,8 +294,10 @@ static void PopToVar(FILE *file, VariableArr *arr, LangNode_t *node, AsmInfo *as
     assert(arr);
     assert(node);
     assert(asm_info);
+    assert(sub_info);
 
     int shift = ResolveVarShift(arr, node, asm_info, sub_info);
+    EMIT_COMMENT("store to var (shift=%d)", shift);
     EMIT("pop rax");
     EMIT_VAR_ADDR(shift);
     EMIT("mov [rcx], rax");
@@ -277,10 +314,10 @@ static void PushParamsToStack(FILE *file, LangNode_t *args_node, VariableArr *ar
     assert(file);
     assert(arr);
     assert(asm_info);
+    assert(sub_info);
     if (!args_node) return;
 
     if (!IsThatOperation(args_node, kOperationComma)) {
-        sub_info->comment = "push arg";
         PrintExpr(file, args_node, arr, asm_info, sub_info);
         return;
     }
@@ -298,6 +335,7 @@ static void PushParamsToRam(FILE *file, LangNode_t *args_node, VariableArr *arr,
     assert(file);
     assert(arr);
     assert(asm_info);
+    assert(sub_info);
     assert(frame_off);
     if (!args_node) return;
 
@@ -320,6 +358,7 @@ static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, AsmInfo *a
     assert(file);
     assert(arr);
     assert(asm_info);
+    assert(sub_info);
     if (!expr) return;
 
     switch (expr->type) {
@@ -346,16 +385,20 @@ static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, AsmInfo *a
 }
 
 static void EmitBinaryOp(FILE *file, LangNode_t *node, VariableArr *arr, AsmInfo *asm_info,
-        SubAsmInfo *sub_info, const char *op_instr) {
+        SubAsmInfo *sub_info, const char *op_instr, const char *op_name) {
     assert(file);
     assert(node);
     assert(arr);
     assert(asm_info);
+    assert(sub_info);
     assert(op_instr);
 
+    EMIT_BLANK();
+    EMIT_COMMENT("%s", op_name);
+
     PrintExpr(file, node->left, arr, asm_info, sub_info);
-    sub_info->comment = NULL;
     PrintExpr(file, node->right, arr, asm_info, sub_info);
+
     EMIT("pop rbx");
     EMIT("pop rax");
 
@@ -375,6 +418,7 @@ static void PrintExprOperationCase(FILE *file, LangNode_t *expr, VariableArr *ar
     assert(expr);
     assert(arr);
     assert(asm_info);
+    assert(sub_info);
 
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wswitch-enum"
@@ -388,6 +432,8 @@ static void PrintExprOperationCase(FILE *file, LangNode_t *expr, VariableArr *ar
             break;
 
         case kOperationSQRT:
+            EMIT_BLANK();
+            EMIT_COMMENT("sqrt");
             PrintExpr(file, expr->left, arr, asm_info, sub_info);
             EMIT("pop rax");
             EMIT("cvtsi2sd xmm0, rax");
@@ -397,24 +443,28 @@ static void PrintExprOperationCase(FILE *file, LangNode_t *expr, VariableArr *ar
             break;
 
         case kOperationAdd:
-            EmitBinaryOp(file, expr, arr, asm_info, sub_info, "add");
+            EmitBinaryOp(file, expr, arr, asm_info, sub_info, "add", "addition");
             break;
         case kOperationSub:
-            EmitBinaryOp(file, expr, arr, asm_info, sub_info, "sub");
+            EmitBinaryOp(file, expr, arr, asm_info, sub_info, "sub", "subtraction");
             break;
         case kOperationMul:
-            EmitBinaryOp(file, expr, arr, asm_info, sub_info, "imul");
+            EmitBinaryOp(file, expr, arr, asm_info, sub_info, "imul", "multiplication");
             break;
         case kOperationDiv:
-            EmitBinaryOp(file, expr, arr, asm_info, sub_info, "idiv");
+            EmitBinaryOp(file, expr, arr, asm_info, sub_info, "idiv", "division");
             break;
 
         case kOperationCall: {
-            PushParamsToStack(file, expr->right, arr, asm_info, sub_info);
             const char *callee = arr->var_array[expr->left->value.pos].variable_name;
+            int nargs = CountArgs(expr->right);
+
+            EMIT_BLANK();
+            EMIT_COMMENT("call %s(%d args), result on stack", callee, nargs);
+
+            PushParamsToStack(file, expr->right, arr, asm_info, sub_info);
             EMIT("call %s", callee);
 
-            int nargs = CountArgs(expr->right);
             if (nargs > 0) {
                 EMIT("add rsp, %d", nargs * 8);
             }
@@ -425,7 +475,8 @@ static void PrintExprOperationCase(FILE *file, LangNode_t *expr, VariableArr *ar
 
         case kOperationArrPos: {
             int arr_base = FindVarPos(arr, expr->left, asm_info) - sub_info->param_count;
-            EMIT_COMMENT("array access [base shift=%d]", arr_base);
+            EMIT_BLANK();
+            EMIT_COMMENT("array read [base shift=%d]", arr_base);
             EMIT("lea rcx, [rel ram]");
             EMIT("mov rdi, r12");
 
@@ -452,6 +503,7 @@ static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, AsmIn
     assert(file);
     assert(arr);
     assert(asm_info);
+    assert(sub_info);
     if (!stmt) return;
 
     switch (stmt->type) {
@@ -496,37 +548,41 @@ static void PrintIfToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, AsmInfo
     assert(stmt);
     assert(arr);
     assert(asm_info);
+    assert(sub_info);
 
     LangNode_t *condition = stmt->left;
+    int this_if = asm_info->label_if++;
+    int this_else = asm_info->label_else++;
+    int has_else = IsThatOperation(stmt->right, kOperationElse);
 
-    sub_info->comment = "if condition left part";
+    EMIT_SECTION("if");
+    EMIT_COMMENT("evaluate condition");
     PrintExpr(file, condition->left, arr, asm_info, sub_info);
-    sub_info->comment = "if condition right part";
     PrintExpr(file, condition->right, arr, asm_info, sub_info);
 
     EMIT("pop rbx");
     EMIT("pop rax");
     EMIT("cmp rax, rbx");
-
-    int this_if = asm_info->label_if++;
-    int this_else = asm_info->label_else++;
-
     EMIT("%s .else_%d", ChooseCompareMode(condition), this_else);
 
+    EMIT_BLANK();
+    EMIT_COMMENT("then branch");
     sub_info->indent++;
-    sub_info->comment = "if";
-    if (IsThatOperation(stmt->right, kOperationElse)) {
+
+    if (has_else) {
         PrintStatement(file, stmt->right->left, arr, asm_info, sub_info);
-        EMIT("jmp .end_if_%d", this_if);
     } else {
         PrintStatement(file, stmt->right, arr, asm_info, sub_info);
-        EMIT("jmp .end_if_%d", this_if);
     }
 
-    EMIT_LABEL(".else_%d:", this_else);
+    EMIT("jmp .end_if_%d", this_if);
     sub_info->indent--;
-    sub_info->comment = "else";
-    if (IsThatOperation(stmt->right, kOperationElse)) {
+
+    EMIT_BLANK();
+    EMIT_LABEL(".else_%d:", this_else);
+
+    if (has_else) {
+        EMIT_COMMENT("else branch");
         PrintStatement(file, stmt->right->right, arr, asm_info, sub_info);
     }
 
@@ -538,15 +594,16 @@ static void PrintWhileToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, AsmI
     assert(stmt);
     assert(arr);
     assert(asm_info);
+    assert(sub_info);
 
     int start_label = asm_info->label_counter++;
     int end_label = asm_info->label_counter++;
 
+    EMIT_SECTION("while loop");
     EMIT_LABEL(".while_start_%d:", start_label);
 
-    sub_info->comment = "while lhs";
+    EMIT_COMMENT("evaluate condition");
     PrintExpr(file, stmt->left->left, arr, asm_info, sub_info);
-    sub_info->comment = "while rhs";
     PrintExpr(file, stmt->left->right, arr, asm_info, sub_info);
 
     EMIT("pop rbx");
@@ -554,11 +611,13 @@ static void PrintWhileToAsm(FILE *file, LangNode_t *stmt, VariableArr *arr, AsmI
     EMIT("cmp rax, rbx");
     EMIT("%s .while_end_%d", ChooseCompareMode(stmt->left), end_label);
 
+    EMIT_BLANK();
+    EMIT_COMMENT("loop body");
     sub_info->indent++;
-    sub_info->comment = "while body";
     PrintStatement(file, stmt->right, arr, asm_info, sub_info);
-
     sub_info->indent--;
+
+    EMIT_BLANK();
     EMIT("jmp .while_start_%d", start_label);
     EMIT_LABEL(".while_end_%d:", end_label);
 }
@@ -568,8 +627,9 @@ static void PrintReturn(FILE *file, LangNode_t *stmt, VariableArr *arr, AsmInfo 
     assert(stmt);
     assert(arr);
     assert(asm_info);
+    assert(sub_info);
 
-    sub_info->comment = "return";
+    EMIT_SECTION("return");
     PrintExpr(file, stmt->left, arr, asm_info, sub_info);
 
     EMIT("pop rax");
@@ -583,11 +643,14 @@ static void PrintArrDeclare(FILE *file, LangNode_t *stmt, VariableArr *arr, AsmI
     assert(stmt);
     assert(arr);
     assert(asm_info);
+    assert(sub_info);
 
     arr->var_array[stmt->left->left->left->value.pos].pos_in_code = asm_info->counter;
 
     int arr_size = (int)stmt->left->left->right->value.number;
-    EMIT_COMMENT("declare array[%d]", arr_size);
+
+    EMIT_BLANK();
+    EMIT_COMMENT("declare array[%d], base at counter=%d", arr_size, asm_info->counter);
 
     for (int i = 0; i < arr_size; i++) {
         int shift = asm_info->counter + i - sub_info->param_count;
@@ -603,8 +666,11 @@ static void PrintIsForArray(FILE *file, LangNode_t *stmt, VariableArr *arr, AsmI
     assert(stmt);
     assert(arr);
     assert(asm_info);
+    assert(sub_info);
 
-    sub_info->comment = "arr assign val";
+    EMIT_BLANK();
+    EMIT_COMMENT("array element assignment");
+
     PrintExpr(file, stmt->right, arr, asm_info, sub_info);
     int arr_base = FindVarPos(arr, stmt->left->left, asm_info) - sub_info->param_count;
 
@@ -616,7 +682,7 @@ static void PrintIsForArray(FILE *file, LangNode_t *stmt, VariableArr *arr, AsmI
         EMIT("sub rdi, %d", -arr_base);
     }
 
-    sub_info->comment = "arr idx";
+    EMIT_COMMENT("compute index");
     PrintExpr(file, stmt->left->right, arr, asm_info, sub_info);
     EMIT("pop rax");
     EMIT("add rdi, rax");
@@ -631,9 +697,12 @@ static void PrintAddressOf(FILE *file, LangNode_t *var_node, VariableArr *arr, A
     assert(arr);
     assert(asm_info);
     assert(var_node->type == kVariable);
+    assert(sub_info);
 
     int shift = FindVarPos(arr, var_node, asm_info) - sub_info->param_count;
-    EMIT_COMMENT("address of (shift=%d) %s", shift, sub_info->comment ? sub_info->comment : "");
+
+    EMIT_BLANK();
+    EMIT_COMMENT("address-of (shift=%d)", shift);
     EMIT_VAR_ADDR(shift);
     EMIT("push rcx");
 }
@@ -643,7 +712,9 @@ static void PrintDereference(FILE *file, LangNode_t *ptr_node, VariableArr *arr,
     assert(ptr_node);
     assert(arr);
     assert(asm_info);
+    assert(sub_info);
 
+    EMIT_COMMENT("dereference");
     PrintAddressOf(file, ptr_node, arr, asm_info, sub_info);
     EMIT("pop rcx");
     EMIT("push qword [rcx]");
@@ -654,8 +725,9 @@ static void PrintAddressAssignment(FILE *file, LangNode_t *deref_node, VariableA
     assert(deref_node);
     assert(arr);
     assert(asm_info);
+    assert(sub_info);
 
-    sub_info->comment = "addr assign";
+    EMIT_COMMENT("store via pointer");
     PrintExpr(file, deref_node->left, arr, asm_info, sub_info);
     EMIT("pop rcx");
     EMIT("pop rax");
@@ -667,15 +739,17 @@ static void EmitPrintInt(FILE *file, LangNode_t *node, VariableArr *arr, AsmInfo
     assert(node);
     assert(arr);
     assert(asm_info);
+    assert(sub_info);
 
-    sub_info->comment = "print int";
+    EMIT_BLANK();
+    EMIT_COMMENT("print integer");
     PrintExpr(file, node->left, arr, asm_info, sub_info);
     EMIT("pop rsi");
     EMIT("mov r13, rsp");
     EMIT("and rsp, -16");
     EMIT("lea rdi, [rel fmt_int]");
     EMIT("xor eax, eax");
-    EMIT("call printf");
+    EMIT("call my_printf");
     EMIT("mov rsp, r13");
 }
 
@@ -684,41 +758,43 @@ static void EmitPrintChar(FILE *file, LangNode_t *node, VariableArr *arr, AsmInf
     assert(node);
     assert(arr);
     assert(asm_info);
+    assert(sub_info);
 
-    sub_info->comment = "print char";
+    EMIT_BLANK();
+    EMIT_COMMENT("print character");
     PrintExpr(file, node->left, arr, asm_info, sub_info);
     EMIT("pop rsi");
     EMIT("mov r13, rsp");
     EMIT("and rsp, -16");
     EMIT("lea rdi, [rel fmt_char]");
     EMIT("xor eax, eax");
-    EMIT("call printf");
+    EMIT("call my_printf");
     EMIT("mov rsp, r13");
 }
 
 static void EmitReadInt(FILE *file, SubAsmInfo *sub_info) {
     assert(file);
+    assert(sub_info);
 
-    EMIT("mov r13, rsp");
-    EMIT("and rsp, -16");
-    EMIT("lea rdi, [rel fmt_scan]");
-    EMIT("lea rsi, [rel scan_buf]");
-    EMIT("xor eax, eax");
-    EMIT("call scanf");
-    EMIT("mov rsp, r13");
-    EMIT("push qword [rel scan_buf]");
+    EMIT_BLANK();
+    EMIT_COMMENT("read integer from stdin");
+    EMIT("call my_scanf");
+    EMIT("push rax");
 }
 
 static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableArr *arr, AsmInfo *asm_info, SubAsmInfo *sub_info) {
     assert(file);
     assert(arr);
     assert(asm_info);
+    assert(sub_info);
     if (!stmt) return;
 
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wswitch-enum"
     switch (stmt->value.operation) {
         case kOperationHLT:
+            EMIT_BLANK();
+            EMIT_COMMENT("halt");
             EMIT("xor edi, edi");
             EMIT("call exit");
             break;
@@ -732,10 +808,14 @@ static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableAr
             break;
 
         case kOperationCall: {
-            PushParamsToStack(file, stmt->right, arr, asm_info, sub_info);
             const char *callee = arr->var_array[stmt->left->value.pos].variable_name;
-            EMIT("call %s", callee);
             int number_args = CountArgs(stmt->right);
+
+            EMIT_BLANK();
+            EMIT_COMMENT("call %s(%d args), discard result", callee, number_args);
+
+            PushParamsToStack(file, stmt->right, arr, asm_info, sub_info);
+            EMIT("call %s", callee);
             if (number_args > 0) {
                 EMIT("add rsp, %d", number_args * 8);
             }
@@ -748,14 +828,15 @@ static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableAr
                 break;
             }
 
-            sub_info->comment = "is right part";
+            EMIT_BLANK();
+            EMIT_COMMENT("assignment");
             PrintExpr(file, stmt->right, arr, asm_info, sub_info);
+
             if (IsThatOperation(stmt->left, kOperationGetAddr)) {
                 PrintAddressAssignment(file, stmt, arr, asm_info, sub_info);
                 break;
             }
 
-            sub_info->comment = "is left part";
             PrintStatement(file, stmt->left, arr, asm_info, sub_info);
             break;
 
@@ -777,9 +858,7 @@ static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableAr
             break;
 
         case kOperationThen:
-            sub_info->comment = "then left";
             PrintStatement(file, stmt->left, arr, asm_info, sub_info);
-            sub_info->comment = "then right";
             PrintStatement(file, stmt->right, arr, asm_info, sub_info);
             break;
 
@@ -792,7 +871,8 @@ static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableAr
             break;
 
         case kOperationTernary:
-            sub_info->comment = "ternary";
+            EMIT_BLANK();
+            EMIT_COMMENT("ternary");
             PrintStatement(file, stmt->left->right, arr, asm_info, sub_info);
             PrintStatement(file, stmt->left->left, arr, asm_info, sub_info);
             break;
@@ -802,7 +882,8 @@ static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableAr
             break;
 
         case kOperationDraw:
-            EMIT_COMMENT("DRAW — not implemented for x86-64");
+            EMIT_BLANK();
+            EMIT_COMMENT("DRAW -- not implemented for x86-64");
             break;
 
         default:
