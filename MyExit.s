@@ -1,0 +1,6 @@
+section .text
+
+my_exit:
+    mov rax, 60
+    mov rdi, 0
+    syscall

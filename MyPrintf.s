@@ -1,7 +1,4 @@
 section .text
-global my_printf
-extern printf
-default rel
 
 %define SA(n) [save_area + 8 * n]
 %define XA(n) [xmm_save + 8 * n]

@@ -1,4 +1,3 @@
-global my_scanf
 
 section .bss
     buffer resb 16

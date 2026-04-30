@@ -101,7 +101,7 @@ $(ALL_BACK_X): $(BACK_X_OBJS) $(COMMON_OBJS)
 	@$(CXX) $^ -o $@ $(LDFLAGS)
 	./build/bin/back_x ast.txt asm.asm
 	nasm -f elf64 asm.asm -o asm.o
-	gcc -no-pie asm.o MyScanf.o MyPrintf.o MyExit.o -o asm
+	gcc -no-pie asm.o -o asm
 
 $(REVERSE): $(REVERSE_OBJS) $(COMMON_OBJS)
 	@mkdir -p $(BIN)

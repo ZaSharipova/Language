@@ -136,7 +136,7 @@ void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base,
         fprintf(file, "\tram: resq 65536\n\n");
 
         fprintf(file, "section .text\n");
-        fprintf(file, "\textern my_printf, my_scanf, my_exit\n");
+        //fprintf(file, "\textern my_printf, my_scanf, my_exit\n");
         fprintf(file, "\tglobal main\n\n");
     }
 
