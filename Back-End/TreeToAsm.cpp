@@ -294,7 +294,7 @@ static const char *ChooseCompareMode(LangNode_t *node) {
         case kOperationBE: return "JA";
         case kOperationE:  return "JNE";
         case kOperationNE: return "JE";
-        default: return "NULL";
+        default:           return "NULL";
     }
     #pragma GCC diagnostic pop
 }

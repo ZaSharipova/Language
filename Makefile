@@ -26,7 +26,15 @@ CXXFLAGS = -ggdb3 -g -std=c++17 -O0 							 \
 	-Wlarger-than=8192 -fPIE -Werror=vla 						 \
 	$(SANITIZERS)
 
-LDFLAGS = -lm $(SANITIZERS)
+LDFLAGS 	 = -lm $(SANITIZERS)
+
+ifdef TREE_ASM
+	CXXFLAGS += -D_DTREE_ASM
+endif
+
+ifdef TREE_ELF
+	CXXFLAGS += -D_DTREE_ELF
+endif
 
 BUILD       = build
 BIN         = $(BUILD)/bin
@@ -86,14 +94,14 @@ $(BACK): $(BACK_OBJS) $(COMMON_OBJS)
 
 $(BACK_X): $(BACK_X_OBJS) $(COMMON_OBJS)
 	@mkdir -p $(BIN)
-	@$(CXX) $^ -o $@ $(LDFLAGS)
+	$(CXX) $^ -o $@ $(LDFLAGS)
 
 $(ALL_BACK_X): $(BACK_X_OBJS) $(COMMON_OBJS)
 	@mkdir -p $(BIN)
 	@$(CXX) $^ -o $@ $(LDFLAGS)
 	./build/bin/back_x ast.txt asm.asm
 	nasm -f elf64 asm.asm -o asm.o
-	gcc -no-pie asm.o MyScanf.o MyPrintf.o -o asm
+	gcc -no-pie asm.o MyScanf.o MyPrintf.o MyExit.o -o asm
 
 $(REVERSE): $(REVERSE_OBJS) $(COMMON_OBJS)
 	@mkdir -p $(BIN)

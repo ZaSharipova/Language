@@ -136,7 +136,7 @@ void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base,
         fprintf(file, "\tram: resq 65536\n\n");
 
         fprintf(file, "section .text\n");
-        fprintf(file, "\textern my_printf, my_scanf, exit\n");
+        fprintf(file, "\textern my_printf, my_scanf, my_exit\n");
         fprintf(file, "\tglobal main\n\n");
     }
 
@@ -217,8 +217,8 @@ static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, i
     if (is_main) {
         EMIT_BLANK();
         EMIT_COMMENT("exit(0)");
-        EMIT("xor edi, edi");
-        EMIT("call exit");
+        //EMIT("xor edi, edi");
+        EMIT("call my_exit");
     } else {
         EMIT("ret");
     }
@@ -410,6 +410,7 @@ static void EmitBinaryOp(FILE *file, LangNode_t *node, VariableArr *arr, AsmInfo
     } else {
         EMIT("%s rax, rbx", op_instr);
     }
+
     EMIT("push rax");
 }
 
@@ -538,7 +539,7 @@ static const char *ChooseCompareMode(LangNode_t *node) {
         case kOperationBE: return "jg";
         case kOperationE:  return "jne";
         case kOperationNE: return "je";
-        default: return "je";
+        default:           return "je";
     }
     #pragma GCC diagnostic pop
 }
@@ -795,8 +796,8 @@ static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableAr
         case kOperationHLT:
             EMIT_BLANK();
             EMIT_COMMENT("halt");
-            EMIT("xor edi, edi");
-            EMIT("call exit");
+            //EMIT("xor edi, edi");
+            EMIT("call my_exit");
             break;
 
         case kOperationCallAddr:
