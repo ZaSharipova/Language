@@ -9,6 +9,7 @@
 #include "Common/Enums.h"
 #include "Common/Structs.h"
 #include "Common/CommonFunctions.h"
+#include "Common/CommonBackFunctions.h"
 
 #define ELF_BASE 0x400000u
 #define PAGE_SIZE 0x1000u
@@ -23,7 +24,6 @@
 #define CALLEE_SIZE 24 // push r12/r13/rbx = 3 * 8
 
 #define DEFAULT_SIZE 128
-
 
 typedef struct {
     uint8_t *data;
@@ -763,24 +763,6 @@ typedef struct {
     int param_count;
 } Sub;
 
-static int IsOp(LangNode_t *node, OperationTypes op) {
-    return node && node->type == kOperation && node->value.operation == op;
-}
-static int CountArgs(LangNode_t *node) {
-    if (!node) return 0;
-    if (!IsOp(node, kOperationComma)) return 1;
-
-    return CountArgs(node->left) + CountArgs(node->right);
-}
-
-static void CleanPos(VariableArr *VariableArr) {
-    assert(VariableArr);
-
-    for (size_t i = 0; i < VariableArr->size; i++) {
-        VariableArr->var_array[i].pos_in_code = -1;
-    }
-}
-
 static void MakeLabel(char *buf, size_t size, const char *pre, int n) {
     assert(buf);
     assert(pre);
@@ -805,25 +787,6 @@ static uint8_t ChooseJCC(LangNode_t *cond) {
     }
 }
 
-static int FindVarPos(VariableArr *VariableArr, LangNode_t *node, AsmInfo *info) {
-    assert(VariableArr);
-    assert(node);
-    assert(info);
-
-    int var_idx = -1;
-    for (size_t i = 0; i < VariableArr->size; i++) {
-        if (strcmp(VariableArr->var_array[i].variable_name, VariableArr->var_array[node->value.pos].variable_name) == 0) {
-            if (VariableArr->var_array[i].pos_in_code == -1) {
-                var_idx = VariableArr->var_array[i].pos_in_code = info->counter++;
-            } else {
-                var_idx = VariableArr->var_array[i].pos_in_code;
-            }
-        }
-    }
-
-    return var_idx;
-}
-
 static int ResolveShift(VariableArr *VariableArr, LangNode_t *node, AsmInfo *info, Sub *sub) {
     assert(VariableArr);
     assert(node);
@@ -831,7 +794,7 @@ static int ResolveShift(VariableArr *VariableArr, LangNode_t *node, AsmInfo *inf
     assert(sub);
 
     LangNode_t *check = node;
-    if (IsOp(node, kOperationGetAddr) || IsOp(node, kOperationCallAddr)) {
+    if (IsThatOperation(node, kOperationGetAddr) || IsThatOperation(node, kOperationCallAddr)) {
         check = node->left;
     }
 
@@ -905,7 +868,7 @@ static void CodeGenerateParamsToRam(Context *context, LangNode_t *args, Variable
     assert(frame_offset);
     if (!args) return;
 
-    if (!IsOp(args, kOperationComma)) {
+    if (!IsThatOperation(args, kOperationComma)) {
         CodeGenerateStoreParam(context, VariableArr, args, info, sub, *frame_offset); *frame_offset += 8; return;
     }
 
@@ -925,7 +888,7 @@ static void CodeGenerateParamsToStack(Context *context, LangNode_t *args, Variab
     assert(sub);
     if (!args) return;
 
-    if (!IsOp(args, kOperationComma)) {
+    if (!IsThatOperation(args, kOperationComma)) {
         CodeGenerateExpr(context, args, VariableArr, info, sub);
         return;
     }
@@ -1106,7 +1069,7 @@ static void CodeGenerateIf(Context *context, LangNode_t *stmt, VariableArr *Vari
 
     LangNode_t *cond = stmt->left;
     int ni = info->label_if++, ne = info->label_else++;
-    int has_else = IsOp(stmt->right, kOperationElse);
+    int has_else = IsThatOperation(stmt->right, kOperationElse);
     char lbl_else[64] = {}, lbl_end[64] = {};
     MakeLabel(lbl_else, sizeof(lbl_else), "else", ne);
     MakeLabel(lbl_end, sizeof(lbl_end), "end_if", ni);
@@ -1238,10 +1201,10 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *Va
 
                 case kOperationCall: {
                     const char *callee = VariableArr->var_array[expr->left->value.pos].variable_name;
-                    int na = CountArgs(expr->right);
+                    int number_args = CountArgs(expr->right);
                     CodeGenerateParamsToStack(context, expr->right, VariableArr, info, sub);
                     EmitCall(context, callee);
-                    if (na > 0) EmitAddRegImm(context, FindRegCode("rsp"), (int64_t)(na * 8));
+                    if (number_args > 0) EmitAddRegImm(context, FindRegCode("rsp"), (int64_t)(number_args * 8));
                     EmitPush(context, 0);
                     break;
                 }
@@ -1292,32 +1255,32 @@ static void CodeGenerateStatement(Context *context, LangNode_t *stmt, VariableAr
 
                 case kOperationCallAddr:
                     CodeGenerateAddrOf(context, stmt->left, VariableArr, info, sub);
-                        break;
+                    break;
 
                 case kOperationGetAddr:
                     CodeGenerateDeref(context, stmt->left, VariableArr, info, sub);
-                        break;
+                    break;
 
                 case kOperationCall: {
                     const char *callee = VariableArr->var_array[stmt->left->value.pos].variable_name;
-                    int na = CountArgs(stmt->right);
+                    int number_args = CountArgs(stmt->right);
                     CodeGenerateParamsToStack(context, stmt->right, VariableArr, info, sub);
                     EmitCall(context, callee);
-                    if (na > 0) {
-                        EmitAddRegImm(context, 4, (int64_t)(na * 8));
+                    if (number_args > 0) {
+                        EmitAddRegImm(context, 4, (int64_t)(number_args * 8));
                     }
 
                     break;
                 }
 
                 case kOperationIs:
-                    if (IsOp(stmt->left, kOperationArrPos)) {
+                    if (IsThatOperation(stmt->left, kOperationArrPos)) {
                         CodeGenerateArrAssign(context, stmt, VariableArr, info, sub);
                         break;
                     }
 
                     CodeGenerateExpr(context, stmt->right, VariableArr, info, sub);
-                    if (IsOp(stmt->left, kOperationGetAddr)) {
+                    if (IsThatOperation(stmt->left, kOperationGetAddr)) {
                         CodeGenerateAddrAssign(context, stmt, VariableArr, info, sub);
                         break;
                     }
@@ -1397,7 +1360,7 @@ static void CodeGenerateFunction(Context *context, LangNode_t *fn, VariableArr *
     assert(info);
     if (!fn) return;
 
-    CleanPos(VariableArr);
+    CleanPositions(VariableArr);
     
     info->counter = 0;
 
@@ -1450,7 +1413,7 @@ static void CodeGenerateProgram(Context *context, LangNode_t *root, VariableArr 
     if (!root) return;
 
     info->counter = 0;
-    if (IsOp(root, kOperationFunction)) {
+    if (IsThatOperation(root, kOperationFunction)) {
         CodeGenerateFunction(context, root, VariableArr, ram_base, info);
     }
 

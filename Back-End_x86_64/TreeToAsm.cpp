@@ -9,6 +9,7 @@
 #include "Common/Structs.h"
 #include "Common/CommonFunctions.h"
 #include "Common/StackFunctions.h"
+#include "Common/CommonBackFunctions.h"
 
 typedef struct {
     int ram_base;
@@ -48,7 +49,7 @@ typedef struct {
 
 #define EMIT_VAR_ADDR(shift)                                    \
     do {                                                        \
-        EMIT("lea rcx, [rel ram]");                             \
+        EMIT("lea rcx, [ram]");                                 \
         EMIT("mov rdi, r12");                                   \
         if ((shift) >= 0) {                                     \
             EMIT("add rdi, %d", (shift));                       \
@@ -60,9 +61,7 @@ typedef struct {
 
 #define CALLEE_SAVED_SIZE 24
 
-static void CleanPositions(VariableArr *arr);
 static const char *ChooseCompareMode(LangNode_t *node);
-static int  CountArgs(LangNode_t *args_node);
 
 static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, int *ram_base, AsmInfo *asm_info, int indent);
 static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, AsmInfo *asm_info, SubAsmInfo *sub_info);
@@ -70,7 +69,6 @@ static void PrintExprOperationCase(FILE *file, LangNode_t *expr, VariableArr *ar
 
 static void PopToVar(FILE *file, VariableArr *arr, LangNode_t *node, AsmInfo *asm_info, SubAsmInfo *sub_info);
 static void StoreParamFromFrame(FILE *file, VariableArr *arr, LangNode_t *node, AsmInfo *asm_info, SubAsmInfo *sub_info, int frame_off);
-static int  FindVarPos(VariableArr *arr, LangNode_t *node, AsmInfo *asm_info);
 static int  ResolveVarShift(VariableArr *arr, LangNode_t *node, AsmInfo *asm_info, SubAsmInfo *sub_info);
 
 static void PushParamsToStack(FILE *file, LangNode_t *args_node, VariableArr *arr, AsmInfo *asm_info, SubAsmInfo *sub_info);
@@ -225,25 +223,6 @@ static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, i
     fprintf(file, "\n\n");
 }
 
-static int FindVarPos(VariableArr *arr, LangNode_t *node, AsmInfo *asm_info) {
-    assert(arr);
-    assert(node);
-    assert(asm_info);
-
-    int var_idx = -1;
-    for (size_t i = 0; i < arr->size; i++) {
-        if (strcmp(arr->var_array[i].variable_name, arr->var_array[node->value.pos].variable_name) == 0) {
-            if (arr->var_array[i].pos_in_code == -1) {
-                var_idx = arr->var_array[i].pos_in_code = asm_info->counter++;
-            } else {
-                var_idx = arr->var_array[i].pos_in_code;
-            }
-        }
-    }
-
-    return var_idx;
-}
-
 static int ResolveVarShift(VariableArr *arr, LangNode_t *node, AsmInfo *asm_info, SubAsmInfo *sub_info) {
     assert(arr);
     assert(node);
@@ -301,13 +280,6 @@ static void PopToVar(FILE *file, VariableArr *arr, LangNode_t *node, AsmInfo *as
     EMIT("pop rax");
     EMIT_VAR_ADDR(shift);
     EMIT("mov [rcx], rax");
-}
-
-static int CountArgs(LangNode_t *args_node) {
-    if (!args_node) return 0;
-    if (!IsThatOperation(args_node, kOperationComma)) return 1;
-
-    return CountArgs(args_node->left) + CountArgs(args_node->right);
 }
 
 static void PushParamsToStack(FILE *file, LangNode_t *args_node, VariableArr *arr, AsmInfo *asm_info, SubAsmInfo *sub_info) {
@@ -478,7 +450,7 @@ static void PrintExprOperationCase(FILE *file, LangNode_t *expr, VariableArr *ar
             int arr_base = FindVarPos(arr, expr->left, asm_info) - sub_info->param_count;
             EMIT_BLANK();
             EMIT_COMMENT("array read [base shift=%d]", arr_base);
-            EMIT("lea rcx, [rel ram]");
+            EMIT("lea rcx, [ram]");
             EMIT("mov rdi, r12");
 
             if (arr_base >= 0) {
@@ -675,7 +647,7 @@ static void PrintIsForArray(FILE *file, LangNode_t *stmt, VariableArr *arr, AsmI
     PrintExpr(file, stmt->right, arr, asm_info, sub_info);
     int arr_base = FindVarPos(arr, stmt->left->left, asm_info) - sub_info->param_count;
 
-    EMIT("lea rcx, [rel ram]");
+    EMIT("lea rcx, [ram]");
     EMIT("mov rdi, r12");
     if (arr_base >= 0) {
         EMIT("add rdi, %d", arr_base);
@@ -748,7 +720,7 @@ static void EmitPrintInt(FILE *file, LangNode_t *node, VariableArr *arr, AsmInfo
     EMIT("pop rsi");
     EMIT("mov r13, rsp");
     EMIT("and rsp, -16");
-    EMIT("lea rdi, [rel fmt_int]");
+    EMIT("lea rdi, [fmt_int]");
     EMIT("xor eax, eax");
     EMIT("call my_printf");
     EMIT("mov rsp, r13");
@@ -767,7 +739,7 @@ static void EmitPrintChar(FILE *file, LangNode_t *node, VariableArr *arr, AsmInf
     EMIT("pop rsi");
     EMIT("mov r13, rsp");
     EMIT("and rsp, -16");
-    EMIT("lea rdi, [rel fmt_char]");
+    EMIT("lea rdi, [fmt_char]");
     EMIT("xor eax, eax");
     EMIT("call my_printf");
     EMIT("mov rsp, r13");
@@ -892,12 +864,4 @@ static void PrintStatementOperationCase(FILE *file, LangNode_t *stmt, VariableAr
             break;
     }
     #pragma GCC diagnostic pop
-}
-
-static void CleanPositions(VariableArr *arr) {
-    assert(arr);
-
-    for (size_t i = 0; i < arr->size; i++) {
-        arr->var_array[i].pos_in_code = -1;
-    }
 }

@@ -36,15 +36,15 @@ ifdef TREE_ELF
 	CXXFLAGS += -D_DTREE_ELF
 endif
 
-BUILD       = build
-BIN         = $(BUILD)/bin
-OBJ_COMMON  = $(BUILD)/common
-OBJ_FRONT   = $(BUILD)/front
-OBJ_MIDDLE  = $(BUILD)/middle
-OBJ_BACK    = $(BUILD)/back
-OBJ_BACK_X	= $(BUILD)/back_x
-OBJ_REVERSE = $(BUILD)/reverse
-OBJ_TRICK   = $(BUILD)/trick
+BUILD         = build
+BIN           = $(BUILD)/bin
+OBJ_COMMON    = $(BUILD)/common
+OBJ_FRONT     = $(BUILD)/front
+OBJ_MIDDLE    = $(BUILD)/middle
+OBJ_BACK      = $(BUILD)/back
+OBJ_BACK_X	  = $(BUILD)/back_x
+OBJ_REVERSE   = $(BUILD)/reverse
+OBJ_TRICK     = $(BUILD)/trick
 
 COMMON_SRCS  = $(wildcard Common/*.cpp)
 FRONT_SRCS   = $(wildcard Front-End/*.cpp)

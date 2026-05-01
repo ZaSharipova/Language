@@ -9,6 +9,7 @@
 #include "Common/Structs.h"
 #include "Common/CommonFunctions.h"
 #include "Common/StackFunctions.h"
+#include "Common/CommonBackFunctions.h"
 
 typedef struct {
     int ram_base;
@@ -42,7 +43,6 @@ typedef struct {
         FPRINTF(#asm_op "\n");                                 \
         break
 
-static void CleanPositions(VariableArr *arr);
 static const char *ChooseCompareMode(LangNode_t *node);
 
 static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, int *ram_base, AsmInfo *asm_info, int indent);
@@ -161,26 +161,6 @@ static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, AsmI
     }
 }
 
-static int FindVarPos(VariableArr *arr, LangNode_t *node, AsmInfo *asm_info) {
-    assert(arr);
-    assert(node);
-    assert(asm_info);
-
-    int var_idx = -1;
-
-    for (size_t i = 0; i < arr->size; i++) {
-        if (strcmp(arr->var_array[i].variable_name, arr->var_array[node->value.pos].variable_name) == 0) {
-            if (arr->var_array[i].pos_in_code == -1) {
-                var_idx = arr->var_array[i].pos_in_code = asm_info->counter++;
-            } else {
-                var_idx = arr->var_array[i].pos_in_code;
-            }
-        }
-    }
-
-    return var_idx;
-}
-
 static void PushParamsToStack(FILE *file, LangNode_t *args_node, VariableArr *arr, AsmInfo *asm_info, SubAsmInfo *sub_info) {
     assert(file);
     assert(arr);
@@ -269,14 +249,6 @@ static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr,
 
         default:
             printf("no such option in expr->type.\n");
-    }
-}
-
-static void CleanPositions(VariableArr *arr) {
-    assert(arr);
-
-    for (size_t i = 0; i < arr->size; i++) {
-        arr->var_array[i].pos_in_code = -1;
     }
 }
 
