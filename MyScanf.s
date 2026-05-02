@@ -1,7 +1,3 @@
-
-section .bss
-    buffer resb 16
-
 section .text
 
 my_scanf:
@@ -11,11 +7,11 @@ my_scanf:
 
     xor rax, rax
     xor rdi, rdi
-    mov rsi, buffer
+    lea rsi, [buffer]
     mov rdx, 16
     syscall
 
-    mov rsi, buffer
+    lea rsi, [buffer]
     xor rax, rax
     xor rcx, rcx
     mov rbx, 1
@@ -81,3 +77,6 @@ CheckSign:
 
 .done:
     ret
+
+section .bss
+    buffer resb 16

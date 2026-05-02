@@ -49,7 +49,6 @@ static void PrintFunction(FILE *file, LangNode_t *func_node, VariableArr *arr, i
 static void PrintExpr(FILE *file, LangNode_t *expr, VariableArr *arr, AsmInfo *asm_info, SubAsmInfo *sub_info);
 static void PrintExprOperationCase(FILE *file, LangNode_t *expr, VariableArr *arr, AsmInfo *asm_info, SubAsmInfo *sub_info);
 static void FindVarPosPopMN(FILE *file, VariableArr *arr, LangNode_t *node, AsmInfo *asm_info, SubAsmInfo *sub_info);
-static int  FindVarPos(VariableArr *arr, LangNode_t *node, AsmInfo *asm_info);
 static void PushParamsToStack(FILE *file, LangNode_t *args_node, VariableArr *arr, AsmInfo *asm_info, SubAsmInfo *sub_info);
 static void PushParamsToRam(FILE *file, LangNode_t *args_node, VariableArr *arr, AsmInfo *asm_info, SubAsmInfo *sub_info);
 static void PrintStatement(FILE *file, LangNode_t *stmt, VariableArr *arr, AsmInfo *asm_info, SubAsmInfo *sub_info);
