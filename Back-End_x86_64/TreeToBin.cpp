@@ -92,7 +92,6 @@ struct RegInfo {
 };
 
 #define REGS_NUMBER 35
-
 static const struct RegInfo regs[REGS_NUMBER] = {
     {"rax",   0, 64}, {"rcx",   1, 64}, {"rdx",   2, 64}, {"rbx",   3, 64},
     {"rsp",   4, 64}, {"rbp",   5, 64}, {"rsi",   6, 64}, {"rdi",   7, 64},
@@ -105,6 +104,117 @@ static const struct RegInfo regs[REGS_NUMBER] = {
     {"xmm0",  0, 128}, {"xmm1",  1, 128},
     {NULL,    0, 0}
 };
+
+static void GenerateMainCode(Context *context, PltGot *plt_got, LangNode_t *root, VariableArr *arr);
+static int LoadLib(LibBlob *blob, const char *path);
+static void ContextFree(Context *context);
+static void MergeAndPatchLibrary(Context *context, LibBlob *blob, size_t *blob_base);
+static void FinalizeAndWrite(Context *context, PltGot *plt_got, const char *elf_path);
+static void FreeLib(LibBlob *blob);
+
+void CompileTreeToELF(LangNode_t *root, VariableArr *arr, const char *elf_path) {
+    assert(root);
+    assert(arr);
+    assert(elf_path);
+
+    Context context = {};
+    PltGot plt_got = {};
+    LibBlob blob = {};
+
+    GenerateMainCode(&context, &plt_got, root, arr);
+
+    if (!LoadLib(&blob, "my_lib.bin")) {
+        ContextFree(&context);
+        return;
+    }
+
+    size_t blob_base = 0;
+    MergeAndPatchLibrary(&context, &blob, &blob_base);
+    FinalizeAndWrite(&context, &plt_got, elf_path);
+
+    FreeLib(&blob);
+    ContextFree(&context);
+}
+
+static void ContextInit(Context *context);
+static void BuildData(Context *context);
+static void BuildGOT(Context *context, PltGot *plt_got);
+static void EmitPLT(Context *context, PltGot *plt_got);
+static void EmitStart(Context *context);
+static void CodeGenerateProgram(Context *context, LangNode_t *root, VariableArr *arr, int *ram_base, AsmInfo *info);
+
+
+static void GenerateMainCode(Context *context, PltGot *plt_got, LangNode_t *root, VariableArr *arr) {
+    assert(context);
+    assert(plt_got);
+    assert(root);
+    assert(arr);
+
+    ContextInit(context);
+    BuildData(context);
+    BuildGOT(context, plt_got);
+    EmitPLT(context, plt_got);
+    EmitStart(context);
+
+    AsmInfo info = {};
+    int ram_base = 0;
+    CodeGenerateProgram(context, root, arr, &ram_base, &info);
+}
+
+static void BufGrow(Buf *buf, size_t need);
+static void Patch64(Buf *buf, size_t offset, uint64_t value);
+
+static void MergeAndPatchLibrary(Context *context, LibBlob *blob, size_t *blob_base) {
+    assert(context);
+    assert(blob);
+    assert(blob_base);
+
+    *blob_base = context->code.size;
+
+    BufGrow(&context->code, blob->size);
+    memcpy(context->code.data + context->code.size, blob->data, blob->size);
+    context->code.size += blob->size;
+
+    context->b_printf = *blob_base + blob->printf_off;
+    context->b_scanf = *blob_base + blob->scanf_off;
+    context->b_exit = *blob_base + blob->exit_off;
+
+    uint64_t blob_vaddr = ELF_BASE + HDRS_TOTAL + *blob_base;
+    for (uint32_t i = 0; i < blob->reloc_count; i++) {
+        size_t patch_offset = *blob_base + blob->relocs[i];
+        uint64_t current_value;
+        memcpy(&current_value, context->code.data + patch_offset, 8);
+        Patch64(&context->code, patch_offset, current_value + blob_vaddr);
+    }
+}
+
+static void LinkRelocs(Context *context, PltGot *plt_got, uint64_t data_vaddr);
+static void WriteElf(Context *context, const char *path);
+
+static void FinalizeAndWrite(Context *context, PltGot *plt_got, const char *elf_path) {
+    assert(context);
+    assert(plt_got);
+    assert(elf_path);
+
+    size_t seg1 = HDRS_TOTAL + context->code.size;
+    size_t data_offset = (seg1 + PAGE_SIZE - 1) & ~(size_t)(PAGE_SIZE - 1);
+    uint64_t data_vaddr = ELF_BASE + data_offset;
+    uint64_t base = ELF_BASE + HDRS_TOTAL;
+
+    uint64_t addrs[3] = {
+        base + context->b_printf,
+        base + context->b_scanf,
+        base + context->b_exit,
+    };
+
+    for (int i = 0; i < 3; i++) {
+        memcpy(context->data.data + plt_got->got_off + i * 8, &addrs[i], 8);
+    }
+
+    LinkRelocs(context, plt_got, data_vaddr);
+    WriteElf(context, elf_path);
+}
+
 
 static void BufInit(Buf *buf, size_t capacity) {
     assert(buf);
@@ -181,8 +291,8 @@ static void ContextInit(Context *context) {
     assert(context);
 
     memset(context, 0, sizeof(*context));
-    BufInit(&context->code, 131072);
-    BufInit(&context->data, RAM_SIZE * 8 + 512);
+    BufInit(&context->code, 131072); // 128 kb -> as a staring point
+    BufInit(&context->data, RAM_SIZE * 8 + 512); // -> the same ^
 }
 
 static void ContextFree(Context *context) {
@@ -215,6 +325,7 @@ static int LabelFind(Context *context, const char *name) {
     return -1;
 }
 
+// type: 0 = rel32 (call/jmp), 1 = abs64 (mov imm64), 2 = GOT-relative rel32
 static void RelocAdd(Context *context, size_t offset, const char *name, int type) {
     assert(context);
     assert(name);
@@ -239,19 +350,31 @@ static int FindRegCode(const char *reg_name) {
     return -1;
 }
 
+// Assembles the ModRM byte: mod[7:6] | reg[5:3] | rm[2:0]
+// mod=3: both operands are registers
+// mod=0,1,2: rm is a memory address
+// reg: first operand (or /digit for opcode group disambiguation)
+// rm: second operand (or address base register)
 static uint8_t ModRM(int mod, int reg, int rm) {
     return (uint8_t)((mod << 6) | ((reg & 7) << 3) | (rm & 7));
 }
 
+
+// Assembles the SIB byte: scale[7:6] | index[5:3] | base[2:0]
+// Address = base_reg + index_reg * (2^scale)
+// scale: 0 = x1, 1 = x2, 2 = x4, 3 = x8
 static uint8_t Sib(int scale, int index, int base) {
     return (uint8_t)((scale << 6) | ((index & 7) << 3) | (base & 7));
 }
 
+// Assembles the REX prefix for 64-bit operations:
+// REX = 0x48 (W=1) | R-bit if reg>=8 | B-bit if rm>=8
+// W=1: 64-bit operands; R: extends ModRM.reg; B: extends ModRM.rm
 static uint8_t RexW(int reg, int rm) {
     uint8_t result = 0x48;
 
-    if (reg >= 8) result |= 0x04;
-    if (rm  >= 8) result |= 0x01;
+    if (reg >= 8) result |= 0x04; // REX.R
+    if (rm  >= 8) result |= 0x01; // REX.B
 
     return result;
 }
@@ -262,15 +385,17 @@ static uint8_t RexW(int reg, int rm) {
 static void EmitMovR64Imm64(Context *context, int reg, int64_t value) {
     assert(context);
 
-    uint8_t rex = 0x48;
-    if (reg >= 8) rex |= 0x01;
+    uint8_t rex = 0x48;                         // REX.W
+    if (reg >= 8) rex |= 0x01;                  // REX.B
 
     Emit8(CD, rex);
-    Emit8(CD, (uint8_t)(0xB8 + (reg & 7)));
-    Emit64(CD, (uint64_t)value);
+    Emit8(CD, (uint8_t)(0xB8 + (reg & 7)));     // 0xB8+r: MOV r64, imm64 (register in low 3 opcode bits)
+    Emit64(CD, (uint64_t)value);                // 8 bytes of the constant, little-endian
 }
 
 //- push rREG -
+// For rax-rdi: opcode = 0x50 + code (no REX)
+// For r8-r15: REX.B (0x41) + opcode = 0x50 + (code % 8)
 static void EmitPush(Context *context, int reg) {
     assert(context);
 
@@ -279,6 +404,8 @@ static void EmitPush(Context *context, int reg) {
 }
 
 //- pop rREG -
+// For rax-rdi: opcode = 0x58 + code
+// For r8-r15: REX.B (0x41) + opcode = 0x58 + (code % 8)
 static void EmitPop(Context *context, int reg) {
     assert(context);
 
@@ -287,32 +414,39 @@ static void EmitPop(Context *context, int reg) {
 }
 
 //- mov rDST, rSRC -
+// Emits: mov dst, src  (register <- register, 64-bit)
+// Opcode 0x89: MOV r/m64, r64  (src writes to rm)
+// ModRM(3, src, dst): mod = 3 (both registers), reg = src, rm = dst
 static void EmitMovRR(Context *context, int dst, int src) {
     assert(context);
 
-    Emit8(CD, RexW(src, dst));
-    Emit8(CD, 0x89);
+    Emit8(CD, RexW(src, dst));      // REX.W + R-bit if src>=8 + B-bit if dst>=8
+    Emit8(CD, 0x89);                // MOV r/m64, r64
     Emit8(CD, ModRM(3, src, dst));
 }
 
 //- add rREG, imm  or  sub rREG, |imm| if imm < 0 -
+// Emits: add reg, imm  (or sub reg, |imm| if imm < 0)
+// For |imm| <= 127: REX.W + 0x83 + ModRM + imm8  (short form)
+// For |imm| > 127:  REX.W + 0x81 + ModRM + imm32 (long form)
+// /0 = ADD, /5 = SUB in the ModRM reg field
 static void EmitAddRegImm(Context *context, int reg, int64_t imm) {
     assert(context);
     if (imm == 0) return;
 
-    uint8_t slash = (imm > 0) ? 0 : 5;
+    uint8_t slash = (imm > 0) ? 0 : 5;            // /0 = ADD, /5 = SUB
     int64_t abs_value = (imm > 0) ? imm : -imm;
 
     if (abs_value <= 127) {
-        Emit8(CD, RexW(0, reg));
-        Emit8(CD, 0x83);
-        Emit8(CD, ModRM(3, slash, reg));
-        Emit8(CD, (uint8_t)(int8_t)abs_value);
+        Emit8(CD, RexW(0, reg));                  // REX.W (+ REX.B if reg >= 8)
+        Emit8(CD, 0x83);                          // ADD/SUB r/m64, imm8 (sign-extended to 64 bits)
+        Emit8(CD, ModRM(3, slash, reg));          // mod=3 (register), reg = /0 or /5, rm = target reg
+        Emit8(CD, (uint8_t)(int8_t)abs_value);    // 8-bit constant
     } else {
-        Emit8(CD, RexW(0, reg));
-        Emit8(CD, 0x81);
+        Emit8(CD, RexW(0, reg));                  // REX.W
+        Emit8(CD, 0x81);                          // ADD/SUB r/m64, imm32
         Emit8(CD, ModRM(3, slash, reg));
-        Emit32(CD, (uint32_t)(int32_t)abs_value);
+        Emit32(CD, (uint32_t)(int32_t)abs_value); // 32-bit constant
     }
 }
 
@@ -321,7 +455,7 @@ static void EmitCall(Context *context, const char *name) {
     assert(context);
     assert(name);
 
-    Emit8(CD, 0xE8);
+    Emit8(CD, 0xE8);                        // CALL rel32
     RelocAdd(context, CD->size, name, 0);
     Emit32(CD, 0);
 }
@@ -331,7 +465,7 @@ static void EmitJmp(Context *context, const char *name) {
     assert(context);
     assert(name);
 
-    Emit8(CD, 0xE9);
+    Emit8(CD, 0xE9);                        // JMP rel32
     RelocAdd(context, CD->size, name, 0);
     Emit32(CD, 0);
 }
@@ -346,7 +480,7 @@ static void EmitJCC(Context *context, uint8_t cc, const char *name) {
     Emit32(CD, 0);
 }
 
-//- mov rREG, <abs addr данных>  (type=1 reloc) -
+//- mov rREG, <abs addr of data>  (type = 1 reloc) -
 static void EmitMovData(Context *context, int reg, const char *symbol) {
     assert(context);
     assert(symbol);
@@ -359,19 +493,18 @@ static void EmitMovData(Context *context, int reg, const char *symbol) {
 static void EmitAlignStack(Context *context) {
     assert(context);
 
-    Emit8(CD, 0x48);
-    Emit8(CD, 0x83);
-    Emit8(CD, 0xE4);
-    Emit8(CD, 0xF0);
+    Emit8(CD, RexW(0, FindRegCode("rsp")));     // REX.W
+    Emit8(CD, 0x83);                            // AND r/m64, imm8
+    Emit8(CD, ModRM(3, 4, FindRegCode("rsp"))); // /4 = AND, rm = rsp
+    Emit8(CD, 0xF0);                            // -16 = 0xF0 as signed int8
 }
 
 //- cmp rax, rbx -
 static void EmitCmpRaxRbx(Context *context) {
     assert(context);
-
-    Emit8(CD, RexW(3, 0));
-    Emit8(CD, 0x39);
-    Emit8(CD, ModRM(3, 3, 0));
+    Emit8(CD, RexW(FindRegCode("rbx"), FindRegCode("rax")));      // REX.W (reg = rbx = 3 < 8, rm = rax = 0 < 8 -> plain 0x48)
+    Emit8(CD, 0x39);                                              // CMP r/m64, r64: subtracts reg from rm, result in flags only
+    Emit8(CD, ModRM(3, FindRegCode("rbx"), FindRegCode("rax")));  // mod = 3 (registers), reg = rbx = 3, rm = rax = 0 -> 0xD8
 }
 
 //- xor eax, eax -
@@ -379,7 +512,7 @@ static void EmitXorEax(Context *context) {
     assert(context);
 
     Emit8(CD, 0x31);
-    Emit8(CD, 0xC0);
+    Emit8(CD, ModRM(3, FindRegCode("rax"), FindRegCode("rax")));
 }
 
 //- ret -
@@ -410,59 +543,55 @@ static void EmitVarAddr(Context *context, int shift) {
     EmitAddRegImm(context, FindRegCode("rdi"), (int64_t)shift);
 
     //- lea rcx, [rcx + rdi * 8]   48 8D 0C + SIB(scale = 3, var_idx = rdi, base = rcx) -
-    Emit8(CD, 0x48);
-    Emit8(CD, 0x8D);
-    Emit8(CD, 0x0C);
-    Emit8(CD, Sib(3, FindRegCode("rdi"), FindRegCode("rcx")));
+    Emit8(CD, RexW(FindRegCode("rcx"), 0));
+    Emit8(CD, 0x8D);                                           // lea
+    Emit8(CD, ModRM(0, FindRegCode("rcx"), 4));                // mod = 0 (memory), reg = rcx, rm = 4 -> "SIB follows"
+    Emit8(CD, Sib(3, FindRegCode("rdi"), FindRegCode("rcx"))); // [rcx + rdi * 8]
 }
 
 static void EmitPrologue(Context *context) {
     assert(context);
 
-    Emit8(CD, 0x55);                                    // push rbp
-    Emit8(CD, 0x48); Emit8(CD, 0x89); Emit8(CD, 0xE5);  // mov rbp,rsp
-    Emit8(CD, 0x41); Emit8(CD, 0x54);                   // push r12
-    Emit8(CD, 0x41); Emit8(CD, 0x55);                   // push r13
-    Emit8(CD, 0x53);                                    // push rbx
+    EmitPush(context, FindRegCode("rbp"));                          // push rbp: save previous frame base
+    EmitMovRR(context, FindRegCode("rbp"), FindRegCode("rsp"));     // mov rbp, rsp: set current frame base
+    EmitPush(context, FindRegCode("r12"));                          // push r12: r12 = RAM base
+    EmitPush(context, FindRegCode("r13"));                          // push r13: r13 = saved rsp
+    EmitPush(context, FindRegCode("rbx"));                          // push rbx: callee-saved scratch register
 }
 
 static void EmitEpilogue(Context *context) {
     assert(context);
 
     //- lea rsp, [rbp - CALLEE_SIZE] -
-    Emit8(CD, 0x48); Emit8(CD, 0x8D); Emit8(CD, 0x65);
+    Emit8(CD, RexW(FindRegCode("rsp"), FindRegCode("rbp")));            // REX.W
+    Emit8(CD, 0x8D);                                                    // lea
+    Emit8(CD, ModRM(1, FindRegCode("rsp"), FindRegCode("rbp")));        // mod= 1  (disp8), reg = rsp, rm = rbp
     Emit8(CD, (uint8_t)(int8_t)(-CALLEE_SIZE));
-    Emit8(CD, 0x5B);                   // pop rbx
-    Emit8(CD, 0x41); Emit8(CD, 0x5D);  // pop r13
-    Emit8(CD, 0x41); Emit8(CD, 0x5C);  // pop r12
-    Emit8(CD, 0x5D);                   // pop rbp
+
+    EmitPop(context, FindRegCode("rbx"));
+    EmitPop(context, FindRegCode("r13"));
+    EmitPop(context, FindRegCode("r13"));
+    EmitPop(context, FindRegCode("rbp"));
 }
 
-static void EmitStart(Context *context) { // TODO
+static void EmitStart(Context *context) {
     assert(context);
 
     context->b_start = CD->size;
 
-    Emit8(CD, 0x48);
-    Emit8(CD, 0x83);
-    Emit8(CD, 0xE4);
-    Emit8(CD, 0xF0);
-    Emit8(CD, 0x48);
-    Emit8(CD, 0x83);
-    Emit8(CD, 0xEC);
-    Emit8(CD, 0x08);
-    Emit8(CD, 0xE8);
+    EmitAlignStack(context); // and rsp, -16
+    EmitAddRegImm(context, FindRegCode("rsp"), -8); // sub rsp, 8
+
+    Emit8(CD, 0xE8);                                                    // call rel32
     RelocAdd(context, CD->size, "main", 0);
     Emit32(CD, 0);
-    Emit8(CD, 0x48);
-    Emit8(CD, 0x89);
-    Emit8(CD, 0xC7);
-    Emit8(CD, 0x48);
-    Emit8(CD, 0xC7);
-    Emit8(CD, 0xC0);
-    Emit32(CD, 60);
-    Emit8(CD, 0x0F);
-    Emit8(CD, 0x05);
+
+    EmitMovRR(context, FindRegCode("rdi"), FindRegCode("rax"));         // mov rdi, rax
+
+    Emit8(CD, RexW(0, FindRegCode("rax"))); Emit8(CD, 0xC7);
+    Emit8(CD, ModRM(3, 0, FindRegCode("rax"))); Emit32(CD, 60);         // mov rax, 60 -> for exit
+
+    Emit8(CD, 0x0F); Emit8(CD, 0x05);                                   // syscall
 }
 
 static void BuildGOT(Context *context, PltGot *plt_got) {
@@ -511,15 +640,14 @@ static void EmitPLT(Context *context, PltGot *plt_got) {
 
     plt_got->plt_printf = CD->size;
     LabelAdd(context, "my_printf", plt_got->plt_printf);
-    Emit8(CD, 0xFF);
-    Emit8(CD, 0x25);
+    Emit8(CD, ModRM(0, 4, 5));  // ModRM: [RIP + disp32]
     RelocAdd(context, CD->size, "__got_printf", 2);
     Emit32(CD, 0);
 
     plt_got->plt_scanf = CD->size;
     LabelAdd(context, "my_scanf", plt_got->plt_scanf);
     Emit8(CD, 0xFF);
-    Emit8(CD, 0x25);
+    Emit8(CD, ModRM(0, 4, 5));
     RelocAdd(context, CD->size, "__got_scanf", 2);
     Emit32(CD, 0);
 
@@ -746,10 +874,12 @@ static void CodeGeneratePopToVar(Context *context, VariableArr *arr, LangNode_t 
     EmitPop(context, FindRegCode("rax"));
     EmitVarAddr(context, shift);
 
-    Emit8(CD, 0x48); Emit8(CD, 0x89); Emit8(CD, 0x01); // mov [rcx], rax 
+    Emit8(CD, RexW(FindRegCode("rax"), FindRegCode("rcx")));
+    Emit8(CD, 0x89);
+    Emit8(CD, ModRM(0, FindRegCode("rax"), FindRegCode("rcx"))); // mov [rcx], rax 
 }
 
-// rax=[rbp + frame_offset]; [&ram[r12 + shift]] = rax 
+// rax = [rbp + frame_offset]; [&ram[r12 + shift]] = rax 
 static void CodeGenerateStoreParam(Context *context, VariableArr *arr, LangNode_t *node, AsmInfo *info, Sub *sub, int frame_offset) {
     assert(context);
     assert(arr);
@@ -759,21 +889,22 @@ static void CodeGenerateStoreParam(Context *context, VariableArr *arr, LangNode_
 
     int shift = ResolveShift(arr, node, info, sub);
     if (frame_offset >= -128 && frame_offset <= 127) {
-        Emit8(CD, 0x48);
+        Emit8(CD, RexW(FindRegCode("rax"), FindRegCode("rbp")));
         Emit8(CD, 0x8B);
-        Emit8(CD, 0x45);
+        Emit8(CD, ModRM(1, FindRegCode("rax"), FindRegCode("rbp")));
         Emit8(CD, (uint8_t)(int8_t)frame_offset);
     } else {
-        Emit8(CD, 0x48);
+        Emit8(CD, RexW(FindRegCode("rax"), FindRegCode("rbp")));
         Emit8(CD, 0x8B);
-        Emit8(CD, 0x85);
+        Emit8(CD, ModRM(1, FindRegCode("rax"), FindRegCode("rbp")));
         Emit32(CD, (uint32_t)(int32_t)frame_offset);
     }
 
-    EmitVarAddr(context, shift);
-    Emit8(CD, 0x48);
+    EmitVarAddr(context, shift); // rcx = &ram[r12 + shift]
+    // mov [rcx], rax
+    Emit8(CD, RexW(FindRegCode("rax"), FindRegCode("rcx")));
     Emit8(CD, 0x89);
-    Emit8(CD, 0x01);
+    Emit8(CD, ModRM(0, FindRegCode("rax"), FindRegCode("rcx")));
 }
 
 static void CodeGenerateParamsToRam(Context *context, LangNode_t *args, VariableArr *arr, AsmInfo *info, Sub *sub, int *frame_offset) {
@@ -843,7 +974,7 @@ static void CodeGenerateDeref(Context *context, LangNode_t *ptr, VariableArr *ar
     CodeGenerateAddrOf(context, ptr, arr, info, sub);
     EmitPop(context, FindRegCode("rcx"));
     Emit8(CD, 0xFF);
-    Emit8(CD, 0x31);
+    Emit8(CD, ModRM(0, 6, FindRegCode("rcx")));
 }
 
 static void CodeGenerateAddrAssign(Context *context, LangNode_t *deref_node, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -854,11 +985,11 @@ static void CodeGenerateAddrAssign(Context *context, LangNode_t *deref_node, Var
     assert(sub);
 
     CodeGenerateExpr(context, deref_node->left, arr, info, sub);
-    EmitPop(context, 1);
-    EmitPop(context, 0);
-    Emit8(CD, 0x48);
+    EmitPop(context, FindRegCode("rcx"));
+    EmitPop(context, FindRegCode("rax"));
+    Emit8(CD, RexW(FindRegCode("rax"), FindRegCode("rcx")));
     Emit8(CD, 0x89);
-    Emit8(CD, 0x01);
+    Emit8(CD, ModRM(0, FindRegCode("rax"), FindRegCode("rcx")));
 }
 
 static void CodeGenerateBinOp(Context *context, LangNode_t *node, VariableArr *arr, AsmInfo *info, Sub *sub, OperationTypes op) {
@@ -877,29 +1008,30 @@ static void CodeGenerateBinOp(Context *context, LangNode_t *node, VariableArr *a
     #pragma GCC diagnostic ignored "-Wswitch-enum"
     switch (op) {
         case kOperationAdd:
-            Emit8(CD, 0x48);
+            Emit8(CD, RexW(FindRegCode("rbx"), FindRegCode("rax")));
             Emit8(CD, 0x01);
-            Emit8(CD, ModRM(3, 3, 0));
+            Emit8(CD, ModRM(3, FindRegCode("rbx"), FindRegCode("rax")));
             break;
 
         case kOperationSub:
-            Emit8(CD, 0x48);
+            Emit8(CD, RexW(FindRegCode("rbx"), FindRegCode("rax")));
             Emit8(CD, 0x29);
-            Emit8(CD, ModRM(3, 3, 0));
+            Emit8(CD, ModRM(3, FindRegCode("rbx"), FindRegCode("rax")));
             break;
 
         case kOperationMul:
-            Emit8(CD, 0x48);
+            Emit8(CD, RexW(FindRegCode("rax"), FindRegCode("rbx")));
             Emit8(CD, 0x0F);
             Emit8(CD, 0xAF);
-            Emit8(CD, ModRM(3, 0, 3));
+            Emit8(CD, ModRM(3, FindRegCode("rax"), FindRegCode("rbx")));
             break;
 
         case kOperationDiv:
-            Emit8(CD, 0x48); Emit8(CD, 0x99); // cqo
-            Emit8(CD, 0x48);
+            Emit8(CD, RexW(0, 0));
+            Emit8(CD, 0x99); // cqo
+            Emit8(CD, RexW(0, FindRegCode("rbx")));
             Emit8(CD, 0xF7);
-            Emit8(CD, ModRM(3, 7, 3));
+            Emit8(CD, ModRM(3, 7, FindRegCode("rbx")));
             break;
 
         default:
@@ -920,12 +1052,12 @@ static void CodeGeneratePrintInt(Context *context, LangNode_t *node, VariableArr
     CodeGenerateExpr(context, node->left, arr, info, sub);
     EmitPop(context, FindRegCode("rsi"));
     EmitMovData(context, FindRegCode("rdi"), "fmt_int");
-    Emit8(CD, 0x49); Emit8(CD, 0x89); Emit8(CD, 0xE5); // mov r13, rsp
+    EmitMovRR(context, FindRegCode("r13"), FindRegCode("rsp"));
 
     EmitAlignStack(context);
     EmitXorEax(context);
     EmitCall(context, "my_printf");
-    Emit8(CD, 0x4C); Emit8(CD, 0x89); Emit8(CD, 0xEC); // mov rsp, r13 
+    EmitMovRR(context, FindRegCode("rsp"), FindRegCode("r13"));
 }
 
 static void CodeGeneratePrintChar(Context *context, LangNode_t *node, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -938,16 +1070,12 @@ static void CodeGeneratePrintChar(Context *context, LangNode_t *node, VariableAr
     CodeGenerateExpr(context, node->left, arr, info, sub);
     EmitPop(context, FindRegCode("rsi"));
     EmitMovData(context, FindRegCode("rdi"), "fmt_char");
-    Emit8(CD, 0x49);
-    Emit8(CD, 0x89);
-    Emit8(CD, 0xE5);
+    EmitMovRR(context, FindRegCode("r13"), FindRegCode("rsp"));
 
     EmitAlignStack(context);
     EmitXorEax(context);
     EmitCall(context, "my_printf");
-    Emit8(CD, 0x4C);
-    Emit8(CD, 0x89);
-    Emit8(CD, 0xEC);
+    EmitMovRR(context, FindRegCode("rsp"), FindRegCode("r13"));
 }
 
 static void CodeGenerateReadInt(Context *context) {
@@ -969,16 +1097,21 @@ static void CodeGenerateArrAssign(Context *context, LangNode_t *stmt, VariableAr
     int array_base = FindVarPos(arr, stmt->left->left, info) - sub->param_count;
     EmitMovData(context, FindRegCode("rcx"), "ram");
     EmitMovRR(context, FindRegCode("rdi"), FindRegCode("r12"));
-    EmitAddRegImm(context, 7, (int64_t)array_base);
+    EmitAddRegImm(context, FindRegCode("rdi"), (int64_t)array_base);
 
-    CodeGenerateExpr(context, stmt->left->right, arr, info, sub);
-    EmitPop(context, FindRegCode("rax"));
-    Emit8(CD, 0x48); Emit8(CD, 0x01); Emit8(CD, ModRM(3, 0, 7)); // add rdi, rax 
-    EmitPop(context, FindRegCode("rax"));
-    Emit8(CD, 0x48);
+    CodeGenerateExpr(context, stmt->left->right, arr, info, sub);                   // stack: [value, index]
+    EmitPop(context, FindRegCode("rax"));                                           // pop rax = index
+
+    Emit8(CD, RexW(FindRegCode("rax"), FindRegCode("rdi"))); 
+    Emit8(CD, 0x01); Emit8(CD, ModRM(3, FindRegCode("rax"), FindRegCode("rdi")));   // add rdi, rax 
+
+    EmitPop(context, FindRegCode("rax"));                                           // pop rax = value
+
+    // mov [rcx + rdi * 8], rax
+    Emit8(CD, RexW(FindRegCode("rax"), 0));
     Emit8(CD, 0x89);
-    Emit8(CD, 0x04);
-    Emit8(CD, Sib(3, 7, 1));
+    Emit8(CD, ModRM(0, FindRegCode("rax"), 4));
+    Emit8(CD, Sib(3, FindRegCode("rxi"), FindRegCode("rcx")));
 }
 
 static void CodeGenerateArrDecl(Context *context, LangNode_t *stmt, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -994,9 +1127,11 @@ static void CodeGenerateArrDecl(Context *context, LangNode_t *stmt, VariableArr 
     for (int i = 0; i < size; i++) {
         int shift = info->counter + i - sub->param_count;
         EmitVarAddr(context, shift);
-        Emit8(CD, 0x48);
+
+        // mov qword ptr [rcx], 0
+        Emit8(CD, RexW(0, FindRegCode("rcx")));
         Emit8(CD, 0xC7);
-        Emit8(CD, 0x01);
+        Emit8(CD, ModRM(0, 0, FindRegCode("rcx")));
         Emit32(CD, 0);
     }
 
@@ -1022,9 +1157,10 @@ static void CodeGenerateIf(Context *context, LangNode_t *stmt, VariableArr *arr,
 
     CodeGenerateExpr(context, cond->left, arr, info, sub);
     CodeGenerateExpr(context, cond->right, arr, info, sub);
-    EmitPop(context, 3);
-    EmitPop(context, 0);
+    EmitPop(context, FindRegCode("rbx"));
+    EmitPop(context, FindRegCode("rax"));
     EmitCmpRaxRbx(context);
+
     EmitJCC(context, ChooseJCC(cond), else_label);
 
     if (has_else) {
@@ -1061,8 +1197,8 @@ static void CodeGenerateWhile(Context *context, LangNode_t *stmt, VariableArr *a
     LabelAdd(context, start_label, CD->size);
     CodeGenerateExpr(context, stmt->left->left, arr, info, sub);
     CodeGenerateExpr(context, stmt->left->right, arr, info, sub);
-    EmitPop(context, 3);
-    EmitPop(context, 0);
+    EmitPop(context, FindRegCode("rbx"));
+    EmitPop(context, FindRegCode("rax"));
 
     EmitCmpRaxRbx(context);
     EmitJCC(context, ChooseJCC(stmt->left), end_label);
@@ -1079,7 +1215,7 @@ static void CodeGenerateReturn(Context *context, LangNode_t *stmt, VariableArr *
     assert(sub);
 
     CodeGenerateExpr(context, stmt->left, arr, info, sub);
-    EmitPop(context, 0);
+    EmitPop(context, FindRegCode("rax"));
     EmitEpilogue(context);
     EmitRet(context);
 }
@@ -1095,20 +1231,24 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *ar
         case kNumber: {
             int64_t number = (int64_t)expr->value.number;
             if (number >= 0 && number <= 0x7FFFFFFF) {
-                Emit8(CD, 0x48); Emit8(CD, 0xC7); Emit8(CD, ModRM(3, 0, 0));
+                // mov rax, imm32 (sign-extended, short form)
+                Emit8(CD, RexW(0, FindRegCode("rax")));
+                Emit8(CD, 0xC7);
+                Emit8(CD, ModRM(3, 0, FindRegCode("rax")));
                 Emit32(CD, (uint32_t)(int32_t)number);
             } else {
-                EmitMovR64Imm64(context, 0, number);
+                // mov rax, imm64 (full 64-bit form, for large constants)
+                EmitMovR64Imm64(context, FindRegCode("rax"), number);
             }
 
-            EmitPush(context, 0);
+            EmitPush(context, FindRegCode("rax"));
             break;
         }
 
         case kVariable: {
             int shift = FindVarPos(arr, expr, info) - sub->param_count;
             EmitVarAddr(context, shift);
-            Emit8(CD, 0xFF); Emit8(CD, 0x31); // push [rcx] 
+            Emit8(CD, 0xFF); Emit8(CD, ModRM(0, 6, FindRegCode("rcx"))); // push [rcx] 
             break;
         }
 
@@ -1134,12 +1274,19 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *ar
 
                 case kOperationSQRT:
                     CodeGenerateExpr(context, expr->left, arr, info, sub);
-                    EmitPop(context, 0);
-                    // cvtsi2sd xmm0, rax; sqrtsd xmm0, xmm0; cvttsd2si rax, xmm0 
-                    Emit8(CD, 0xF2); Emit8(CD, 0x48); Emit8(CD, 0x0F); Emit8(CD, 0x2A); Emit8(CD, 0xC0);
-                    Emit8(CD, 0xF2); Emit8(CD, 0x0F); Emit8(CD, 0x51); Emit8(CD, 0xC0);
-                    Emit8(CD, 0xF2); Emit8(CD, 0x48); Emit8(CD, 0x0F); Emit8(CD, 0x2C); Emit8(CD, 0xC0);
-                    EmitPush(context, 0);
+                    EmitPop(context, FindRegCode("rax"));
+                    // cvtsi2sd xmm0, rax; 
+                    Emit8(CD, 0xF2); Emit8(CD, RexW(0, FindRegCode("rax"))); 
+                    Emit8(CD, 0x0F); Emit8(CD, 0x2A); Emit8(CD, ModRM(3, 0, FindRegCode("rax"))); // xmm0 = 0, rax = 0
+
+                    // sqrtsd -  xmm0, xmm0;
+                    Emit8(CD, 0xF2); Emit8(CD, 0x0F); Emit8(CD, 0x51); Emit8(CD, ModRM(3, 0, 0));
+
+                    // cvttsd2si rax, xmm0
+                    Emit8(CD, 0xF2); Emit8(CD, RexW(FindRegCode("rax"), 0)); Emit8(CD, 0x0F); Emit8(CD, 0x2C);
+                    Emit8(CD, ModRM(3, FindRegCode("rax"), 0));
+
+                    EmitPush(context, FindRegCode("rax"));
                     break;
 
                 case kOperationCallAddr:
@@ -1167,14 +1314,19 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *ar
                     int array_base = FindVarPos(arr, expr->left, info) - sub->param_count;
                     EmitMovData(context, FindRegCode("rcx"), "ram");
                     EmitMovRR(context, FindRegCode("rdi"), FindRegCode("r12"));
-                    EmitAddRegImm(context, 7, (int64_t)array_base);
+                    EmitAddRegImm(context, FindRegCode("rdi"), (int64_t)array_base);
 
                     CodeGenerateExpr(context, expr->right, arr, info, sub);
                     EmitPop(context, FindRegCode("rax"));
-                    Emit8(CD, 0x48); Emit8(CD, 0x01); Emit8(CD, ModRM(3, 0, 7));
+
+                    // add rdi, rax:
+                    Emit8(CD, RexW(FindRegCode("rax"), FindRegCode("rdi")));
+                    Emit8(CD, 0x01);
+                    Emit8(CD, ModRM(3, FindRegCode("rax"), FindRegCode("rdi")));
 
                     // push [rcx + rdi * 8] 
-                    Emit8(CD, 0xFF); Emit8(CD, 0x04); Emit8(CD, Sib(3, 7, 1));
+                    Emit8(CD, 0xFF); Emit8(CD, ModRM(0, 0, 4));
+                    Emit8(CD, Sib(3, FindRegCode("rdi"), FindRegCode("rcx")));
                     break;
                 }
 
@@ -1219,7 +1371,7 @@ static void CodeGenerateStatement(Context *context, LangNode_t *stmt, VariableAr
                     CodeGenerateParamsToStack(context, stmt->right, arr, info, sub);
                     EmitCall(context, callee);
                     if (num_args > 0) {
-                        EmitAddRegImm(context, 4, (int64_t)(num_args * 8));
+                        EmitAddRegImm(context, FindRegCode("rsp"), (int64_t)(num_args * 8));
                     }
 
                     break;
@@ -1295,9 +1447,11 @@ static void CodeGenerateStatement(Context *context, LangNode_t *stmt, VariableAr
 
         case kNumber: {
             int64_t number = (int64_t)stmt->value.number;
-            Emit8(CD, 0x48); Emit8(CD, 0xC7); Emit8(CD, ModRM(3, 0, 0));
+            Emit8(CD, RexW(0, FindRegCode("rax")));
+            Emit8(CD, 0xC7);
+            Emit8(CD, ModRM(3, 0, FindRegCode("rax")));
             Emit32(CD, (uint32_t)(int32_t)number);
-            EmitPush(context, 0);
+            EmitPush(context, FindRegCode("rax"));
             break;
         }
 
@@ -1330,16 +1484,18 @@ static void CodeGenerateFunction(Context *context, LangNode_t *func_node, Variab
 
     if (is_main) {
         // xor r12d, r12d 
-        Emit8(CD, 0x45); Emit8(CD, 0x31); Emit8(CD, 0xE4);
+        Emit8(CD, 0x45);
+        Emit8(CD, 0x31);
+        Emit8(CD, ModRM(3, FindRegCode("r12"), FindRegCode("r12")));
     }
 
     int param_count = arr->var_array[func_node->left->value.pos].variable_value;
     sub.param_count = param_count;
     if (param_count > 0) {
-        EmitAddRegImm(context, 12, (int64_t)param_count);
+        EmitAddRegImm(context, FindRegCode("r12"), (int64_t)param_count);
     }
 
-    int frame_offset = 16;
+    int frame_offset = 16; // parameters start at [rbp + 16]
     if (args) {
         CodeGenerateParamsToRam(context, args, arr, info, &sub, &frame_offset);
     }
@@ -1391,7 +1547,7 @@ static int LoadLib(LibBlob *blob, const char *path) {
         return 0;
     }
 
-    LibHeader header;
+    LibHeader header = {};
     if (fread(&header, sizeof(header), 1, file) != 1) {
         fprintf(stderr, "%s: failed to read header.\n", path);
         fclose(file);
@@ -1449,65 +1605,4 @@ static void FreeLib(LibBlob *blob) {
     free(blob->relocs);
     blob->data = NULL;
     blob->relocs = NULL;
-}
-
-void CompileTreeToELF(LangNode_t *root, VariableArr *arr, const char *elf_path) {
-    Context context = {};
-    PltGot plt_got = {};
-    LibBlob blob = {};
-
-    ContextInit(&context);
-    BuildData(&context);
-    BuildGOT(&context, &plt_got);
-
-    EmitPLT(&context, &plt_got);
-    EmitStart(&context);
-
-    AsmInfo info = {};
-    int ram_base = 0;
-    CodeGenerateProgram(&context, root, arr, &ram_base, &info);
-
-    if (!LoadLib(&blob, "my_lib.bin")) {
-        ContextFree(&context);
-        return;
-    }
-
-    size_t blob_base = context.code.size;
-
-    BufGrow(&context.code, blob.size);
-    memcpy(context.code.data + context.code.size, blob.data, blob.size);
-    context.code.size += blob.size;
-
-    context.b_printf = blob_base + blob.printf_off;
-    context.b_scanf = blob_base + blob.scanf_off;
-    context.b_exit = blob_base + blob.exit_off;
-
-    uint64_t blob_vaddr = ELF_BASE + HDRS_TOTAL + blob_base;
-    for (uint32_t i = 0; i < blob.reloc_count; i++) {
-        size_t patch_offset = blob_base + blob.relocs[i];
-        uint64_t current_value;
-        memcpy(&current_value, context.code.data + patch_offset, 8);
-        Patch64(&context.code, patch_offset, current_value + blob_vaddr);
-    }
-
-    size_t seg1 = HDRS_TOTAL + context.code.size;
-    size_t data_offset = (seg1 + PAGE_SIZE - 1) & ~(size_t)(PAGE_SIZE - 1);
-    uint64_t data_vaddr = ELF_BASE + data_offset;
-    uint64_t base = ELF_BASE + HDRS_TOTAL;
-
-    uint64_t addrs[3] = {
-        base + context.b_printf,
-        base + context.b_scanf,
-        base + context.b_exit,
-    };
-
-    for (int i = 0; i < 3; i++) {
-        memcpy(context.data.data + plt_got.got_off + i * 8, &addrs[i], 8);
-    }
-
-    LinkRelocs(&context, &plt_got, data_vaddr);
-    WriteElf(&context, elf_path);
-
-    FreeLib(&blob);
-    ContextFree(&context);
 }
