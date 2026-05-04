@@ -9,7 +9,7 @@ ifeq ($(MODE),debug)
 endif
 
 CXXFLAGS = -ggdb3 -g -std=c++17 -O0 							 \
-	-Iinclude -I. 												 \
+	-Iinclude												 	 \
 	-Wall -Wextra -Weffc++ -Wc++14-compat -Wmissing-declarations \
 	-Wcast-align -Wcast-qual -Wchar-subscripts -Wconversion 	 \
 	-Wctor-dtor-privacy -Wempty-body -Wfloat-equal 				 \
@@ -27,14 +27,6 @@ CXXFLAGS = -ggdb3 -g -std=c++17 -O0 							 \
 	$(SANITIZERS)
 
 LDFLAGS 	 = -lm $(SANITIZERS)
-
-ifdef TREE_ASM
-	CXXFLAGS += -D_DTREE_ASM
-endif
-
-ifdef TREE_ELF
-	CXXFLAGS += -D_DTREE_ELF
-endif
 
 BUILD         = build
 BIN           = $(BUILD)/bin

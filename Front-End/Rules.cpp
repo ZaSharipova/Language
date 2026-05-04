@@ -804,7 +804,7 @@ static LangNode_t *GetAssignmentLValue(Language *lang_info, LangNode_t *func_nam
         }
     }
     
-    LangNode_t *assign_op = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos)); // TODO:
+    LangNode_t *assign_op = GetStackElem(lang_info->tokens, *(lang_info->tokens_pos));
     if (!IsThatOperation(assign_op, kOperationIs)) {
         (*lang_info->tokens_pos) = save_pos;
         return NULL;
