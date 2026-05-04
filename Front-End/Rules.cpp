@@ -1006,4 +1006,21 @@ static bool CheckCompareSign(LangNode_t *sign) {
 }
 
 DEFINE_SIMPLE_COMMAND_PARSER(GetHLT,  kOperationHLT)
-DEFINE_SIMPLE_COMMAND_PARSER(GetDraw, kOperationDraw)
+// DEFINE_SIMPLE_COMMAND_PARSER(GetDraw, kOperationDraw)
+
+static LangNode_t *GetDraw(Language *lang_info) {
+    assert(lang_info);
+
+    size_t save_pos = *(lang_info->tokens_pos);
+    LangNode_t *name = NULL, *get = NULL, *tok = NULL;
+
+    CHECK_EXPECTED_TOKEN(name, IsThatOperation(name, kOperationDraw), );
+    CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationParOpen), fprintf(stderr, "Error: no '(' in DRAW\n"));
+    CHECK_EXPECTED_TOKEN(get, get->type == kVariable, fprintf(stderr, "Error: no arr pointer in DRAW\n"));
+    CHECK_EXPECTED_TOKEN(tok, IsThatOperation(tok, kOperationParClose), fprintf(stderr, "Error: no ')' in DRAW\n"));
+    CHECK_EXPECTED_TOKEN(tok,  IsThatOperation(tok, kOperationThen), fprintf(stderr, "Error: no ';' in DRAW\n"));
+
+    name->left = get;           
+    get->parent = name;                                                                    
+    return name;
+}

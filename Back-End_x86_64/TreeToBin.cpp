@@ -12,7 +12,7 @@
 #include "Common/CommonBackFunctions.h"
 
 #define ELF_BASE 0x400000u
-#define PAGE_SIZE 0x1000u // TODO: переделать 
+#define PAGE_SIZE 0x1000u
 #define ELF_HEADER_SIZE 64
 #define PHDR_SIZE 56
 #define NUM_PHDRS 2
@@ -23,6 +23,7 @@
 #define MAX_RELOCS 8192
 #define CALLEE_SIZE 24
 #define DEFAULT_SIZE 128
+#define DEFAULT_LABEL_SIZE 64
 
 typedef struct {
     uint8_t *data;
@@ -35,12 +36,14 @@ typedef struct {
     size_t plt_printf_char;
     size_t plt_scanf;
     size_t plt_exit;
+    size_t plt_draw;
 } PltGot;
 
 typedef struct {
     uint32_t printf_off;
     uint32_t scanf_off;
     uint32_t exit_off;
+    uint32_t draw_off;
     uint32_t code_size;
     uint32_t reloc_count;
 } LibHeader;
@@ -51,6 +54,7 @@ typedef struct {
     uint32_t printf_off;
     uint32_t scanf_off;
     uint32_t exit_off;
+    uint32_t draw_off;
     uint32_t reloc_count;
     uint32_t *relocs;
 } LibBlob;
@@ -77,7 +81,7 @@ typedef struct {
 
     size_t fmt_int_off, fmt_char_off, ram_off;
 
-    size_t b_printf, b_printf_char, b_scanf, b_exit, b_start;
+    size_t b_printf, b_printf_char, b_scanf, b_exit, b_draw, b_start;
 } Context;
 
 typedef struct {
@@ -178,6 +182,7 @@ static void MergeAndPatchLibrary(Context *context, LibBlob *blob, size_t *blob_b
     context->b_printf = *blob_base + blob->printf_off;
     context->b_scanf = *blob_base + blob->scanf_off;
     context->b_exit = *blob_base + blob->exit_off;
+    context->b_draw = *blob_base + blob->draw_off;
 
     uint64_t blob_vaddr = ELF_BASE + HDRS_TOTAL + *blob_base;
     for (uint32_t i = 0; i < blob->reloc_count; i++) {
@@ -201,13 +206,14 @@ static void FinalizeAndWrite(Context *context, PltGot *plt_got, const char *elf_
     uint64_t data_vaddr = ELF_BASE + data_offset;
     uint64_t base = ELF_BASE + HDRS_TOTAL;
 
-    uint64_t addrs[3] = {
+    uint64_t addrs[4] = {
         base + context->b_printf,
         base + context->b_scanf,
         base + context->b_exit,
+        base + context->b_draw,
     };
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         memcpy(context->data.data + plt_got->got_off + i * 8, &addrs[i], 8);
     }
 
@@ -570,7 +576,7 @@ static void EmitEpilogue(Context *context) {
 
     EmitPop(context, FindRegCode("rbx"));
     EmitPop(context, FindRegCode("r13"));
-    EmitPop(context, FindRegCode("r13"));
+    EmitPop(context, FindRegCode("r12"));
     EmitPop(context, FindRegCode("rbp"));
 }
 
@@ -640,6 +646,7 @@ static void EmitPLT(Context *context, PltGot *plt_got) {
 
     plt_got->plt_printf = CD->size;
     LabelAdd(context, "my_printf", plt_got->plt_printf);
+    Emit8(CD, 0xFF);
     Emit8(CD, ModRM(0, 4, 5));  // ModRM: [RIP + disp32]
     RelocAdd(context, CD->size, "__got_printf", 2);
     Emit32(CD, 0);
@@ -656,6 +663,13 @@ static void EmitPLT(Context *context, PltGot *plt_got) {
     Emit8(CD, 0xFF);
     Emit8(CD, 0x25);
     RelocAdd(context, CD->size, "__got_exit", 2);
+    Emit32(CD, 0);
+
+    plt_got->plt_draw = CD->size;
+    LabelAdd(context, "my_draw", plt_got->plt_draw);
+    Emit8(CD, 0xFF);
+    Emit8(CD, 0x25);
+    RelocAdd(context, CD->size, "__got_draw", 2);
     Emit32(CD, 0);
 }
 
@@ -721,6 +735,8 @@ static void LinkRelocs(Context *context, PltGot *plt_got, uint64_t data_vaddr) {
                 got_slot_vaddr = data_vaddr + plt_got->got_off + 1 * 8;
             } else if (strcmp(reloc->name, "__got_exit") == 0) {
                 got_slot_vaddr = data_vaddr + plt_got->got_off + 2 * 8;
+            } else if (strcmp(reloc->name, "__got_draw") == 0) {
+                got_slot_vaddr = data_vaddr + plt_got->got_off + 3 * 8;
             } else {
                 fprintf(stderr, "Unknown GOT symbol: %s\n", reloc->name);
                 continue;
@@ -732,6 +748,11 @@ static void LinkRelocs(Context *context, PltGot *plt_got, uint64_t data_vaddr) {
         }
     }
 }
+
+static void WriteElfHeader(FILE *file, uint64_t entry);
+static void WriteCodeSegmentPhdr(FILE *file, size_t seg1);
+static void WriteDataSegmentPhdr(FILE *file, size_t data_off, uint64_t data_vaddr, size_t data_size);
+static void WritePadding(FILE *file, size_t pad);
 
 static void WriteElf(Context *context, const char *path) {
     assert(context);
@@ -748,57 +769,101 @@ static void WriteElf(Context *context, const char *path) {
         return;
     }
 
-    uint8_t header[ELF_HEADER_SIZE] = {};
-    header[0] = 0x7F; header[1] = 'E'; header[2] = 'L'; header[3] = 'F';
-    header[4] = 2; header[5] = 1; header[6] = 1;
-
-    { uint16_t value = 2;  memcpy(header + 16, &value, 2); }
-    { uint16_t value = 62; memcpy(header + 18, &value, 2); }
-    { uint32_t value = 1;  memcpy(header + 20, &value, 4); }
-    memcpy(header + 24, &entry, 8);
-
-    { uint64_t value = 64; memcpy(header + 32, &value, 8); }
-    { uint16_t value = 64; memcpy(header + 52, &value, 2); }
-    { uint16_t value = 56; memcpy(header + 54, &value, 2); }
-    { uint16_t value = 2;  memcpy(header + 56, &value, 2); }
-    fwrite(header, 1, ELF_HEADER_SIZE, file);
-
-    uint8_t ph[PHDR_SIZE] = {};
-    { uint32_t value = 1; memcpy(ph, &value, 4); }
-    { uint32_t value = 7; memcpy(ph + 4, &value, 4); } // TODO
-    { uint64_t value = 0; memcpy(ph + 8, &value, 8); } // TODO
-    { uint64_t value = ELF_BASE; memcpy(ph + 16, &value, 8); memcpy(ph + 24, &value, 8); }
-    { uint64_t value = seg1; memcpy(ph + 32, &value, 8); memcpy(ph + 40, &value, 8); }
-    { uint64_t value = PAGE_SIZE; memcpy(ph + 48, &value, 8); }
-    fwrite(ph, 1, PHDR_SIZE, file);
-
-    memset(ph, 0, PHDR_SIZE);
-    { uint32_t value = 1; memcpy(ph, &value, 4); }
-    { uint32_t value = 6; memcpy(ph + 4, &value, 4); }
-    memcpy(ph + 8, &data_off, 8);
-    memcpy(ph + 16, &data_vaddr, 8);
-    memcpy(ph + 24, &data_vaddr, 8);
-    { uint64_t value = context->data.size; memcpy(ph + 32, &value, 8); memcpy(ph + 40, &value, 8); }
-    { uint64_t value = PAGE_SIZE; memcpy(ph + 48, &value, 8); }
-    fwrite(ph, 1, PHDR_SIZE, file);
-
+    WriteElfHeader(file, entry);
+    WriteCodeSegmentPhdr(file, seg1);
+    WriteDataSegmentPhdr(file, data_off, data_vaddr, context->data.size);
+    
     fwrite(context->code.data, 1, context->code.size, file);
-
-    size_t pad = data_off - seg1;
-    if (pad > 0) {
-        uint8_t *zeroes = (uint8_t *) calloc (1, pad);
-        if (!zeroes) {
-            perror("Error calloc.\n");
-            fclose(file);
-            return;
-        }
-
-        fwrite(zeroes, 1, pad, file);
-        free(zeroes);
-    }
-
+    
+    WritePadding(file, data_off - seg1);
     fwrite(context->data.data, 1, context->data.size, file);
+    
     fclose(file);
+}
+
+static void WriteElfHeader(FILE *file, uint64_t entry) {
+    assert(file);
+    uint8_t header[ELF_HEADER_SIZE] = {};
+    
+    header[0] = 0x7F; header[1] = 'E'; header[2] = 'L'; header[3] = 'F';
+    header[4] = 2;  // 64-bit
+    header[5] = 1;  // little-endian
+    header[6] = 1;  // ELF version
+
+    // e_type = ET_EXEC (2), e_machine = EM_X86_64 (62)
+    uint16_t value16 = 2; memcpy(header + 16, &value16, 2);
+    value16 = 62; memcpy(header + 18, &value16, 2);
+    
+    // e_version = 1
+    uint32_t value32 = 1; memcpy(header + 20, &value32, 4);
+    
+    // e_entry
+    memcpy(header + 24, &entry, 8);
+    
+    // e_phoff = 64 (program header offset)
+    uint64_t value64 = 64; memcpy(header + 32, &value64, 8);
+    
+    // e_shoff = 0 (no section header)
+    // e_flags = 0
+    // e_ehsize = 64 -> elf header size
+    value64 = 64; memcpy(header + 52, &value64, 2);
+    
+    // e_phentsize = 56, e_phnum = 2
+    value16 = 56; memcpy(header + 54, &value16, 2);
+    value16 = 2; memcpy(header + 56, &value16, 2);
+    
+    fwrite(header, 1, ELF_HEADER_SIZE, file);
+}
+
+static void WriteCodeSegmentPhdr(FILE *file, size_t seg1) {
+    assert(file);
+    uint8_t ph[PHDR_SIZE] = {};
+    
+    uint32_t value32 = 1; memcpy(ph, &value32, 4);      // p_type = PT_LOAD
+    value32 = 7; memcpy(ph + 4, &value32, 4);           // p_flags = RWX
+    
+    uint64_t value64 = 0; memcpy(ph + 8, &value64, 8);  // p_offset = 0
+    value64 = ELF_BASE; memcpy(ph + 16, &value64, 8);   // p_vaddr -> load address
+    memcpy(ph + 24, &value64, 8);                       // p_paddr = p_vaddr
+    value64 = seg1; memcpy(ph + 32, &value64, 8);       // p_filesz
+    memcpy(ph + 40, &value64, 8);                       // p_memsz = p_filesz
+    value64 = PAGE_SIZE; memcpy(ph + 48, &value64, 8);  // p_align
+    
+    fwrite(ph, 1, PHDR_SIZE, file);
+}
+
+static void WriteDataSegmentPhdr(FILE *file, size_t data_off, uint64_t data_vaddr, size_t data_size) {
+    assert(file);
+    uint8_t ph[PHDR_SIZE] = {};
+    
+    uint32_t value32 = 1; memcpy(ph, &value32, 4);         // p_type = PT_LOAD
+    value32 = 6; memcpy(ph + 4, &value32, 4);              // p_flags = RW
+    
+    memcpy(ph + 8, &data_off, 8);                          // p_offset
+    memcpy(ph + 16, &data_vaddr, 8);                       // p_vaddr
+    memcpy(ph + 24, &data_vaddr, 8);                       // p_paddr
+    
+    uint64_t value64 = data_size;
+    memcpy(ph + 32, &value64, 8);                          // p_filesz
+    memcpy(ph + 40, &value64, 8);                          // p_memsz
+    
+    value64 = PAGE_SIZE; memcpy(ph + 48, &value64, 8);     // p_align
+    
+    fwrite(ph, 1, PHDR_SIZE, file);
+}
+
+static void WritePadding(FILE *file, size_t pad) {
+    assert(file);
+    if (pad == 0) return;
+    
+    uint8_t *zeroes = (uint8_t *) calloc (1, pad);
+    if (!zeroes) {
+        perror("Error calloc.\n");
+        return;
+    }
+    
+    fwrite(zeroes, 1, pad, file);
+    free(zeroes);
 }
 
 static void MakeLabel(char *buf, size_t size, const char *prefix, int number) {
@@ -896,7 +961,7 @@ static void CodeGenerateStoreParam(Context *context, VariableArr *arr, LangNode_
     } else {
         Emit8(CD, RexW(FindRegCode("rax"), FindRegCode("rbp")));
         Emit8(CD, 0x8B);
-        Emit8(CD, ModRM(1, FindRegCode("rax"), FindRegCode("rbp")));
+        Emit8(CD, ModRM(2, FindRegCode("rax"), FindRegCode("rbp")));
         Emit32(CD, (uint32_t)(int32_t)frame_offset);
     }
 
@@ -1085,6 +1150,25 @@ static void CodeGenerateReadInt(Context *context) {
     EmitPush(context, FindRegCode("rax"));
 }
 
+static void CodeGenerateDraw(Context *context, LangNode_t *node, VariableArr *arr, AsmInfo *info, Sub *sub) {
+    assert(context);
+    assert(node);
+    assert(arr);
+    assert(info);
+    assert(sub);
+
+    CodeGenerateAddrOf(context, node->left, arr, info, sub);
+
+    EmitPop(context, FindRegCode("rdi"));
+    EmitMovRR(context, FindRegCode("r13"), FindRegCode("rsp"));
+
+    EmitAlignStack(context);
+
+    EmitCall(context, "my_draw");
+
+    EmitMovRR(context, FindRegCode("rsp"), FindRegCode("r13"));
+}
+
 static void CodeGenerateArrAssign(Context *context, LangNode_t *stmt, VariableArr *arr, AsmInfo *info, Sub *sub) {
     assert(context);
     assert(stmt);
@@ -1111,7 +1195,7 @@ static void CodeGenerateArrAssign(Context *context, LangNode_t *stmt, VariableAr
     Emit8(CD, RexW(FindRegCode("rax"), 0));
     Emit8(CD, 0x89);
     Emit8(CD, ModRM(0, FindRegCode("rax"), 4));
-    Emit8(CD, Sib(3, FindRegCode("rxi"), FindRegCode("rcx")));
+    Emit8(CD, Sib(3, FindRegCode("rdi"), FindRegCode("rcx")));
 }
 
 static void CodeGenerateArrDecl(Context *context, LangNode_t *stmt, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -1149,8 +1233,8 @@ static void CodeGenerateIf(Context *context, LangNode_t *stmt, VariableArr *arr,
     int if_number = info->label_if++;
     int else_number = info->label_else++;
     int has_else = IsThatOperation(stmt->right, kOperationElse);
-    char else_label[64] = {};
-    char end_label[64] = {};
+    char else_label[DEFAULT_LABEL_SIZE] = {};
+    char end_label[DEFAULT_LABEL_SIZE] = {};
 
     MakeLabel(else_label, sizeof(else_label), "else", else_number);
     MakeLabel(end_label, sizeof(end_label), "end_if", if_number);
@@ -1188,8 +1272,8 @@ static void CodeGenerateWhile(Context *context, LangNode_t *stmt, VariableArr *a
 
     int start_number = info->label_counter++;
     int end_number = info->label_counter++;
-    char start_label[64] = {};
-    char end_label[64] = {};
+    char start_label[DEFAULT_LABEL_SIZE] = {};
+    char end_label[DEFAULT_LABEL_SIZE] = {};
 
     MakeLabel(start_label, sizeof(start_label), "wstart", start_number);
     MakeLabel(end_label, sizeof(end_label), "wend", end_number);
@@ -1431,7 +1515,8 @@ static void CodeGenerateStatement(Context *context, LangNode_t *stmt, VariableAr
                     CodeGenerateArrDecl(context, stmt, arr, info, sub);
                     break;
 
-                case kOperationDraw: // TODO
+                case kOperationDraw:
+                    CodeGenerateDraw(context, stmt, arr, info, sub);
                     break;
 
                 default:
@@ -1557,6 +1642,7 @@ static int LoadLib(LibBlob *blob, const char *path) {
     blob->printf_off = header.printf_off;
     blob->scanf_off = header.scanf_off;
     blob->exit_off = header.exit_off;
+    blob->draw_off = header.draw_off;
     blob->size = header.code_size;
     blob->reloc_count = header.reloc_count;
 

@@ -44,5 +44,5 @@ incantatio verify_and_print(centrum_x, centrum_y, radius_quadratus) |>
         y magica y augeo 1~~
     <|
 
-    draw~~
+    draw(array)~~
 <|
