@@ -245,7 +245,7 @@ static int LabelFind(Context *context, const char *name) {
     return -1;
 }
 
-static void RelocAdd(Context *context, size_t offset, const char *name, int type) {
+static void RelocAdd(Context *context, size_t offset, const char *name, RelocType type) {
     assert(context);
     assert(name);
     assert(context->number_relocs < MAX_RELOCS);
@@ -261,9 +261,9 @@ static uint8_t ModRM(int mod, int reg, int rm) {
     return (uint8_t)((mod << 6) | ((reg & 7) << 3) | (rm & 7));
 }
 
-static uint8_t Sib(int scale, int index, int base) {
-    return (uint8_t)((scale << 6) | ((index & 7) << 3) | (base & 7));
-}
+// static uint8_t Sib(int scale, int index, int base) {
+//     return (uint8_t)((scale << 6) | ((index & 7) << 3) | (base & 7));
+// }
 
 static uint8_t RexW(int reg, int rm) {
     uint8_t result = 0x48;
@@ -334,7 +334,7 @@ static void EmitCall(Context *context, const char *name) {
     assert(name);
 
     Emit8(CD, 0xE8);
-    RelocAdd(context, CD->size, name, 0);
+    RelocAdd(context, CD->size, name, kRel32);
     Emit32(CD, 0);
 }
 
@@ -343,7 +343,7 @@ static void EmitJmp(Context *context, const char *name) {
     assert(name);
 
     Emit8(CD, 0xE9);
-    RelocAdd(context, CD->size, name, 0);
+    RelocAdd(context, CD->size, name, kRel32);
     Emit32(CD, 0);
 }
 
@@ -352,7 +352,7 @@ static void EmitJCC(Context *context, uint8_t cc, const char *name) {
     assert(name);
 
     Emit8(CD, 0x0F); Emit8(CD, cc);
-    RelocAdd(context, CD->size, name, 0);
+    RelocAdd(context, CD->size, name, kRel32);
     Emit32(CD, 0);
 }
 
@@ -361,7 +361,7 @@ static void EmitMovData(Context *context, int reg, const char *symbol) {
     assert(symbol);
 
     EmitMovR64Imm64(context, reg, 0);
-    RelocAdd(context, CD->size - 8, symbol, 1);
+    RelocAdd(context, CD->size - 8, symbol, kAbs64);
 }
 
 static void EmitAlignStack(Context *context) {
@@ -452,8 +452,8 @@ static void EmitPrologue(Context *context, int frame_size) {
 static void EmitEpilogue(Context *context) {
     assert(context);
 
-    EmitMovRR(context, kRSP, kRBP);          // mov rsp, rbp
-    EmitPop(context, kRBP);                  // pop rbp
+    EmitMovRR(context, kRSP, kRBP);                         // mov rsp, rbp
+    EmitPop(context, kRBP);                                 // pop rbp
 }
 
 static void EmitStart(Context *context) {
@@ -465,7 +465,7 @@ static void EmitStart(Context *context) {
     EmitAddRegImm(context, kRSP, -8);
 
     Emit8(CD, 0xE8);
-    RelocAdd(context, CD->size, "main", 0);
+    RelocAdd(context, CD->size, "main", kRel32);
     Emit32(CD, 0);
 
     EmitMovRR(context, kRDI, kRAX);
@@ -500,11 +500,11 @@ static void BuildData(Context *context) {
     Buf *data = &context->data;
 
     context->fmt_int_off = data->size;
-    Emit8(data, '%'); Emit8(data, 'd');
+    Emit8(data, '%');  Emit8(data, 'd');
     Emit8(data, '\n'); Emit8(data, 0);
 
     context->fmt_char_off = data->size;
-    Emit8(data, '%'); Emit8(data, 'c');
+    Emit8(data, '%');  Emit8(data, 'c');
     Emit8(data, 0);
 
     while (data->size % 8) {
@@ -512,37 +512,30 @@ static void BuildData(Context *context) {
     }
 }
 
+static void EmitPltStub(Context *context, const char *label_name, const char *got_name, size_t *out_plt_off) {
+    assert(context);
+    assert(label_name);
+    assert(got_name);
+    assert(out_plt_off);
+
+    *out_plt_off = CD->size;
+    LabelAdd(context, label_name, *out_plt_off);
+
+    Emit8(CD, 0xFF);
+    Emit8(CD, ModRM(0, 4, 5));
+    
+    RelocAdd(context, CD->size, got_name, kGOTRel32);
+    Emit32(CD, 0);
+}
+
 static void EmitPLT(Context *context, PltGot *plt_got) {
     assert(context);
     assert(plt_got);
 
-    plt_got->plt_printf = CD->size;
-    LabelAdd(context, "my_printf", plt_got->plt_printf);
-    Emit8(CD, 0xFF);
-    Emit8(CD, ModRM(0, 4, 5));
-    RelocAdd(context, CD->size, "__got_printf", 2);
-    Emit32(CD, 0);
-
-    plt_got->plt_scanf = CD->size;
-    LabelAdd(context, "my_scanf", plt_got->plt_scanf);
-    Emit8(CD, 0xFF);
-    Emit8(CD, ModRM(0, 4, 5));
-    RelocAdd(context, CD->size, "__got_scanf", 2);
-    Emit32(CD, 0);
-
-    plt_got->plt_exit = CD->size;
-    LabelAdd(context, "my_exit", plt_got->plt_exit);
-    Emit8(CD, 0xFF);
-    Emit8(CD, 0x25);
-    RelocAdd(context, CD->size, "__got_exit", 2);
-    Emit32(CD, 0);
-
-    plt_got->plt_draw = CD->size;
-    LabelAdd(context, "my_draw", plt_got->plt_draw);
-    Emit8(CD, 0xFF);
-    Emit8(CD, 0x25);
-    RelocAdd(context, CD->size, "__got_draw", 2);
-    Emit32(CD, 0);
+    EmitPltStub(context, "my_printf", "__got_printf", &plt_got->plt_printf);
+    EmitPltStub(context, "my_scanf",  "__got_scanf",  &plt_got->plt_scanf);
+    EmitPltStub(context, "my_exit",   "__got_exit",   &plt_got->plt_exit);
+    EmitPltStub(context, "my_draw",   "__got_draw",   &plt_got->plt_draw);
 }
 
 static int ResolveDataSym(Context *context, const char *name, size_t *out) {
@@ -563,55 +556,62 @@ static int ResolveDataSym(Context *context, const char *name, size_t *out) {
     return 0;
 }
 
-static void LinkRelocs(Context *context, PltGot *plt_got, uint64_t data_vaddr) { // TODO
+static uint64_t GetSymbolAddress(Context *context, PltGot *plt_got, Relocation *rel, uint64_t data_vaddr) {
+    assert(context);
+    assert(plt_got);
+    assert(rel);
+
+    if (rel->type == kGOTRel32) {
+        const char *got_names[] = {"__got_printf", "__got_scanf", "__got_exit", "__got_draw"};
+
+        for (size_t i = 0; i < 4; i++) {
+            if (strcmp(rel->name, got_names[i]) == 0) {
+                return data_vaddr + plt_got->got_off + i * 8;
+            }
+        }
+
+        return 0;
+    }
+
+    size_t data_off = 0;
+    if (ResolveDataSym(context, rel->name, &data_off)) {
+        return data_vaddr + data_off;
+    }
+
+    int label_idx = LabelFind(context, rel->name);
+    if (label_idx >= 0) {
+        return ELF_BASE + HDRS_TOTAL + context->labels[label_idx].offset;
+    }
+
+    return 0;
+}
+
+static void LinkRelocs(Context *context, PltGot *plt_got, uint64_t data_vaddr) {
     assert(context);
     assert(plt_got);
 
     for (int i = 0; i < context->number_relocs; i++) {
-        Relocation *reloc = &context->relocs[i];
+        Relocation *rel = &context->relocs[i];
+        uint64_t sym_addr = GetSymbolAddress(context, plt_got, rel, data_vaddr);
+        uint64_t patch_rip = ELF_BASE + HDRS_TOTAL + rel->offset + 4;
 
-        if (reloc->type == 0) {
-            int label_index = LabelFind(context, reloc->name);
-            if (label_index < 0) {
-                fprintf(stderr, "Undefined label: %s\n", reloc->name);
+        if (rel->type == kRel32) {
+            if (!sym_addr) {
+                fprintf(stderr, "Undefined: %s.\n", rel->name);
                 continue;
             }
 
-            int32_t rel = (int32_t)((int64_t)context->labels[label_index].offset - (int64_t)(reloc->offset + 4));
-            Patch32(&context->code, reloc->offset, (uint32_t)rel);
+            Patch32(&context->code, rel->offset, (uint32_t)(sym_addr - patch_rip));
 
-        } else if (reloc->type == 1) {
-            size_t data_offset = 0;
-            if (ResolveDataSym(context, reloc->name, &data_offset)) {
-                Patch64(&context->code, reloc->offset, data_vaddr + data_offset);
-            } else {
-                int label_index = LabelFind(context, reloc->name);
-                if (label_index >= 0) {
-                    Patch64(&context->code, reloc->offset, ELF_BASE + HDRS_TOTAL + context->labels[label_index].offset);
-                } else {
-                    fprintf(stderr, "Unknown symbol: %s\n", reloc->name);
-                }
-            }
-
-        } else if (reloc->type == 2) {
-            uint64_t got_slot_vaddr = 0;
-
-            if (strcmp(reloc->name, "__got_printf") == 0) {
-                got_slot_vaddr = data_vaddr + plt_got->got_off + 0 * 8;
-            } else if (strcmp(reloc->name, "__got_scanf") == 0) {
-                got_slot_vaddr = data_vaddr + plt_got->got_off + 1 * 8;
-            } else if (strcmp(reloc->name, "__got_exit") == 0) {
-                got_slot_vaddr = data_vaddr + plt_got->got_off + 2 * 8;
-            } else if (strcmp(reloc->name, "__got_draw") == 0) {
-                got_slot_vaddr = data_vaddr + plt_got->got_off + 3 * 8;
-            } else {
-                fprintf(stderr, "Unknown GOT symbol: %s\n", reloc->name);
+        } else if (rel->type == kAbs64) {
+            Patch64(&context->code, rel->offset, sym_addr);
+        } else if (rel->type == kGOTRel32) {
+            if (!sym_addr) {
+                fprintf(stderr, "Unknown GOT sym: %s.\n", rel->name);
                 continue;
             }
 
-            uint64_t rip = ELF_BASE + HDRS_TOTAL + reloc->offset + 4;
-            int32_t rel = (int32_t)(got_slot_vaddr - rip);
-            Patch32(&context->code, reloc->offset, (uint32_t)rel);
+            Patch32(&context->code, rel->offset, (uint32_t)(sym_addr - patch_rip));
         }
     }
 }
@@ -668,7 +668,7 @@ static void WriteElfHeader(FILE *file, uint64_t entry) {
              value64 = 64; memcpy(header + 52, &value64, 2);
 
              value16 = 56; memcpy(header + 54, &value16, 2);
-             value16 = 2; memcpy(header + 56, &value16, 2);
+             value16 = 2;  memcpy(header + 56, &value16, 2);
 
     fwrite(header, 1, ELF_HEADER_SIZE, file);
 }
@@ -754,7 +754,7 @@ static void CountLocalSlots(LangNode_t *node, VariableArr *arr, AsmInfo *info) {
     if (IsThatOperation(node, kOperationArrDecl)) {
         LangNode_t *arr_pos = node->left;
         if (arr_pos && arr_pos->left && arr_pos->right) {
-            int var_pos = arr_pos->left->value.pos;
+            size_t var_pos = arr_pos->left->value.pos;
             int size = (int)arr_pos->right->value.number;
 
             if (arr->var_array[var_pos].pos_in_code == -1) {
@@ -767,7 +767,7 @@ static void CountLocalSlots(LangNode_t *node, VariableArr *arr, AsmInfo *info) {
     }
 
     if (node->type == kVariable) {
-        int pos = node->value.pos;
+        size_t pos = node->value.pos;
         for (size_t i = 0; i < arr->size; i++) {
             if (arr->var_array[pos].variable_name && arr->var_array[i].variable_name &&
                     strcmp(arr->var_array[i].variable_name, arr->var_array[pos].variable_name) == 0) {
@@ -793,7 +793,7 @@ static int GetVarSlot(VariableArr *arr, LangNode_t *node) {
         check = node->left;
     }
 
-    int var_pos = check->value.pos;
+    size_t var_pos = check->value.pos;
     const char *name = arr->var_array[var_pos].variable_name;
 
     for (size_t i = 0; i < arr->size; i++) {
@@ -915,8 +915,7 @@ static void CodeGenerateBinOp(Context *context, LangNode_t *node, VariableArr *a
             Emit8(CD, ModRM(3, 7, kRBX));
             break;
 
-        default:
-            break;
+        default: break;
     }
     #pragma GCC diagnostic pop
 
@@ -1012,7 +1011,7 @@ static void CodeGenerateArrAssign(Context *context, LangNode_t *stmt, VariableAr
     int slot = GetVarSlot(arr, stmt->left->left);
     int local_idx = slot - sub->param_count;
 
-    // rcx = lea [rbp - 8*(local_idx + 1)]
+    // rcx = lea [rbp - 8 * (local_idx + 1)]
     int32_t base_disp = -8 * (local_idx + 1);
     EmitLeaRcxRbp(context, base_disp);
 
@@ -1063,14 +1062,12 @@ static void CodeGenerateIf(Context *context, LangNode_t *stmt, VariableArr *arr,
     assert(sub);
 
     LangNode_t *cond = stmt->left;
-    int if_number = info->label_if++;
-    int else_number = info->label_else++;
+    int if_number = info->label_if++, else_number = info->label_else++;
     int has_else = IsThatOperation(stmt->right, kOperationElse);
-    char else_label[DEFAULT_LABEL_SIZE] = {};
-    char end_label[DEFAULT_LABEL_SIZE] = {};
+    char else_label[DEFAULT_LABEL_SIZE] = {}, end_label[DEFAULT_LABEL_SIZE] = {};
 
     MakeLabel(else_label, sizeof(else_label), "else", else_number);
-    MakeLabel(end_label, sizeof(end_label), "end_if", if_number);
+    MakeLabel(end_label,  sizeof(end_label), "end_if", if_number);
 
     CodeGenerateExpr(context, cond->left, arr, info, sub);
     CodeGenerateExpr(context, cond->right, arr, info, sub);
@@ -1193,29 +1190,29 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *ar
             #pragma GCC diagnostic ignored "-Wswitch-enum"
             switch (expr->value.operation) {
                 case kOperationAdd:
-                    CodeGenerateBinOp(context, expr, arr, info, sub, kOperationAdd);
-                    break;
+                    CodeGenerateBinOp(context, expr, arr, info, sub, kOperationAdd); break;
 
                 case kOperationSub:
-                    CodeGenerateBinOp(context, expr, arr, info, sub, kOperationSub);
-                    break;
+                    CodeGenerateBinOp(context, expr, arr, info, sub, kOperationSub); break;
 
                 case kOperationMul:
-                    CodeGenerateBinOp(context, expr, arr, info, sub, kOperationMul);
-                    break;
+                    CodeGenerateBinOp(context, expr, arr, info, sub, kOperationMul); break;
 
                 case kOperationDiv:
-                    CodeGenerateBinOp(context, expr, arr, info, sub, kOperationDiv);
-                    break;
+                    CodeGenerateBinOp(context, expr, arr, info, sub, kOperationDiv); break;
 
                 case kOperationSQRT:
                     CodeGenerateExpr(context, expr->left, arr, info, sub);
                     EmitPop(context, kRAX);
+
+                    // cvtsi2sd xmm0, rax
                     Emit8(CD, 0xF2); Emit8(CD, RexW(0, kRAX));
                     Emit8(CD, 0x0F); Emit8(CD, 0x2A); Emit8(CD, ModRM(3, 0, kRAX));
 
+                    // sqrtsd xmm0, xmm0
                     Emit8(CD, 0xF2); Emit8(CD, 0x0F); Emit8(CD, 0x51); Emit8(CD, ModRM(3, 0, 0));
 
+                    // cvttsd2si rax, xmm0
                     Emit8(CD, 0xF2); Emit8(CD, RexW(kRAX, 0)); Emit8(CD, 0x0F); Emit8(CD, 0x2C);
                     Emit8(CD, ModRM(3, kRAX, 0));
 
@@ -1223,12 +1220,10 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *ar
                     break;
 
                 case kOperationCallAddr:
-                    CodeGenerateAddrOf(context, expr->left, arr, info, sub);
-                    break;
+                    CodeGenerateAddrOf(context, expr->left, arr, info, sub); break;
 
                 case kOperationGetAddr:
-                    CodeGenerateDeref(context, expr->left, arr, info, sub);
-                    break;
+                    CodeGenerateDeref(context, expr->left, arr, info, sub); break;
 
                 case kOperationCall: {
                     const char *callee = arr->var_array[expr->left->value.pos].variable_name;
@@ -1271,8 +1266,7 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *ar
                     break;
                 }
 
-                default:
-                    break;
+                default: break;
             }
             #pragma GCC diagnostic pop
             break;
@@ -1407,7 +1401,7 @@ static void AssignParamSlots(LangNode_t *args, VariableArr *arr, int *slot_count
 
     if (!IsThatOperation(args, kOperationComma)) {
         if (args->type == kVariable) {
-            int pos = args->value.pos;
+            size_t pos = args->value.pos;
             const char *name = arr->var_array[pos].variable_name;
 
             for (size_t i = 0; i < arr->size; i++) {

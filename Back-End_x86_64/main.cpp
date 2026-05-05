@@ -7,6 +7,9 @@
 #include "Common/CommonFunctions.h"
 #include "Back-End/TreeToAsm.h"
 
+#include "Back-End/BackFunctions.h"
+#include "Back-End/TreeToBin.h"
+
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -19,18 +22,21 @@ int main(int argc, char *argv[]) {
 
     INIT_EVERYTHING(root, Variable_Array, lang_info, tokens_no, dump_info);
 
-    CHECK_ERROR_RETURN(ReadTreeAndParse(&lang_info, &dump_info, filename_in), NULL, NULL, NULL); //TODO: наоборот
+    CHECK_ERROR_RETURN(ReadTreeAndParse(&lang_info, &dump_info, filename_in), NULL, NULL, NULL);
 
     DoTreeInGraphviz(lang_info.root->root, &dump_info, &Variable_Array);
 
     if (strncmp(mode, "--tree_asm", sizeof("--tree_asm")) == 0) {
-#include "Back-End/BackFunctions.h"
         const char *filename_out = argv[3];
         CHECK_ERROR_RETURN(PrintAsm(&lang_info, filename_out), NULL, NULL, NULL);
 
     } else if (strncmp(mode, "--tree_elf", sizeof("--tree_elf")) == 0) {
-#include "Back-End/TreeToBin.h"
         CompileTreeToELF(lang_info.root->root, &Variable_Array, "my_program");
+    } else {
+        fprintf(stderr, "Error: no such mode. Write either \"--tree_asm\" or \"--tree_elf\".\n");
+        TreeDtor(lang_info.root);
+        DtorVariableArray(&Variable_Array);
+        return 1;
     }
 
     TreeDtor(lang_info.root);

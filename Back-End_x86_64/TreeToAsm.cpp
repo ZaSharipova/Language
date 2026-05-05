@@ -192,7 +192,7 @@ static void AssignParamSlots(LangNode_t *args, VariableArr *arr, int *slot_count
 
     if (!IsThatOperation(args, kOperationComma)) {
         if (args->type == kVariable) {
-            int pos = args->value.pos;
+            size_t pos = args->value.pos;
             const char *name = arr->var_array[pos].variable_name;
 
             for (size_t i = 0; i < arr->size; i++) {
@@ -221,7 +221,7 @@ static void CountLocalSlots(LangNode_t *node, VariableArr *arr, AsmInfo *info) {
     if (IsThatOperation(node, kOperationArrDecl)) {
         LangNode_t *arr_pos = node->left;
         if (arr_pos && arr_pos->left && arr_pos->right) {
-            int var_pos = arr_pos->left->value.pos;
+            size_t var_pos = arr_pos->left->value.pos;
             int size = (int)arr_pos->right->value.number;
 
             if (arr->var_array[var_pos].pos_in_code == -1) {
@@ -234,7 +234,7 @@ static void CountLocalSlots(LangNode_t *node, VariableArr *arr, AsmInfo *info) {
     }
 
     if (node->type == kVariable) {
-        int pos = node->value.pos;
+        size_t pos = node->value.pos;
         for (size_t i = 0; i < arr->size; i++) {
             if (arr->var_array[pos].variable_name && arr->var_array[i].variable_name &&
                     strcmp(arr->var_array[i].variable_name, arr->var_array[pos].variable_name) == 0) {
@@ -260,7 +260,7 @@ static int GetVarSlot(VariableArr *arr, LangNode_t *node) {
         check = node->left;
     }
 
-    int var_pos = check->value.pos;
+    size_t var_pos = check->value.pos;
     const char *name = arr->var_array[var_pos].variable_name;
 
     for (size_t i = 0; i < arr->size; i++) {

@@ -46,10 +46,16 @@ typedef struct {
     size_t offset;
 } Label;
 
+enum RelocType {
+    kRel32,
+    kAbs64,
+    kGOTRel32,
+};
+
 typedef struct {
     size_t offset;
     char name[DEFAULT_SIZE];
-    int type;
+    RelocType type;
 } Relocation;
 
 typedef struct {
