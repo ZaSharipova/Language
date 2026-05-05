@@ -81,7 +81,7 @@ void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base,
 
     asm_info->counter = 0;
 
-    SubAsmInfo sub_info = {0};
+    SubAsmInfo sub_info = {0, 0, 1};
     AsmGroup ctx_val = {file, arr, asm_info, &sub_info};
 
     if (IsThatOperation(root, kOperationFunction)) {
@@ -91,7 +91,7 @@ void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base,
     if (root->left) {
         PrintProgram(file, root->left, arr, ram_base, asm_info);
     }
-    
+
     if (root->right) {
         PrintProgram(file, root->right, arr, ram_base, asm_info);
     }

@@ -62,31 +62,44 @@ typedef struct {
  *   [rbp - 8 * 2]       -- 1st local cell
  *   ...
  *
- * pos_in_code semantics:
- *   slot < param_count : parameter (read from [rbp + 16 + 8 * slot])
- *   slot >= param_count: local idx = slot - param_count,
- *                        addr = [rbp - 8 * (local_idx + 1)]
- *
- * Arrays grow toward LOWER addresses: array[0] is at base address,
- * array[i] is at base - 8 * i. This matches CodeGenerateArrAssign /
- * kOperationArrPos in TreeToBin.c.
+ * Arrays grow toward LOWER addresses: array[i] is at base - 8 * i.
  * ------------------------------------------------------------------- */
 
-// emit lea rcx, [rbp + disp] -- address of variable by slot id
-#define EMIT_VAR_ADDR_BY_SLOT(slot)                                       \
-    do {                                                                  \
-        int _s = (slot);                                                  \
-        if (_s < ctx->sub_info->param_count) {                            \
-            int _disp = 16 + 8 * _s;                                      \
-            EMIT("lea rcx, [rbp + %d]", _disp);                           \
-        } else {                                                          \
-            int _local = _s - ctx->sub_info->param_count;                 \
-            int _disp  = -8 * (_local + 1);                               \
-            EMIT("lea rcx, [rbp %s %d]",                                  \
-                 (_disp >= 0) ? "+" : "-",                                \
-                 (_disp >= 0) ? _disp : -_disp);                          \
-        }                                                                 \
-    } while (0)
+/* ---------------------------------------------------------------
+ *               VARIABLE OPERAND HELPERS
+ *
+ * VarSlotDisp returns the displacement off rbp for a given slot.
+ * VarMemOperand fills `out` with a NASM memory operand string like
+ * "qword [rbp - 16]" or "qword [rbp + 24]".  Used directly inside
+ * mov / push / cmp / etc instructions, no `lea rcx, ...` first.
+ * --------------------------------------------------------------- */
+
+static int VarSlotDisp(int slot, int param_count) {
+    if (slot < param_count) {
+        return 16 + 8 * slot;
+    }
+    int local_idx = slot - param_count;
+    return -8 * (local_idx + 1);
+}
+
+static void VarMemOperand(char *out, size_t cap, int slot, int param_count) {
+    int disp = VarSlotDisp(slot, param_count);
+    if (disp >= 0) {
+        snprintf(out, cap, "qword [rbp + %d]", disp);
+    } else {
+        snprintf(out, cap, "qword [rbp - %d]", -disp);
+    }
+}
+
+/* like VarMemOperand but without the size prefix - useful for `lea` */
+static void VarAddrOperand(char *out, size_t cap, int slot, int param_count) {
+    int disp = VarSlotDisp(slot, param_count);
+    if (disp >= 0) {
+        snprintf(out, cap, "[rbp + %d]", disp);
+    } else {
+        snprintf(out, cap, "[rbp - %d]", -disp);
+    }
+}
 
 static const char *ChooseCompareMode(LangNode_t *node);
 
@@ -115,10 +128,8 @@ static void EmitPrologue(AsmCtx *ctx) {
     EMIT_SECTION("prologue");
     EMIT("push rbp");
     EMIT("mov rbp, rsp");
-    EMIT("push r12");                       // r12 used to save/restore rsp around external calls
-    EMIT("push rbx");                       // callee-saved scratch
-    /* keep stack aligned: pushed 2 callee-saved regs (16 bytes), so frame_size
-       (which is multiple of 16) keeps alignment. */
+    EMIT("push r12");
+    EMIT("push rbx");
     if (ctx->sub_info->frame_size > 0) {
         EMIT("sub rsp, %d", ctx->sub_info->frame_size);
     }
@@ -144,9 +155,9 @@ void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base,
     (void)ram_base;
     if (!root) return;
 
-    static int header_printed = 0;
+    static bool header_printed = false;
     if (!header_printed) {
-        header_printed = 1;
+        header_printed = true;
         fprintf(file, ";---------------------------------------------\n");
         fprintf(file, "; Generated assembly\n");
         fprintf(file, ";---------------------------------------------\n\n");
@@ -158,7 +169,7 @@ void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base,
         fprintf(file, "\tglobal main\n\n");
     }
 
-    SubAsmInfo sub_info = {0, 0, 0};
+    SubAsmInfo sub_info = {0, 0, 1};
     AsmCtx ctx_val = {file, arr, asm_info, &sub_info};
 
     if (IsThatOperation(root, kOperationFunction)) {
@@ -301,7 +312,7 @@ static void PrintFunction(LangNode_t *func_node, AsmCtx *ctx) {
     int frame_size = local_slots * 8;
     if (frame_size % 16 != 0) frame_size += 8;
 
-    SubAsmInfo sub_info_val = { param_count, frame_size, 0 };
+    SubAsmInfo sub_info_val = { param_count, frame_size, 1 };
     ctx->sub_info = &sub_info_val;
 
     fprintf(ctx->file, ";---------------------------------------------\n");
@@ -330,6 +341,10 @@ static void PrintFunction(LangNode_t *func_node, AsmCtx *ctx) {
     fprintf(ctx->file, "\n\n");
 }
 
+/* ---------------------------------------------------------------
+ *               VARIABLE READ / WRITE  (one-instruction path)
+ * --------------------------------------------------------------- */
+
 static void PopToVar(LangNode_t *node, AsmCtx *ctx) {
     assert(ctx->file);
     assert(ctx->arr);
@@ -337,10 +352,11 @@ static void PopToVar(LangNode_t *node, AsmCtx *ctx) {
     assert(ctx->sub_info);
 
     int slot = GetVarSlot(ctx->arr, node);
+    char mem[64];
+    VarMemOperand(mem, sizeof(mem), slot, ctx->sub_info->param_count);
+
     EMIT_COMMENT("store to var (slot=%d)", slot);
-    EMIT("pop rax");
-    EMIT_VAR_ADDR_BY_SLOT(slot);
-    EMIT("mov [rcx], rax");
+    EMIT("pop %s", mem);                  // pop directly into the memory slot
 }
 
 static void PushParamsToStack(LangNode_t *args_node, AsmCtx *ctx) {
@@ -376,9 +392,11 @@ static void PrintExpr(LangNode_t *expr, AsmCtx *ctx) {
 
         case kVariable: {
             int slot = GetVarSlot(ctx->arr, expr);
+            char mem[64];
+            VarMemOperand(mem, sizeof(mem), slot, ctx->sub_info->param_count);
+
             EMIT_COMMENT("load var (slot=%d)", slot);
-            EMIT_VAR_ADDR_BY_SLOT(slot);
-            EMIT("push qword [rcx]");
+            EMIT("push %s", mem);          // push directly from memory slot
             break;
         }
 
@@ -459,17 +477,18 @@ static void PrintExprOperationCase(LangNode_t *expr, AsmCtx *ctx) {
 
         case kOperationArrPos: {
             int slot = GetVarSlot(ctx->arr, expr->left);
+            char addr[64];
+            VarAddrOperand(addr, sizeof(addr), slot, ctx->sub_info->param_count);
+
             EMIT_BLANK();
             EMIT_COMMENT("array read (base slot=%d)", slot);
 
             PrintExpr(expr->right, ctx);
             EMIT("pop rdi");
 
-            EMIT_VAR_ADDR_BY_SLOT(slot);
-
+            EMIT("lea rcx, %s", addr);     // rcx = &array[0]
             EMIT("shl rdi, 3");
-            EMIT("sub rcx, rdi");
-
+            EMIT("sub rcx, rdi");          // rcx = &array[i]
             EMIT("push qword [rcx]");
             break;
         }
@@ -611,8 +630,9 @@ static void PrintArrDeclare(LangNode_t *stmt, AsmCtx *ctx) {
     EMIT_COMMENT("declare array[%d], base slot=%d", arr_size, base_slot);
     for (int i = 0; i < arr_size; i++) {
         int slot = base_slot + i;
-        EMIT_VAR_ADDR_BY_SLOT(slot);
-        EMIT("mov qword [rcx], 0");
+        char mem[64];
+        VarMemOperand(mem, sizeof(mem), slot, ctx->sub_info->param_count);
+        EMIT("mov %s, 0", mem);            // direct memory write, no lea
     }
 }
 
@@ -632,9 +652,12 @@ static void PrintIsForArray(LangNode_t *stmt, AsmCtx *ctx) {
     EMIT("pop rax");                             // rax = value
 
     int slot = GetVarSlot(ctx->arr, stmt->left->left);
-    EMIT_VAR_ADDR_BY_SLOT(slot);                 // rcx = base addr
+    char addr[64];
+    VarAddrOperand(addr, sizeof(addr), slot, ctx->sub_info->param_count);
+
+    EMIT("lea rcx, %s", addr);                   // rcx = &array[0]
     EMIT("shl rdi, 3");
-    EMIT("sub rcx, rdi");                        // rcx = base - 8 * index
+    EMIT("sub rcx, rdi");                        // rcx = &array[index]
     EMIT("mov [rcx], rax");
 }
 
@@ -644,9 +667,12 @@ static void PrintAddressOf(LangNode_t *var_node, AsmCtx *ctx) {
     assert(ctx->sub_info);
 
     int slot = GetVarSlot(ctx->arr, var_node);
+    char addr[64];
+    VarAddrOperand(addr, sizeof(addr), slot, ctx->sub_info->param_count);
+
     EMIT_BLANK();
     EMIT_COMMENT("address-of (slot=%d)", slot);
-    EMIT_VAR_ADDR_BY_SLOT(slot);
+    EMIT("lea rcx, %s", addr);
     EMIT("push rcx");
 }
 
@@ -726,9 +752,7 @@ static void EmitDraw(LangNode_t *node, AsmCtx *ctx) {
     EMIT_BLANK();
     EMIT_COMMENT("draw");
 
-    // push address of the array (its base slot), then pop into rdi
     PrintAddressOf(node->left, ctx);
-
     EMIT("pop rdi");
     EMIT("mov r12, rsp");
     EMIT("and rsp, -16");
@@ -791,7 +815,7 @@ static void PrintStatementOperationCase(LangNode_t *stmt, AsmCtx *ctx) {
         case kOperationWriteChar: EmitPrintChar(stmt, ctx); break;
         case kOperationRead: EmitReadInt(ctx); PopToVar(stmt->left, ctx); break;
 
-        case kOperationThen: 
+        case kOperationThen:
             PrintStatement(stmt->left, ctx);
             PrintStatement(stmt->right, ctx);
             break;
