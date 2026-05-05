@@ -1,3 +1,4 @@
+default rel
 section .text
 
 my_exit:

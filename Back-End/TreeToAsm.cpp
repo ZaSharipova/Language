@@ -91,6 +91,7 @@ void PrintProgram(FILE *file, LangNode_t *root, VariableArr *arr, int *ram_base,
     if (root->left) {
         PrintProgram(file, root->left, arr, ram_base, asm_info);
     }
+    
     if (root->right) {
         PrintProgram(file, root->right, arr, ram_base, asm_info);
     }
@@ -183,6 +184,7 @@ static void PushParamsToStack(LangNode_t *args_node, AsmGroup *ctx) {
     if (args_node->left) {
         PushParamsToStack(args_node->right, ctx);
     }
+
     if (args_node->right) {
         PushParamsToStack(args_node->left, ctx);
     }
@@ -201,6 +203,7 @@ static void PushParamsToRam(LangNode_t *args_node, AsmGroup *ctx) {
     if (args_node->left) {
         PushParamsToRam(args_node->left, ctx);
     }
+
     if (args_node->right) {
         PushParamsToRam(args_node->right, ctx);
     }
@@ -246,9 +249,7 @@ static void PrintExpr(LangNode_t *expr, AsmGroup *ctx) {
             FPRINTF("PUSHM [RCX]\n");
             break;
 
-        case kOperation:
-            PrintExprOperationCase(expr, ctx);
-            break;
+        case kOperation: PrintExprOperationCase(expr, ctx); break;
 
         default:
             printf("no such option in expr->type.\n");
@@ -443,17 +444,9 @@ static void PrintStatementOperationCase(LangNode_t *stmt, AsmGroup *ctx) {
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wswitch-enum"
     switch (stmt->value.operation) {
-        case kOperationHLT:
-            FPRINTF("HLT\n");
-            break;
-
-        case kOperationCallAddr:
-            PrintAddressOf(stmt->left, ctx);
-            break;
-
-        case kOperationGetAddr:
-            PrintDereference(stmt->left, ctx);
-            break;
+        case kOperationHLT: FPRINTF("HLT\n"); break;
+        case kOperationCallAddr: PrintAddressOf(stmt->left, ctx); break;
+        case kOperationGetAddr: PrintDereference(stmt->left, ctx); break;
 
         case kOperationCall:
             PushParamsToStack(stmt->right, ctx);
@@ -465,11 +458,13 @@ static void PrintStatementOperationCase(LangNode_t *stmt, AsmGroup *ctx) {
                 PrintIsForArray(stmt, ctx);
                 break;
             }
+
             PrintExpr(stmt->right, ctx);
             if (IsThatOperation(stmt->left, kOperationGetAddr)) {
                 PrintAddressAssignment(stmt, ctx);
                 break;
             }
+
             ctx->sub_info->comment = "is left part";
             PrintStatement(stmt->left, ctx);
             break;
@@ -494,13 +489,8 @@ static void PrintStatementOperationCase(LangNode_t *stmt, AsmGroup *ctx) {
             PrintStatement(stmt->right, ctx);
             break;
 
-        case kOperationIf:
-            PrintIfToAsm(stmt, ctx);
-            break;
-
-        case kOperationWhile:
-            PrintWhileToAsm(stmt, ctx);
-            break;
+        case kOperationIf: PrintIfToAsm(stmt, ctx); break;
+        case kOperationWhile: PrintWhileToAsm(stmt, ctx); break;
 
         case kOperationTernary:
             ctx->sub_info->comment = "ternary";
@@ -508,17 +498,10 @@ static void PrintStatementOperationCase(LangNode_t *stmt, AsmGroup *ctx) {
             PrintStatement(stmt->left->left, ctx);
             break;
 
-        case kOperationArrDecl:
-            PrintArrDeclare(stmt, ctx);
-            break;
+        case kOperationArrDecl: PrintArrDeclare(stmt, ctx); break;
+        case kOperationDraw: FPRINTF("DRAW"); break;
 
-        case kOperationDraw:
-            FPRINTF("DRAW");
-            break;
-
-        default:
-            PrintExpr(stmt, ctx);
-            break;
+        default: PrintExpr(stmt, ctx); break;
     }
     #pragma GCC diagnostic pop
 }
@@ -532,13 +515,8 @@ static void PrintExprOperationCase(LangNode_t *expr, AsmGroup *ctx) {
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wswitch-enum"
     switch (expr->value.operation) {
-        case kOperationCallAddr:
-            PrintAddressOf(expr->left, ctx);
-            break;
-
-        case kOperationGetAddr:
-            PrintDereference(expr->left, ctx);
-            break;
+        case kOperationCallAddr: PrintAddressOf(expr->left, ctx); break;
+        case kOperationGetAddr: PrintDereference(expr->left, ctx); break;
 
         CASE_UNARY_OP(expr, SQRT, SQRT, ctx);
         CASE_BINARY_OP(expr, Add, ADD, ctx);

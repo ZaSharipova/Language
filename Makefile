@@ -91,7 +91,7 @@ $(BACK_X): $(BACK_X_OBJS) $(COMMON_OBJS)
 $(ALL_BACK_X): $(BACK_X_OBJS) $(COMMON_OBJS)
 	@mkdir -p $(BIN)
 	@$(CXX) $^ -o $@ $(LDFLAGS)
-	./build/bin/back_x ast.txt asm.asm
+	./build/bin/back_x --tree_asm ast.txt asm.asm
 	nasm -f elf64 asm.asm -o asm.o
 	gcc -no-pie asm.o -o asm
 

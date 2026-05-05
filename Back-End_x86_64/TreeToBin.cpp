@@ -393,7 +393,7 @@ static void EmitRet(Context *context) {
     Emit8(CD, 0xC3);
 }
 
-/* ----------------------------------------------------------------
+/* -----------------------------------------------------------------------------------
  * Variable addressing on the stack.
  *
  * Function frame layout:
@@ -408,7 +408,7 @@ static void EmitRet(Context *context) {
  * Variable slot identifier (pos_in_code):
  *   0 .. param_count - 1 -> parameters (read from [rbp + 16 + ...])
  *   >= param_count       -> locals (read from [rbp - 8 * ((slot - param_count) + 1)])
- * ----------------------------------------------------------------
+ * ------------------------------------------------------------------------------------
  */
 
 // rcx = lea [rbp + disp]

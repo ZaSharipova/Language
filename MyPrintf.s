@@ -1,3 +1,4 @@
+default rel
 section .text
 
 %define SA(n) [save_area + 8 * n]
@@ -672,7 +673,16 @@ PrintDouble:
         pop rbx
         ret
 
- 
+;------------------------------------------------------------------------------
+; PrintG - Print double in %g format
+;
+; RULE:     if -4 <= e < 6 — print as %f without trailing zeroes
+;           else            — print as %e
+;
+; Entry:    XMM0 = double value
+; Exit:     characters written via BufferChar
+; Destr:    RAX, RBX, RCX, RDX, XMM0, XMM8
+;------------------------------------------------------------------------------
 PrintG:
         sub rsp, 16
 

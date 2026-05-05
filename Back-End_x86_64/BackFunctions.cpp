@@ -22,6 +22,7 @@ LangErrors PrintAsm(Language *lang_info, const char *filename_out) {
     fprintf(asm_file, "\n%%include \"MyPrintf.s\"\n");
     fprintf(asm_file, "%%include \"MyScanf.s\"\n");
     fprintf(asm_file, "%%include \"MyExit.s\"\n");
+    fprintf(asm_file, "%%include \"MyDraw.s\"\n");
     fclose(asm_file);
 
     return kSuccess;
