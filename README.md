@@ -42,7 +42,7 @@
 - optimise tree
 
 ### Back-End
-Перевод в:
+Перевод из ast в:
 - мой, реализованный в [Processor](/https://github.com/ZaSharipova/Processor) asm;
 - x86_64 nasm;
 - elf исполняемый файл.

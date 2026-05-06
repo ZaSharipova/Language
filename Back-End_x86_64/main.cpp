@@ -26,12 +26,12 @@ int main(int argc, char *argv[]) {
 
     DoTreeInGraphviz(lang_info.root->root, &dump_info, &Variable_Array);
 
+    const char *filename_out = argv[3];
     if (strncmp(mode, "--tree_asm", sizeof("--tree_asm")) == 0) {
-        const char *filename_out = argv[3];
         CHECK_ERROR_RETURN(PrintAsm(&lang_info, filename_out), NULL, NULL, NULL);
 
     } else if (strncmp(mode, "--tree_elf", sizeof("--tree_elf")) == 0) {
-        CompileTreeToELF(lang_info.root->root, &Variable_Array, "my_program");
+        CompileTreeToELF(lang_info.root->root, &Variable_Array, filename_out);
     } else {
         fprintf(stderr, "Error: no such mode. Write either \"--tree_asm\" or \"--tree_elf\".\n");
         TreeDtor(lang_info.root);
