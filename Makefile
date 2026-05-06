@@ -54,6 +54,9 @@ BACK_X_OBJS  = $(BACK_SRCS_X:Back-End_x86_64/%.cpp=$(OBJ_BACK_X)/%.o)
 REVERSE_OBJS = $(REVERSE_SRCS:Reverse-End/%.cpp=$(OBJ_REVERSE)/%.o)
 TRICK_OBJS   = $(TRICK_SRCS:Trick-End/%.cpp=$(OBJ_TRICK)/%.o)
 
+FRONT_SRCS_NO_MAIN = $(filter-out Front-End/main.cpp, $(FRONT_SRCS))
+FRONT_OBJS_NO_MAIN = $(FRONT_SRCS_NO_MAIN:Front-End/%.cpp=$(OBJ_FRONT)/%.o)
+
 FRONT   = $(BIN)/front
 MIDDLE  = $(BIN)/middle
 BACK    = $(BIN)/back
@@ -99,7 +102,7 @@ $(REVERSE): $(REVERSE_OBJS) $(COMMON_OBJS)
 	@mkdir -p $(BIN)
 	@$(CXX) $^ -o $@ $(LDFLAGS)
 
-$(TRICK): $(TRICK_OBJS) $(COMMON_OBJS)
+$(TRICK): $(TRICK_OBJS) $(COMMON_OBJS) $(FRONT_OBJS_NO_MAIN)
 	@mkdir -p $(BIN)
 	@$(CXX) $^ -o $@ $(LDFLAGS)
 

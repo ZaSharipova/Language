@@ -66,7 +66,6 @@ static LangNode_t *func_name(Language *lang_info) {                     \
     return name;                                                        \
 }
 
-
 static LangNode_t *GetGoal(Language *lang_info);
 static LangNode_t *GetAssignment(Language *lang_info, LangNode_t *func_name);
 static LangNode_t *GetOp(Language *lang_info, LangNode_t *func_name);
@@ -142,17 +141,42 @@ LangErrors ReadInfix(Language *lang_info, DumpInfo *dump_info, const char *filen
 #define NEWN(num) NewNode(lang_info, kNumber, ((Value){ .number = (num)}), NULL, NULL)
 #define NEWOP(op, left, right) NewNode(lang_info, kOperation, (Value){ .operation = (op) }, left, right) 
 
-/* G :: = FUNCTION_D+
-   OP :: = WHILE | IF | ASSIGNMENT+; | FUNCTION_C
-   WHILE :: = 'while' ( E ) { OP+ }
-   IF :: = 'if' ( E ) { OP+ }
-   ASSIGNMENT :: = V '=' E
-   FUNCTION_D :: = "declare" V (T {, T}+) { OP+}
-   FUNCTION_C :: = V (T {, T}+);
-   E :: = T ([+-] T)*
-   T :: = POWER ([*:] T)*
-   POWER :: = PRIMARY ([^] POWER)*
-   PRIMARY :: = ( E ) | N | S
+/* G          ::= FUNCTION_D+
+   FUNCTION_D ::= "declare" V "(" [ E {"," E}* ] ")" "{" OP* "}"
+   
+   OP         ::= RETURN | PRINTF | SCANF | WHILE | IF | HLT | DRAW | STATEMENT_SEQ
+   
+   RETURN     ::= "return" E ";"
+   PRINTF     ::= ("write" | "write_char") "(" (V | N) ")" ";"
+   SCANF      ::= "read" "(" S ")" ";"
+   WHILE      ::= "while" "(" CONDITION ")" BODY
+   IF         ::= "if" "(" CONDITION ")" BODY [ "else" BODY ]
+   CONDITION  ::= E [ ("<=" | "<" | ">=" | ">" | "==" | "!=") E ]
+   BODY       ::= "{" OP* "}"
+   
+   STATEMENT_SEQ ::= (ASSIGNMENT | FUNCTION_C ";")+
+   
+   ASSIGNMENT ::= SIMPLE_AS | ARRAY_AS | TERNARY
+   SIMPLE_AS  ::= (V | ADDR_V) "=" (FUNCTION_C | E)
+   ARRAY_AS   ::= ["arr_decl"] V "[" E "]" "=" E
+   TERNARY    ::= (V | ADDR_V) "=" E "?" E ":" E
+   
+   FUNCTION_C ::= V "(" [ E {"," E}* ] ")"
+   
+   E          ::= T ([+-] T)*
+   T          ::= POWER ([*:/] T)*
+   POWER      ::= PRIMARY (["^"] POWER)*
+   PRIMARY    ::= "(" E ")" | N | S | FUNCTION_C | UNARY_F | ARRAY_EL | ADDR_V
+   
+   UNARY_F    ::= "sqrt" "(" E ")"
+   ARRAY_EL   ::= V "[" N "]"
+   ADDR_V     ::= ("&" | "get_addr") V
+   
+   V          ::= Variable
+   N          ::= Number
+   S          ::= String
+   HLT        ::= "hlt" ";"
+   DRAW       ::= "draw" "(" V ")" ";"
 */
 
 static LangNode_t *GetGoal(Language *lang_info) { //
