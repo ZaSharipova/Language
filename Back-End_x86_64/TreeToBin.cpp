@@ -922,16 +922,16 @@ static void CodeGenerateBinOp(Context *context, LangNode_t *node, VariableArr *a
     EmitPush(context, kRAX);
 }
 
-static void EmitSaveRspToR11(Context *context) {
-    Emit8(CD, RexW(kRSP, kR11));
+static void EmitSaveRspToR13(Context *context) {
+    Emit8(CD, RexW(kRSP, kR13));
     Emit8(CD, 0x89);
-    Emit8(CD, ModRM(3, kRSP, kR11));
+    Emit8(CD, ModRM(3, kRSP, kR13));
 }
 
-static void EmitRestoreRspFromR11(Context *context) {
-    Emit8(CD, RexW(kR11, kRSP));
+static void EmitRestoreRspFromR13(Context *context) {
+    Emit8(CD, RexW(kR13, kRSP));
     Emit8(CD, 0x89);
-    Emit8(CD, ModRM(3, kR11, kRSP));
+    Emit8(CD, ModRM(3, kR13, kRSP));
 }
 
 static void CodeGeneratePrintInt(Context *context, LangNode_t *node, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -945,11 +945,11 @@ static void CodeGeneratePrintInt(Context *context, LangNode_t *node, VariableArr
     EmitPop(context, kRSI);
     EmitMovData(context, kRDI, "fmt_int");
 
-    EmitSaveRspToR11(context);
+    EmitSaveRspToR13(context);
     EmitAlignStack(context);
     EmitXorEax(context);
     EmitCall(context, "my_printf");
-    EmitRestoreRspFromR11(context);
+    EmitRestoreRspFromR13(context);
 }
 
 static void CodeGeneratePrintChar(Context *context, LangNode_t *node, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -963,20 +963,20 @@ static void CodeGeneratePrintChar(Context *context, LangNode_t *node, VariableAr
     EmitPop(context, kRSI);
     EmitMovData(context, kRDI, "fmt_char");
 
-    EmitSaveRspToR11(context);
+    EmitSaveRspToR13(context);
     EmitAlignStack(context);
     EmitXorEax(context);
     EmitCall(context, "my_printf");
-    EmitRestoreRspFromR11(context);
+    EmitRestoreRspFromR13(context);
 }
 
 static void CodeGenerateReadInt(Context *context) {
     assert(context);
 
-    EmitSaveRspToR11(context);
+    EmitSaveRspToR13(context);
     EmitAlignStack(context);
     EmitCall(context, "my_scanf");
-    EmitRestoreRspFromR11(context);
+    EmitRestoreRspFromR13(context);
     EmitPush(context, kRAX);
 }
 
@@ -990,10 +990,10 @@ static void CodeGenerateDraw(Context *context, LangNode_t *node, VariableArr *ar
     CodeGenerateAddrOf(context, node->left, arr, info, sub);
     EmitPop(context, kRDI);
 
-    EmitSaveRspToR11(context);
+    EmitSaveRspToR13(context);
     EmitAlignStack(context);
     EmitCall(context, "my_draw");
-    EmitRestoreRspFromR11(context);
+    EmitRestoreRspFromR13(context);
 }
 
 static void CodeGenerateArrAssign(Context *context, LangNode_t *stmt, VariableArr *arr, AsmInfo *info, Sub *sub) {

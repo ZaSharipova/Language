@@ -16,9 +16,12 @@ incantatio adepio_maximus() |>
 
 incantatio verify_appr(radius) |>
     si (radius superior 16) |>
-        printc(18)~~
-        printc(81)~~
-        printc(81)~~
+        printc(101)~~
+        printc(114)~~
+        printc(114)~~
+        printc(111)~~
+        printc(114)~~
+        printc(10)~~
         exit~~
     <|
 <|
@@ -39,6 +42,7 @@ incantatio verify_and_print(centrum_x, centrum_y, radius_quadratus) |>
                 printc(46)~~
                 printc(46)~~
             <|
+            
             x magica x augeo 1~~
         <|
 

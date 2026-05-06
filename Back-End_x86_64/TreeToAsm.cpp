@@ -11,6 +11,8 @@
 #include "Common/StackFunctions.h"
 #include "Common/CommonBackFunctions.h"
 
+#define DEFAULT_BUF_SIZE 64
+
 typedef struct {
     int param_count;
     int frame_size;
@@ -336,10 +338,6 @@ static void PrintFunction(LangNode_t *func_node, AsmContext *context) {
     fprintf(context->file, "\n\n");
 }
 
-/* ---------------------------------------------------------------
- *               VARIABLE READ / WRITE  (one-instruction path)
- * --------------------------------------------------------------- */
-
 static void PopToVar(LangNode_t *node, AsmContext *context) {
     assert(context->file);
     assert(context->arr);
@@ -347,7 +345,7 @@ static void PopToVar(LangNode_t *node, AsmContext *context) {
     assert(context->sub_info);
 
     int slot = GetVarSlot(context->arr, node);
-    char mem[64];
+    char mem[DEFAULT_BUF_SIZE] = {};
     VarMemOperand(mem, sizeof(mem), slot, context->sub_info->param_count);
 
     EMIT_COMMENT("store to var (slot=%d)", slot);
@@ -387,7 +385,7 @@ static void PrintExpr(LangNode_t *expr, AsmContext *context) {
 
         case kVariable: {
             int slot = GetVarSlot(context->arr, expr);
-            char mem[64];
+            char mem[DEFAULT_BUF_SIZE] = {};
             VarMemOperand(mem, sizeof(mem), slot, context->sub_info->param_count);
 
             EMIT_COMMENT("load var (slot=%d)", slot);
@@ -472,7 +470,7 @@ static void PrintExprOperationCase(LangNode_t *expr, AsmContext *context) {
 
         case kOperationArrPos: {
             int slot = GetVarSlot(context->arr, expr->left);
-            char addr[64];
+            char addr[DEFAULT_BUF_SIZE] = {};
             VarAddrOperand(addr, sizeof(addr), slot, context->sub_info->param_count);
 
             EMIT_BLANK();
@@ -625,7 +623,7 @@ static void PrintArrDeclare(LangNode_t *stmt, AsmContext *context) {
     EMIT_COMMENT("declare array[%d], base slot=%d", arr_size, base_slot);
     for (int i = 0; i < arr_size; i++) {
         int slot = base_slot + i;
-        char mem[64];
+        char mem[DEFAULT_BUF_SIZE] = {};
         VarMemOperand(mem, sizeof(mem), slot, context->sub_info->param_count);
         EMIT("mov %s, 0", mem);            // direct memory write, no lea
     }
@@ -643,16 +641,16 @@ static void PrintIsForArray(LangNode_t *stmt, AsmContext *context) {
     PrintExpr(stmt->right, context);                 // push value
     PrintExpr(stmt->left->right, context);           // push index
 
-    EMIT("pop rdi");                             // rdi = index
-    EMIT("pop rax");                             // rax = value
+    EMIT("pop rdi");                                 // rdi = index
+    EMIT("pop rax");                                 // rax = value
 
     int slot = GetVarSlot(context->arr, stmt->left->left);
-    char addr[64];
+    char addr[DEFAULT_BUF_SIZE] = {};
     VarAddrOperand(addr, sizeof(addr), slot, context->sub_info->param_count);
 
-    EMIT("lea rcx, %s", addr);                   // rcx = &array[0]
+    EMIT("lea rcx, %s", addr);                       // rcx = &array[0]
     EMIT("shl rdi, 3");
-    EMIT("sub rcx, rdi");                        // rcx = &array[index]
+    EMIT("sub rcx, rdi");                            // rcx = &array[index]
     EMIT("mov [rcx], rax");
 }
 
@@ -662,7 +660,7 @@ static void PrintAddressOf(LangNode_t *var_node, AsmContext *context) {
     assert(context->sub_info);
 
     int slot = GetVarSlot(context->arr, var_node);
-    char addr[64];
+    char addr[DEFAULT_BUF_SIZE] = {};
     VarAddrOperand(addr, sizeof(addr), slot, context->sub_info->param_count);
 
     EMIT_BLANK();

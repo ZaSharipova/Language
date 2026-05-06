@@ -16,9 +16,13 @@ incantatio adepio_maximus() |>
 
 incantatio verify_appr(radius) |>
     si (radius superior 16) |>
-        printc(18)~~
-        printc(81)~~
-        printc(81)~~
+        printc(101)~~
+        printc(114)~~
+        printc(114)~~
+        printc(111)~~
+        printc(114)~~
+        printc(10)~~
+        exit~~
         exit~~
     <|
 <|
@@ -34,6 +38,7 @@ incantatio verify_and_print(centrum_x, centrum_y, radius_quadratus) |>
             dy magica y minuo centrum_y~~
             distantia_quadrata magica (dx multiplico dx) augeo (dy multiplico dy)~~
             t magica 32 multiplico y augeo x~~
+
             si (distantia_quadrata inferior_aut radius_quadratus) |>
                 array[t] magica 1~~
             <| altius |>
