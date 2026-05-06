@@ -34,8 +34,6 @@
 
 ### Front-End 
 - code -> tree
-- code -> asm
-- tree -> asm
 
 ### Reverse-End
 - tree -> code
@@ -43,7 +41,11 @@
 ### Middle-End 
 - optimise tree
 
-### Back-End (в репозитории под названием "Processor")
+### Back-End
+Перевод в:
+- мой, реализованный в [Processor](/https://github.com/ZaSharipova/Processor) asm;
+- x86_64 nasm;
+- elf исполняемый файл.
 
 ## 📚 Синтаксис и команды
 
@@ -89,14 +91,14 @@
 | **superior** | `>` | Больше | `x superior y` → `x > y` |
 | **superior_aut** | `>=` | Больше или равно | `x superior_aut y` → `x >= y` |
 | **aequalis** | `==` | Равно | `x aequalis y` → `x == y` |
-| **!=** | `!=` | Не равно | `x != y` → `x != y` |
+| **non_aequalis** | `!=` | Не равно | `x non_aequalis y` → `x != y` |
 
 ### 💬 **Ввод-вывод**
 
 | Команда | Аналог в C | Описание | Пример |
 |---------|------------|----------|---------|
 | **revelatio** | `printf` | Вывод на экран | `revelatio(arg)` |
-| **printc** | `putchar` | Вывод символа | `printc(arg)` |
+| **printc** | `putchar или printf("%c", ...)` | Вывод символа | `printc(arg)` |
 | **augurio** | `scanf` | Ввод с клавиатуры | `augurio(arg)` |
 
 ### 🏗️ **Функции и управление программой**
@@ -104,7 +106,7 @@
 | Команда | Аналог в C | Описание | Пример |
 |---------|------------|----------|---------|
 | **incantatio** | `func` | Объявление функции | `incantatio nomen() \|> ... <\|` |
-| **call** | вызов функции | Вызов функции | `nomen(<<params>>)` |
+| **...** | вызов функции | Вызов функции | `<funcname>(<<params>>)` |
 | **reporto** | `return` | Возврат значения | `reporto valor` |
 | **exit** | `exit` | Завершение программы | `exit` |
 
