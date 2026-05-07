@@ -32,11 +32,13 @@ incantatio discriminant(a, b, c) |>
 incantatio findroot1(a, b, d) |> 
     root1 magica ((-1) multiplico b augeo d) divido (2 multiplico a)~~
     revelatio(root1)~~
+    printc(10)~~
 <|
 
 incantatio findroot2(a, b, d) |> 
     root2 magica ((-1) multiplico b minuo d) divido (2 multiplico a)~~
     revelatio(root2)~~
+    printc(10)~~
 <|
 
 incantatio verifydis(d) |> 
@@ -46,8 +48,10 @@ incantatio verifydis(d) |>
     <| altius |> 
         si (d aequalis 0)|> 
             revelatio(1)~~
+            printc(10)~~
         <| altius |> 
             revelatio(2)~~
+            printc(10)~~
         <|
     <|
 <|
@@ -57,6 +61,7 @@ incantatio dolinear(b, c) |>
         verifyc(c)~~
     <| altius |> 
         revelatio(1)~~
+        printc(10)~~
         x magica ((-1) multiplico c) divido b~~
         revelatio(x)~~
         doout()~~

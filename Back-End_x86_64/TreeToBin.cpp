@@ -1,6 +1,7 @@
 #include "Back-End/TreeToBin.h"
 
 #include <assert.h>
+#include <elf.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,6 +12,7 @@
 #include "Common/CommonFunctions.h"
 #include "Common/CommonBackFunctions.h"
 
+#define STANDART_FUNCTIONS_NUMBER 4
 #define REGS_NUMBER 35
 static const struct RegInfo regs[REGS_NUMBER] = {
     {"rax",   0, 64}, {"rcx",   1, 64}, {"rdx",   2, 64}, {"rbx",   3, 64},
@@ -32,6 +34,13 @@ static void MergeAndPatchLibrary(Context *context, LibBlob *blob, size_t *blob_b
 static void FinalizeAndWrite(Context *context, PltGot *plt_got, const char *elf_path);
 static void FreeLib(LibBlob *blob);
 
+static void ContextInit(Context *context);
+static void BuildData(Context *context);
+static void BuildGOT(Context *context, PltGot *plt_got);
+static void EmitPLT(Context *context, PltGot *plt_got);
+static void EmitStart(Context *context);
+static void CodeGenerateProgram(Context *context, LangNode_t *root, VariableArr *arr, AsmInfo *info);
+
 void CompileTreeToELF(LangNode_t *root, VariableArr *arr, const char *elf_path) {
     assert(root);
     assert(arr);
@@ -41,27 +50,31 @@ void CompileTreeToELF(LangNode_t *root, VariableArr *arr, const char *elf_path) 
     PltGot plt_got = {};
     LibBlob blob = {};
 
-    GenerateMainCode(&context, &plt_got, root, arr);
+    //GenerateMainCode(&context, &plt_got, root, arr);
 
-    if (!LoadLib(&blob, "my_lib.bin")) {
+    ContextInit(&context);
+    BuildData(&context);
+    BuildGOT(&context, &plt_got);
+
+    if (!LoadLib(&blob, "my_lib.elf")) {
         ContextFree(&context);
         return;
     }
 
     size_t blob_base = 0;
     MergeAndPatchLibrary(&context, &blob, &blob_base);
+
+    EmitPLT(&context, &plt_got);
+    EmitStart(&context);
+
+    AsmInfo info = {};
+    CodeGenerateProgram(&context, root, arr, &info);
+
     FinalizeAndWrite(&context, &plt_got, elf_path);
 
     FreeLib(&blob);
     ContextFree(&context);
 }
-
-static void ContextInit(Context *context);
-static void BuildData(Context *context);
-static void BuildGOT(Context *context, PltGot *plt_got);
-static void EmitPLT(Context *context, PltGot *plt_got);
-static void EmitStart(Context *context);
-static void CodeGenerateProgram(Context *context, LangNode_t *root, VariableArr *arr, AsmInfo *info);
 
 static void GenerateMainCode(Context *context, PltGot *plt_got, LangNode_t *root, VariableArr *arr) {
     assert(context);
@@ -101,9 +114,9 @@ static void MergeAndPatchLibrary(Context *context, LibBlob *blob, size_t *blob_b
     uint64_t blob_vaddr = ELF_BASE + HDRS_TOTAL + *blob_base;
     for (uint32_t i = 0; i < blob->reloc_count; i++) {
         size_t patch_offset = *blob_base + blob->relocs[i];
-        uint64_t current_value;
+        uint64_t current_value = 0;
         memcpy(&current_value, context->code.data + patch_offset, 8);
-        Patch64(&context->code, patch_offset, current_value + blob_vaddr);
+        Patch64(&context->code, patch_offset, current_value - blob->link_base + blob_vaddr);
     }
 }
 
@@ -120,14 +133,14 @@ static void FinalizeAndWrite(Context *context, PltGot *plt_got, const char *elf_
     uint64_t data_vaddr = ELF_BASE + data_offset;
     uint64_t base = ELF_BASE + HDRS_TOTAL;
 
-    uint64_t addrs[4] = {
+    uint64_t addrs[STANDART_FUNCTIONS_NUMBER] = {
         base + context->b_printf,
         base + context->b_scanf,
         base + context->b_exit,
         base + context->b_draw,
     };
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < STANDART_FUNCTIONS_NUMBER; i++) {
         memcpy(context->data.data + plt_got->got_off + i * 8, &addrs[i], 8);
     }
 
@@ -274,7 +287,7 @@ static uint8_t RexW(int reg, int rm) {
     return result;
 }
 
-#define CD (&context->code)
+#define CODE (&context->code)
 
 static void EmitMovR64Imm64(Context *context, int reg, int64_t value) {
     assert(context);
@@ -282,31 +295,31 @@ static void EmitMovR64Imm64(Context *context, int reg, int64_t value) {
     uint8_t rex = 0x48;
     if (reg >= 8) rex |= 0x01;
 
-    Emit8(CD, rex);
-    Emit8(CD, (uint8_t)(0xB8 + (reg & 7)));
-    Emit64(CD, (uint64_t)value);
+    Emit8(CODE, rex);
+    Emit8(CODE, (uint8_t)(0xB8 + (reg & 7)));
+    Emit64(CODE, (uint64_t)value);
 }
 
 static void EmitPush(Context *context, int reg) {
     assert(context);
 
-    if (reg >= 8) Emit8(CD, 0x41);
-    Emit8(CD, (uint8_t)(0x50 + (reg & 7)));
+    if (reg >= 8) Emit8(CODE, 0x41);
+    Emit8(CODE, (uint8_t)(0x50 + (reg & 7)));
 }
 
 static void EmitPop(Context *context, int reg) {
     assert(context);
 
-    if (reg >= 8) Emit8(CD, 0x41);
-    Emit8(CD, (uint8_t)(0x58 + (reg & 7)));
+    if (reg >= 8) Emit8(CODE, 0x41);
+    Emit8(CODE, (uint8_t)(0x58 + (reg & 7)));
 }
 
 static void EmitMovRR(Context *context, int dst, int src) {
     assert(context);
 
-    Emit8(CD, RexW(src, dst));
-    Emit8(CD, 0x89);
-    Emit8(CD, ModRM(3, src, dst));
+    Emit8(CODE, RexW(src, dst));
+    Emit8(CODE, 0x89);
+    Emit8(CODE, ModRM(3, src, dst));
 }
 
 static void EmitAddRegImm(Context *context, int reg, int64_t imm) {
@@ -317,15 +330,15 @@ static void EmitAddRegImm(Context *context, int reg, int64_t imm) {
     int64_t abs_value = (imm > 0) ? imm : -imm;
 
     if (abs_value <= 127) {
-        Emit8(CD, RexW(0, reg));
-        Emit8(CD, 0x83);
-        Emit8(CD, ModRM(3, slash, reg));
-        Emit8(CD, (uint8_t)(int8_t)abs_value);
+        Emit8(CODE, RexW(0, reg));
+        Emit8(CODE, 0x83);
+        Emit8(CODE, ModRM(3, slash, reg));
+        Emit8(CODE, (uint8_t)(int8_t)abs_value);
     } else {
-        Emit8(CD, RexW(0, reg));
-        Emit8(CD, 0x81);
-        Emit8(CD, ModRM(3, slash, reg));
-        Emit32(CD, (uint32_t)(int32_t)abs_value);
+        Emit8(CODE, RexW(0, reg));
+        Emit8(CODE, 0x81);
+        Emit8(CODE, ModRM(3, slash, reg));
+        Emit32(CODE, (uint32_t)(int32_t)abs_value);
     }
 }
 
@@ -333,27 +346,27 @@ static void EmitCall(Context *context, const char *name) {
     assert(context);
     assert(name);
 
-    Emit8(CD, 0xE8);
-    RelocAdd(context, CD->size, name, kRel32);
-    Emit32(CD, 0);
+    Emit8(CODE, 0xE8);
+    RelocAdd(context, CODE->size, name, kRel32);
+    Emit32(CODE, 0);
 }
 
 static void EmitJmp(Context *context, const char *name) {
     assert(context);
     assert(name);
 
-    Emit8(CD, 0xE9);
-    RelocAdd(context, CD->size, name, kRel32);
-    Emit32(CD, 0);
+    Emit8(CODE, 0xE9);
+    RelocAdd(context, CODE->size, name, kRel32);
+    Emit32(CODE, 0);
 }
 
 static void EmitJCC(Context *context, uint8_t cc, const char *name) {
     assert(context);
     assert(name);
 
-    Emit8(CD, 0x0F); Emit8(CD, cc);
-    RelocAdd(context, CD->size, name, kRel32);
-    Emit32(CD, 0);
+    Emit8(CODE, 0x0F); Emit8(CODE, cc);
+    RelocAdd(context, CODE->size, name, kRel32);
+    Emit32(CODE, 0);
 }
 
 static void EmitMovData(Context *context, int reg, const char *symbol) {
@@ -361,36 +374,36 @@ static void EmitMovData(Context *context, int reg, const char *symbol) {
     assert(symbol);
 
     EmitMovR64Imm64(context, reg, 0);
-    RelocAdd(context, CD->size - 8, symbol, kAbs64);
+    RelocAdd(context, CODE->size - 8, symbol, kAbs64);
 }
 
 static void EmitAlignStack(Context *context) {
     assert(context);
 
-    Emit8(CD, RexW(0, kRSP));
-    Emit8(CD, 0x83);
-    Emit8(CD, ModRM(3, 4, kRSP));
-    Emit8(CD, 0xF0);
+    Emit8(CODE, RexW(0, kRSP));
+    Emit8(CODE, 0x83);
+    Emit8(CODE, ModRM(3, 4, kRSP));
+    Emit8(CODE, 0xF0);
 }
 
 static void EmitCmpRaxRbx(Context *context) {
     assert(context);
-    Emit8(CD, RexW(kRBX, kRAX));
-    Emit8(CD, 0x39);
-    Emit8(CD, ModRM(3, kRBX, kRAX));
+    Emit8(CODE, RexW(kRBX, kRAX));
+    Emit8(CODE, 0x39);
+    Emit8(CODE, ModRM(3, kRBX, kRAX));
 }
 
 static void EmitXorEax(Context *context) {
     assert(context);
 
-    Emit8(CD, 0x31);
-    Emit8(CD, ModRM(3, kRAX, kRAX));
+    Emit8(CODE, 0x31);
+    Emit8(CODE, ModRM(3, kRAX, kRAX));
 }
 
 static void EmitRet(Context *context) {
     assert(context);
 
-    Emit8(CD, 0xC3);
+    Emit8(CODE, 0xC3);
 }
 
 /* -----------------------------------------------------------------------------------
@@ -415,14 +428,14 @@ static void EmitRet(Context *context) {
 static void EmitLeaRcxRbp(Context *context, int32_t disp) {
     assert(context);
 
-    Emit8(CD, RexW(kRCX, kRBP));        // REX.W
-    Emit8(CD, 0x8D);                    // lea
+    Emit8(CODE, RexW(kRCX, kRBP));        // REX.W
+    Emit8(CODE, 0x8D);                    // lea
     if (disp >= -128 && disp <= 127) {
-        Emit8(CD, ModRM(1, kRCX, kRBP));
-        Emit8(CD, (uint8_t)(int8_t)disp);
+        Emit8(CODE, ModRM(1, kRCX, kRBP));
+        Emit8(CODE, (uint8_t)(int8_t)disp);
     } else {
-        Emit8(CD, ModRM(2, kRCX, kRBP));
-        Emit32(CD, (uint32_t)disp);
+        Emit8(CODE, ModRM(2, kRCX, kRBP));
+        Emit32(CODE, (uint32_t)disp);
     }
 }
 
@@ -433,8 +446,8 @@ static void EmitVarAddrBySlot(Context *context, int slot, int param_count) {
         int32_t disp = 16 + 8 * slot;
         EmitLeaRcxRbp(context, disp);
     } else {
-        int local_idx = slot - param_count;
-        int32_t disp = -8 * (local_idx + 1);
+        int local_index = slot - param_count;
+        int32_t disp = -8 * (local_index + 1);
         EmitLeaRcxRbp(context, disp);
     }
 }
@@ -459,21 +472,21 @@ static void EmitEpilogue(Context *context) {
 static void EmitStart(Context *context) {
     assert(context);
 
-    context->b_start = CD->size;
+    context->b_start = CODE->size;
 
     EmitAlignStack(context);
     EmitAddRegImm(context, kRSP, -8);
 
-    Emit8(CD, 0xE8);
-    RelocAdd(context, CD->size, "main", kRel32);
-    Emit32(CD, 0);
+    Emit8(CODE, 0xE8);
+    RelocAdd(context, CODE->size, "main", kRel32);
+    Emit32(CODE, 0);
 
     EmitMovRR(context, kRDI, kRAX);
 
-    Emit8(CD, RexW(0, kRAX)); Emit8(CD, 0xC7);
-    Emit8(CD, ModRM(3, 0, kRAX)); Emit32(CD, 60);
+    Emit8(CODE, RexW(0, kRAX)); Emit8(CODE, 0xC7);
+    Emit8(CODE, ModRM(3, 0, kRAX)); Emit32(CODE, 60);
 
-    Emit8(CD, 0x0F); Emit8(CD, 0x05);
+    Emit8(CODE, 0x0F); Emit8(CODE, 0x05);
 }
 
 static void BuildGOT(Context *context, PltGot *plt_got) {
@@ -500,8 +513,7 @@ static void BuildData(Context *context) {
     Buf *data = &context->data;
 
     context->fmt_int_off = data->size;
-    Emit8(data, '%');  Emit8(data, 'd');
-    Emit8(data, '\n'); Emit8(data, 0);
+    Emit8(data, '%');  Emit8(data, 'd'); Emit8(data, 0);
 
     context->fmt_char_off = data->size;
     Emit8(data, '%');  Emit8(data, 'c');
@@ -518,14 +530,14 @@ static void EmitPltStub(Context *context, const char *label_name, const char *go
     assert(got_name);
     assert(out_plt_off);
 
-    *out_plt_off = CD->size;
+    *out_plt_off = CODE->size;
     LabelAdd(context, label_name, *out_plt_off);
 
-    Emit8(CD, 0xFF);
-    Emit8(CD, ModRM(0, 4, 5));
+    Emit8(CODE, 0xFF);
+    Emit8(CODE, ModRM(0, 4, 5));
     
-    RelocAdd(context, CD->size, got_name, kGOTRel32);
-    Emit32(CD, 0);
+    RelocAdd(context, CODE->size, got_name, kGOTRel32);
+    Emit32(CODE, 0);
 }
 
 static void EmitPLT(Context *context, PltGot *plt_got) {
@@ -578,9 +590,9 @@ static uint64_t GetSymbolAddress(Context *context, PltGot *plt_got, Relocation *
         return data_vaddr + data_off;
     }
 
-    int label_idx = LabelFind(context, rel->name);
-    if (label_idx >= 0) {
-        return ELF_BASE + HDRS_TOTAL + context->labels[label_idx].offset;
+    int label_index = LabelFind(context, rel->name);
+    if (label_index >= 0) {
+        return ELF_BASE + HDRS_TOTAL + context->labels[label_index].offset;
     }
 
     return 0;
@@ -650,64 +662,67 @@ static void WriteElf(Context *context, const char *path) {
 
 static void WriteElfHeader(FILE *file, uint64_t entry) {
     assert(file);
-    uint8_t header[ELF_HEADER_SIZE] = {};
 
-    header[0] = 0x7F; header[1] = 'E'; header[2] = 'L'; header[3] = 'F';
-    header[4] = 2;
-    header[5] = 1;
-    header[6] = 1;
+    Elf64_Ehdr elf_header = {};
 
-    uint16_t value16 = 2;  memcpy(header + 16, &value16, 2);
-             value16 = 62; memcpy(header + 18, &value16, 2);
+    elf_header.e_ident[EI_MAG0] = ELFMAG0;                // 0x7f
+    elf_header.e_ident[EI_MAG1] = ELFMAG1;                // 'E'
+    elf_header.e_ident[EI_MAG2] = ELFMAG2;                // 'L'
+    elf_header.e_ident[EI_MAG3] = ELFMAG3;                // 'F'
+    elf_header.e_ident[EI_CLASS] = ELFCLASS64;            // 64-bit format
+    elf_header.e_ident[EI_DATA] = ELFDATA2LSB;            // little-endian
+    elf_header.e_ident[EI_VERSION] = EV_CURRENT;          // current version
+    elf_header.e_ident[EI_OSABI] = ELFOSABI_SYSV;         // UNIX System V ABI
 
-    uint32_t value32 = 1;  memcpy(header + 20, &value32, 4);
+    elf_header.e_type = ET_EXEC;                          // Executable
+    elf_header.e_machine = EM_X86_64;                     // AMD x86-64
+    elf_header.e_version = EV_CURRENT;                    // Current version
+    elf_header.e_entry = entry;
+    elf_header.e_page_headeroff = sizeof(Elf64_Ehdr);
+    elf_header.e_shoff = 0;
+    elf_header.e_flags = 0;
+    elf_header.e_elf_headersize = sizeof(Elf64_Ehdr);
+    elf_header.e_page_headerentsize = sizeof(Elf64_Phdr);
+    elf_header.e_page_headernum = 2;                      // number of sections
+    elf_header.e_shentsize = 0;
+    elf_header.e_shnum = 0;
+    elf_header.e_shstrndx = 0;
 
-    memcpy(header + 24, &entry, 8);
-
-    uint64_t value64 = 64; memcpy(header + 32, &value64, 8);
-             value64 = 64; memcpy(header + 52, &value64, 2);
-
-             value16 = 56; memcpy(header + 54, &value16, 2);
-             value16 = 2;  memcpy(header + 56, &value16, 2);
-
-    fwrite(header, 1, ELF_HEADER_SIZE, file);
+    fwrite(&elf_header, sizeof(elf_header), 1, file);
 }
 
 static void WriteCodeSegmentPhdr(FILE *file, size_t seg1) {
     assert(file);
-    uint8_t ph[PHDR_SIZE] = {};
 
-    uint32_t value32 = 1; memcpy(ph, &value32, 4);
-             value32 = 7; memcpy(ph + 4, &value32, 4);
+    Elf64_Phdr page_header = {};
 
-    uint64_t value64 = 0; memcpy(ph + 8, &value64, 8);
-             value64 = ELF_BASE; memcpy(ph + 16, &value64, 8);
-    memcpy(ph + 24, &value64, 8);
-             value64 = seg1; memcpy(ph + 32, &value64, 8);
-    memcpy(ph + 40, &value64, 8);
-             value64 = PAGE_SIZE; memcpy(ph + 48, &value64, 8);
+    page_header.p_type = PT_LOAD;
+    page_header.p_flags = PF_R | PF_W | PF_X;
+    page_header.p_offset = 0;
+    page_header.p_vaddr = ELF_BASE;
+    page_header.p_paddr = ELF_BASE;
+    page_header.p_filesz = seg1;
+    page_header.p_memsz = seg1;
+    page_header.p_align = PAGE_SIZE;
 
-    fwrite(ph, 1, PHDR_SIZE, file);
+    fwrite(&page_header, sizeof(page_header), 1, file);
 }
 
 static void WriteDataSegmentPhdr(FILE *file, size_t data_off, uint64_t data_vaddr, size_t data_size) {
     assert(file);
-    uint8_t ph[PHDR_SIZE] = {};
 
-    uint32_t value32 = 1; memcpy(ph, &value32, 4);
-    value32 = 6; memcpy(ph + 4, &value32, 4);
+    Elf64_Phdr page_header = {};
 
-    memcpy(ph + 8, &data_off, 8);
-    memcpy(ph + 16, &data_vaddr, 8);
-    memcpy(ph + 24, &data_vaddr, 8);
+    page_header.p_type = PT_LOAD;
+    page_header.p_flags = PF_R | PF_W;
+    page_header.p_offset = data_off;
+    page_header.p_vaddr = data_vaddr;
+    page_header.p_paddr = data_vaddr;
+    page_header.p_filesz = data_size;
+    page_header.p_memsz = data_size;
+    page_header.p_align = PAGE_SIZE;
 
-    uint64_t value64 = data_size;
-    memcpy(ph + 32, &value64, 8);
-    memcpy(ph + 40, &value64, 8);
-
-    value64 = PAGE_SIZE; memcpy(ph + 48, &value64, 8);
-
-    fwrite(ph, 1, PHDR_SIZE, file);
+    fwrite(&page_header, sizeof(page_header), 1, file);
 }
 
 static void WritePadding(FILE *file, size_t pad) {
@@ -827,9 +842,9 @@ static void CodeGeneratePopToVar(Context *context, VariableArr *arr, LangNode_t 
     EmitPop(context, kRAX);
     EmitVarAddrBySlot(context, slot, sub->param_count);
 
-    Emit8(CD, RexW(kRAX, kRCX));
-    Emit8(CD, 0x89);
-    Emit8(CD, ModRM(0, kRAX, kRCX)); // mov [rcx], rax
+    Emit8(CODE, RexW(kRAX, kRCX));
+    Emit8(CODE, 0x89);
+    Emit8(CODE, ModRM(0, kRAX, kRCX)); // mov [rcx], rax
 }
 
 static void CodeGenerateAddrOf(Context *context, LangNode_t *var, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -854,8 +869,8 @@ static void CodeGenerateDeref(Context *context, LangNode_t *ptr, VariableArr *ar
 
     CodeGenerateAddrOf(context, ptr, arr, info, sub);
     EmitPop(context, kRCX);
-    Emit8(CD, 0xFF);
-    Emit8(CD, ModRM(0, 6, kRCX));
+    Emit8(CODE, 0xFF);
+    Emit8(CODE, ModRM(0, 6, kRCX));
 }
 
 static void CodeGenerateAddrAssign(Context *context, LangNode_t *deref_node, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -868,9 +883,9 @@ static void CodeGenerateAddrAssign(Context *context, LangNode_t *deref_node, Var
     CodeGenerateExpr(context, deref_node->left, arr, info, sub);
     EmitPop(context, kRCX);
     EmitPop(context, kRAX);
-    Emit8(CD, RexW(kRAX, kRCX));
-    Emit8(CD, 0x89);
-    Emit8(CD, ModRM(0, kRAX, kRCX));
+    Emit8(CODE, RexW(kRAX, kRCX));
+    Emit8(CODE, 0x89);
+    Emit8(CODE, ModRM(0, kRAX, kRCX));
 }
 
 static void CodeGenerateBinOp(Context *context, LangNode_t *node, VariableArr *arr, AsmInfo *info, Sub *sub, OperationTypes op) {
@@ -889,30 +904,30 @@ static void CodeGenerateBinOp(Context *context, LangNode_t *node, VariableArr *a
     #pragma GCC diagnostic ignored "-Wswitch-enum"
     switch (op) {
         case kOperationAdd:
-            Emit8(CD, RexW(kRBX, kRAX));
-            Emit8(CD, 0x01);
-            Emit8(CD, ModRM(3, kRBX, kRAX));
+            Emit8(CODE, RexW(kRBX, kRAX));
+            Emit8(CODE, 0x01);
+            Emit8(CODE, ModRM(3, kRBX, kRAX));
             break;
 
         case kOperationSub:
-            Emit8(CD, RexW(kRBX, kRAX));
-            Emit8(CD, 0x29);
-            Emit8(CD, ModRM(3, kRBX, kRAX));
+            Emit8(CODE, RexW(kRBX, kRAX));
+            Emit8(CODE, 0x29);
+            Emit8(CODE, ModRM(3, kRBX, kRAX));
             break;
 
         case kOperationMul:
-            Emit8(CD, RexW(kRAX, kRBX));
-            Emit8(CD, 0x0F);
-            Emit8(CD, 0xAF);
-            Emit8(CD, ModRM(3, kRAX, kRBX));
+            Emit8(CODE, RexW(kRAX, kRBX));
+            Emit8(CODE, 0x0F);
+            Emit8(CODE, 0xAF);
+            Emit8(CODE, ModRM(3, kRAX, kRBX));
             break;
 
         case kOperationDiv:
-            Emit8(CD, RexW(0, 0));
-            Emit8(CD, 0x99);
-            Emit8(CD, RexW(0, kRBX));
-            Emit8(CD, 0xF7);
-            Emit8(CD, ModRM(3, 7, kRBX));
+            Emit8(CODE, RexW(0, 0));
+            Emit8(CODE, 0x99);
+            Emit8(CODE, RexW(0, kRBX));
+            Emit8(CODE, 0xF7);
+            Emit8(CODE, ModRM(3, 7, kRBX));
             break;
 
         default: break;
@@ -923,15 +938,15 @@ static void CodeGenerateBinOp(Context *context, LangNode_t *node, VariableArr *a
 }
 
 static void EmitSaveRspToR13(Context *context) {
-    Emit8(CD, RexW(kRSP, kR13));
-    Emit8(CD, 0x89);
-    Emit8(CD, ModRM(3, kRSP, kR13));
+    Emit8(CODE, RexW(kRSP, kR13));
+    Emit8(CODE, 0x89);
+    Emit8(CODE, ModRM(3, kRSP, kR13));
 }
 
 static void EmitRestoreRspFromR13(Context *context) {
-    Emit8(CD, RexW(kR13, kRSP));
-    Emit8(CD, 0x89);
-    Emit8(CD, ModRM(3, kR13, kRSP));
+    Emit8(CODE, RexW(kR13, kRSP));
+    Emit8(CODE, 0x89);
+    Emit8(CODE, ModRM(3, kR13, kRSP));
 }
 
 static void CodeGeneratePrintInt(Context *context, LangNode_t *node, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -1009,27 +1024,27 @@ static void CodeGenerateArrAssign(Context *context, LangNode_t *stmt, VariableAr
     EmitPop(context, kRAX);                                          // rax = value
 
     int slot = GetVarSlot(arr, stmt->left->left);
-    int local_idx = slot - sub->param_count;
+    int local_index = slot - sub->param_count;
 
-    // rcx = lea [rbp - 8 * (local_idx + 1)]
-    int32_t base_disp = -8 * (local_idx + 1);
+    // rcx = lea [rbp - 8 * (local_index + 1)]
+    int32_t base_disp = -8 * (local_index + 1);
     EmitLeaRcxRbp(context, base_disp);
 
     // rdi = rdi * 8  -> shl rdi, 3
-    Emit8(CD, RexW(0, kRDI));
-    Emit8(CD, 0xC1);
-    Emit8(CD, ModRM(3, 4, kRDI));   // /4 = SHL
-    Emit8(CD, 3);
+    Emit8(CODE, RexW(0, kRDI));
+    Emit8(CODE, 0xC1);
+    Emit8(CODE, ModRM(3, 4, kRDI));   // /4 = SHL
+    Emit8(CODE, 3);
 
     // rcx = rcx - rdi  -> sub rcx, rdi
-    Emit8(CD, RexW(kRDI, kRCX));
-    Emit8(CD, 0x29);
-    Emit8(CD, ModRM(3, kRDI, kRCX));
+    Emit8(CODE, RexW(kRDI, kRCX));
+    Emit8(CODE, 0x29);
+    Emit8(CODE, ModRM(3, kRDI, kRCX));
 
     // mov [rcx], rax
-    Emit8(CD, RexW(kRAX, kRCX));
-    Emit8(CD, 0x89);
-    Emit8(CD, ModRM(0, kRAX, kRCX));
+    Emit8(CODE, RexW(kRAX, kRCX));
+    Emit8(CODE, 0x89);
+    Emit8(CODE, ModRM(0, kRAX, kRCX));
 }
 
 static void CodeGenerateArrDecl(Context *context, LangNode_t *stmt, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -1047,10 +1062,10 @@ static void CodeGenerateArrDecl(Context *context, LangNode_t *stmt, VariableArr 
         int slot = base_slot + i;
         EmitVarAddrBySlot(context, slot, sub->param_count);
         // mov qword ptr [rcx], 0
-        Emit8(CD, RexW(0, kRCX));
-        Emit8(CD, 0xC7);
-        Emit8(CD, ModRM(0, 0, kRCX));
-        Emit32(CD, 0);
+        Emit8(CODE, RexW(0, kRCX));
+        Emit8(CODE, 0xC7);
+        Emit8(CODE, ModRM(0, 0, kRCX));
+        Emit32(CODE, 0);
     }
 }
 
@@ -1084,13 +1099,13 @@ static void CodeGenerateIf(Context *context, LangNode_t *stmt, VariableArr *arr,
     }
 
     EmitJmp(context, end_label);
-    LabelAdd(context, else_label, CD->size);
+    LabelAdd(context, else_label, CODE->size);
 
     if (has_else) {
         CodeGenerateStatement(context, stmt->right->right, arr, info, sub);
     }
 
-    LabelAdd(context, end_label, CD->size);
+    LabelAdd(context, end_label, CODE->size);
 }
 
 static void CodeGenerateWhile(Context *context, LangNode_t *stmt, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -1108,7 +1123,7 @@ static void CodeGenerateWhile(Context *context, LangNode_t *stmt, VariableArr *a
     MakeLabel(start_label, sizeof(start_label), "wstart", start_number);
     MakeLabel(end_label, sizeof(end_label), "wend", end_number);
 
-    LabelAdd(context, start_label, CD->size);
+    LabelAdd(context, start_label, CODE->size);
     CodeGenerateExpr(context, stmt->left->left, arr, info, sub);
     CodeGenerateExpr(context, stmt->left->right, arr, info, sub);
     EmitPop(context, kRBX);
@@ -1118,7 +1133,7 @@ static void CodeGenerateWhile(Context *context, LangNode_t *stmt, VariableArr *a
     EmitJCC(context, ChooseJCC(stmt->left), end_label);
     CodeGenerateStatement(context, stmt->right, arr, info, sub);
     EmitJmp(context, start_label);
-    LabelAdd(context, end_label, CD->size);
+    LabelAdd(context, end_label, CODE->size);
 }
 
 static void CodeGenerateReturn(Context *context, LangNode_t *stmt, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -1166,10 +1181,10 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *ar
         case kNumber: {
             int64_t number = (int64_t)expr->value.number;
             if (number >= 0 && number <= 0x7FFFFFFF) {
-                Emit8(CD, RexW(0, kRAX));
-                Emit8(CD, 0xC7);
-                Emit8(CD, ModRM(3, 0, kRAX));
-                Emit32(CD, (uint32_t)(int32_t)number);
+                Emit8(CODE, RexW(0, kRAX));
+                Emit8(CODE, 0xC7);
+                Emit8(CODE, ModRM(3, 0, kRAX));
+                Emit32(CODE, (uint32_t)(int32_t)number);
             } else {
                 EmitMovR64Imm64(context, kRAX, number);
             }
@@ -1181,7 +1196,7 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *ar
         case kVariable: {
             int slot = GetVarSlot(arr, expr);
             EmitVarAddrBySlot(context, slot, sub->param_count);
-            Emit8(CD, 0xFF); Emit8(CD, ModRM(0, 6, kRCX)); // push qword [rcx]
+            Emit8(CODE, 0xFF); Emit8(CODE, ModRM(0, 6, kRCX)); // push qword [rcx]
             break;
         }
 
@@ -1206,15 +1221,15 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *ar
                     EmitPop(context, kRAX);
 
                     // cvtsi2sd xmm0, rax
-                    Emit8(CD, 0xF2); Emit8(CD, RexW(0, kRAX));
-                    Emit8(CD, 0x0F); Emit8(CD, 0x2A); Emit8(CD, ModRM(3, 0, kRAX));
+                    Emit8(CODE, 0xF2); Emit8(CODE, RexW(0, kRAX));
+                    Emit8(CODE, 0x0F); Emit8(CODE, 0x2A); Emit8(CODE, ModRM(3, 0, kRAX));
 
                     // sqrtsd xmm0, xmm0
-                    Emit8(CD, 0xF2); Emit8(CD, 0x0F); Emit8(CD, 0x51); Emit8(CD, ModRM(3, 0, 0));
+                    Emit8(CODE, 0xF2); Emit8(CODE, 0x0F); Emit8(CODE, 0x51); Emit8(CODE, ModRM(3, 0, 0));
 
                     // cvttsd2si rax, xmm0
-                    Emit8(CD, 0xF2); Emit8(CD, RexW(kRAX, 0)); Emit8(CD, 0x0F); Emit8(CD, 0x2C);
-                    Emit8(CD, ModRM(3, kRAX, 0));
+                    Emit8(CODE, 0xF2); Emit8(CODE, RexW(kRAX, 0)); Emit8(CODE, 0x0F); Emit8(CODE, 0x2C);
+                    Emit8(CODE, ModRM(3, kRAX, 0));
 
                     EmitPush(context, kRAX);
                     break;
@@ -1240,29 +1255,29 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *ar
 
                 case kOperationArrPos: {
                     int slot = GetVarSlot(arr, expr->left);
-                    int local_idx = slot - sub->param_count;
+                    int local_index = slot - sub->param_count;
 
                     CodeGenerateExpr(context, expr->right, arr, info, sub);
                     EmitPop(context, kRDI);   // rdi = index
 
-                    // rcx = lea [rbp - 8*(local_idx + 1)]
-                    int32_t base_disp = -8 * (local_idx + 1);
+                    // rcx = lea [rbp - 8*(local_index + 1)]
+                    int32_t base_disp = -8 * (local_index + 1);
                     EmitLeaRcxRbp(context, base_disp);
 
                     // rdi <<= 3
-                    Emit8(CD, RexW(0, kRDI));
-                    Emit8(CD, 0xC1);
-                    Emit8(CD, ModRM(3, 4, kRDI));
-                    Emit8(CD, 3);
+                    Emit8(CODE, RexW(0, kRDI));
+                    Emit8(CODE, 0xC1);
+                    Emit8(CODE, ModRM(3, 4, kRDI));
+                    Emit8(CODE, 3);
 
                     // rcx -= rdi
-                    Emit8(CD, RexW(kRDI, kRCX));
-                    Emit8(CD, 0x29);
-                    Emit8(CD, ModRM(3, kRDI, kRCX));
+                    Emit8(CODE, RexW(kRDI, kRCX));
+                    Emit8(CODE, 0x29);
+                    Emit8(CODE, ModRM(3, kRDI, kRCX));
 
                     // push qword [rcx]
-                    Emit8(CD, 0xFF);
-                    Emit8(CD, ModRM(0, 6, kRCX));
+                    Emit8(CODE, 0xFF);
+                    Emit8(CODE, ModRM(0, 6, kRCX));
                     break;
                 }
 
@@ -1383,10 +1398,10 @@ static void CodeGenerateStatement(Context *context, LangNode_t *stmt, VariableAr
 
         case kNumber: {
             int64_t number = (int64_t)stmt->value.number;
-            Emit8(CD, RexW(0, kRAX));
-            Emit8(CD, 0xC7);
-            Emit8(CD, ModRM(3, 0, kRAX));
-            Emit32(CD, (uint32_t)(int32_t)number);
+            Emit8(CODE, RexW(0, kRAX));
+            Emit8(CODE, 0xC7);
+            Emit8(CODE, ModRM(3, 0, kRAX));
+            Emit32(CODE, (uint32_t)(int32_t)number);
             EmitPush(context, kRAX);
             break;
         }
@@ -1457,11 +1472,11 @@ static void CodeGenerateFunction(Context *context, LangNode_t *func_node, Variab
     int frame_size = local_slots * 8;
     if (frame_size % 16 != 0) frame_size += 8;
 
-    Sub sub = { 0, param_count, frame_size };
+    Sub sub = {0, param_count, frame_size};
 
-    LabelAdd(context, func_name, CD->size);
+    LabelAdd(context, func_name, CODE->size);
     if (is_main) {
-        LabelAdd(context, "main", CD->size);
+        LabelAdd(context, "main", CODE->size);
     }
 
     EmitPrologue(context, frame_size);
@@ -1496,65 +1511,196 @@ static void CodeGenerateProgram(Context *context, LangNode_t *root, VariableArr 
     }
 }
 
-static int LoadLib(LibBlob *blob, const char *path) {
-    assert(blob);
+static uint8_t* ReadELFToMemory(const char *path, long *out_size) {
     assert(path);
+    assert(out_size);
 
     FILE *file = fopen(path, "rb");
     if (!file) {
         perror(path);
-        return 0;
+        return NULL;
     }
 
-    LibHeader header = {};
-    if (fread(&header, sizeof(header), 1, file) != 1) {
-        fprintf(stderr, "%s: failed to read header.\n", path);
+    fseek(file, 0, SEEK_END);
+    long file_size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    if (file_size < (long)sizeof(Elf64_Ehdr)) {
+        fprintf(stderr, "%s: too small for ELF.\n", path);
         fclose(file);
+        return NULL;
+    }
+
+    uint8_t *file_buf = (uint8_t *)malloc(file_size);
+    if (!file_buf) {
+        perror("Error malloc file_buf.\n");
+        fclose(file);
+        return NULL;
+    }
+
+    if (fread(file_buf, 1, file_size, file) != (size_t)file_size) {
+        fprintf(stderr, "%s: failed to read file.\n", path);
+        free(file_buf);
+        fclose(file);
+        return NULL;
+    }
+    fclose(file);
+
+    *out_size = file_size;
+    return file_buf;
+}
+
+typedef struct {
+    Elf64_Shdr *text;
+    Elf64_Shdr *symtab;
+    Elf64_Shdr *strtab;
+    Elf64_Shdr *rela;
+    int text_index;
+} FoundSections;
+
+
+static int LoadRelocations(LibBlob *blob, uint8_t *file_buf, Elf64_Shdr *rela_sh, Elf64_Shdr *text_sh) {
+    assert(blob);
+    assert(file_buf);
+    assert(rela_sh);
+    assert(text_sh);
+
+    blob->relocs = NULL;
+    blob->reloc_count = 0;
+    
+    if (!rela_sh) return 1;
+    
+    Elf64_Rela *rels = (Elf64_Rela *)(file_buf + rela_sh->sh_offset);
+    size_t rel_count = rela_sh->sh_size / sizeof(Elf64_Rela);
+    
+    if (rel_count == 0) return 1;
+    
+    blob->relocs = (uint32_t *) calloc (rel_count, sizeof(uint32_t));
+    if (!blob->relocs) {
+        perror("Error calloc relocs.\n");
+        return 0;
+    }
+    
+    for (size_t i = 0; i < rel_count; i++) {
+        if (ELF64_R_TYPE(rels[i].r_info) == R_X86_64_64) {
+            blob->relocs[blob->reloc_count++] =  (uint32_t)(rels[i].r_offset - text_sh->sh_addr);
+        }
+    }
+    
+    return 1;
+}
+
+static FoundSections FindSections(Elf64_Ehdr *elf_header, Elf64_Shdr *section_header, const char *shstr) {
+    assert(elf_header);
+    assert(section_header);
+    assert(shstr);
+
+    FoundSections found = {NULL, NULL, NULL, NULL, -1};
+    
+    for (int i = 0; i < elf_header->e_shnum; i++) {
+        const char *name = shstr + section_header[i].sh_name;
+        
+        if (strcmp(name, ".text") == 0) {
+            found.text = &section_header[i];
+            found.text_index = i;
+        } else if (strcmp(name, ".symtab") == 0) {
+            found.symtab = &section_header[i];
+        } else if (strcmp(name, ".strtab") == 0) {
+            found.strtab = &section_header[i];
+        } else if (strcmp(name, ".rela.text") == 0) {
+            found.rela = &section_header[i];
+        }
+    }
+    
+    return found;
+}
+
+static int FindStandardSymbols(Elf64_Sym *syms, size_t sym_count, const char *strtab, Elf64_Shdr *text_sh, LibBlob *blob) {
+    assert(syms);
+    assert(sym_count);
+    assert(strtab);
+    assert(text_sh);
+    assert(blob);
+
+    const char *want_functions[] = {"my_printf", "my_scanf", "my_exit", "my_draw"};
+    uint32_t *out_offs[] = {&blob->printf_off, &blob->scanf_off,  &blob->exit_off, &blob->draw_off};
+    int found[STANDART_FUNCTIONS_NUMBER] = {};
+    
+    for (size_t i = 0; i < sym_count; i++) {
+        const char *name = strtab + syms[i].st_name;
+        
+        for (int k = 0; k < STANDART_FUNCTIONS_NUMBER; k++) {
+            if (!found[k] && strcmp(name, want_functions[k]) == 0) {
+                *out_offs[k] = (uint32_t)(syms[i].st_value - text_sh->sh_addr);
+                found[k] = 1;
+            }
+        }
+    }
+    
+    for (int k = 0; k < STANDART_FUNCTIONS_NUMBER; k++) {
+        if (!found[k]) return 0;
+    }
+
+    return 1;
+}
+
+static int LoadLib(LibBlob *blob, const char *path) {
+    assert(blob);
+    assert(path);
+
+    long out_size = 0;
+    uint8_t *file_buf = ReadELFToMemory(path, &out_size);
+    if (!file_buf) return 0;
+
+    Elf64_Ehdr *elf_header = (Elf64_Ehdr *)file_buf;
+    if (memcmp(elf_header->e_ident, ELFMAG, SELFMAG) != 0 || elf_header->e_ident[EI_CLASS] != ELFCLASS64) { // ELFMAG = 0x7ELF // SELFMAG = 4
+        fprintf(stderr, "%s: not ELF64.\n", path);              // ^ this thing was really important for me as I didn't change the file name
+        free(file_buf);
         return 0;
     }
 
-    blob->printf_off = header.printf_off;
-    blob->scanf_off = header.scanf_off;
-    blob->exit_off = header.exit_off;
-    blob->draw_off = header.draw_off;
-    blob->size = header.code_size;
-    blob->reloc_count = header.reloc_count;
+    Elf64_Shdr *section_header = (Elf64_Shdr *)(file_buf + elf_header->e_shoff);                            // this is the 
+    const char *shstr = (const char *)(file_buf + section_header[elf_header->e_shstrndx].sh_offset);        // e_shstrndx -> index of zero elem in s_table
+    // so there we get .shstrtab pointer
+    Elf64_Shdr *text_sh = NULL, *symtab_sh = NULL, *strtab_sh = NULL, *rela_sh = NULL;
+    int text_index = -1;
 
-    if (header.reloc_count > 0) {
-        blob->relocs = (uint32_t *) calloc (header.reloc_count,  sizeof(uint32_t));
-        if (!blob->relocs) {
-            perror("Error calloc relocs.\n");
-            fclose(file);
-            return 0;
-        }
-
-        if (fread(blob->relocs, sizeof(uint32_t), header.reloc_count, file) != header.reloc_count) {
-            fprintf(stderr, "%s: failed to read reloc table.\n", path);
-            free(blob->relocs);
-            fclose(file);
-            return 0;
-        }
-    } else {
-        blob->relocs = NULL;
+    FoundSections found = FindSections(elf_header, section_header, shstr);
+    if (!found.text || !found.symtab || !found.strtab) {
+        fprintf(stderr, "%s: AAAAA missing required ELF sections.\n", path);
+        free(file_buf);
+        return 0;
     }
+
+    blob->size = found.text->sh_size;
+    blob->link_base = found.text->sh_addr;
 
     blob->data = (uint8_t *) calloc (1, blob->size);
     if (!blob->data) {
-        perror("Error calloc blob.\n");
-        free(blob->relocs);
-        fclose(file);
+        perror("Error calloc blob->data.\n");
+        free(file_buf);
         return 0;
     }
+    memcpy(blob->data, file_buf + found.text->sh_offset, blob->size);
 
-    if (fread(blob->data, 1, blob->size, file) != blob->size) {
-        fprintf(stderr, "%s: failed to read code.\n", path);
+    Elf64_Sym *syms = (Elf64_Sym *)(file_buf + found.symtab->sh_offset);
+    size_t sym_count = found.symtab->sh_size / sizeof(Elf64_Sym);
+    const char *strtab = (const char *)(file_buf + found.strtab->sh_offset);
+    
+    if (!FindStandardSymbols(syms, sym_count, strtab, found.text, blob)) {
+        fprintf(stderr, "%s: standard symbol not found.\n", path);
         free(blob->data);
-        free(blob->relocs);
-        fclose(file);
+        free(file_buf);
         return 0;
     }
 
-    fclose(file);
+    if (!LoadRelocations(blob, file_buf, found.rela, found.text)) {
+        free(blob->data);
+        free(file_buf);
+        return 0;
+    }
+
+    free(file_buf);
     return 1;
 }
 
