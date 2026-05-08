@@ -93,6 +93,7 @@ typedef struct {
     uint32_t draw_off;
     uint32_t reloc_count;
     uint32_t *relocs;
+    uint64_t link_base;
 } LibBlob;
 
 enum Regs {

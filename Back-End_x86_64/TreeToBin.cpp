@@ -11,6 +11,7 @@
 #include "Common/Structs.h"
 #include "Common/CommonFunctions.h"
 #include "Common/CommonBackFunctions.h"
+#include "Back-End/DSL.h"
 
 #define STANDART_FUNCTIONS_NUMBER 4
 #define REGS_NUMBER 35
@@ -27,7 +28,6 @@ static const struct RegInfo regs[REGS_NUMBER] = {
     {NULL,    0, 0}
 };
 
-static void GenerateMainCode(Context *context, PltGot *plt_got, LangNode_t *root, VariableArr *arr);
 static int LoadLib(LibBlob *blob, const char *path);
 static void ContextFree(Context *context);
 static void MergeAndPatchLibrary(Context *context, LibBlob *blob, size_t *blob_base);
@@ -41,6 +41,23 @@ static void EmitPLT(Context *context, PltGot *plt_got);
 static void EmitStart(Context *context);
 static void CodeGenerateProgram(Context *context, LangNode_t *root, VariableArr *arr, AsmInfo *info);
 
+// static void DumpLibRelocs(const LibBlob *blob) {
+//     assert(blob);
+
+//     fprintf(stderr, " Lib relocations (%u total) \n", blob->reloc_count);
+//     fprintf(stderr, "link_base = 0x%lx, blob size = %zu\n",
+//             (unsigned long)blob->link_base, blob->size);
+
+//     for (uint32_t i = 0; i < blob->reloc_count; i++) {
+//         uint32_t off = blob->relocs[i];
+//         uint64_t value = 0;
+//         memcpy(&value, blob->data + off, 8);
+
+//         fprintf(stderr, "  [%3u] off=0x%08x  qword=0x%016lx\n",
+//                 i, off, (unsigned long)value);
+//     }
+// }
+
 void CompileTreeToELF(LangNode_t *root, VariableArr *arr, const char *elf_path) {
     assert(root);
     assert(arr);
@@ -50,8 +67,6 @@ void CompileTreeToELF(LangNode_t *root, VariableArr *arr, const char *elf_path) 
     PltGot plt_got = {};
     LibBlob blob = {};
 
-    //GenerateMainCode(&context, &plt_got, root, arr);
-
     ContextInit(&context);
     BuildData(&context);
     BuildGOT(&context, &plt_got);
@@ -60,6 +75,8 @@ void CompileTreeToELF(LangNode_t *root, VariableArr *arr, const char *elf_path) 
         ContextFree(&context);
         return;
     }
+
+    // DumpLibRelocs(&blob);
 
     size_t blob_base = 0;
     MergeAndPatchLibrary(&context, &blob, &blob_base);
@@ -74,22 +91,6 @@ void CompileTreeToELF(LangNode_t *root, VariableArr *arr, const char *elf_path) 
 
     FreeLib(&blob);
     ContextFree(&context);
-}
-
-static void GenerateMainCode(Context *context, PltGot *plt_got, LangNode_t *root, VariableArr *arr) {
-    assert(context);
-    assert(plt_got);
-    assert(root);
-    assert(arr);
-
-    ContextInit(context);
-    BuildData(context);
-    BuildGOT(context, plt_got);
-    EmitPLT(context, plt_got);
-    EmitStart(context);
-
-    AsmInfo info = {};
-    CodeGenerateProgram(context, root, arr, &info);
 }
 
 static void BufGrow(Buf *buf, size_t need);
@@ -386,20 +387,6 @@ static void EmitAlignStack(Context *context) {
     Emit8(CODE, 0xF0);
 }
 
-static void EmitCmpRaxRbx(Context *context) {
-    assert(context);
-    Emit8(CODE, RexW(kRBX, kRAX));
-    Emit8(CODE, 0x39);
-    Emit8(CODE, ModRM(3, kRBX, kRAX));
-}
-
-static void EmitXorEax(Context *context) {
-    assert(context);
-
-    Emit8(CODE, 0x31);
-    Emit8(CODE, ModRM(3, kRAX, kRAX));
-}
-
 static void EmitRet(Context *context) {
     assert(context);
 
@@ -444,29 +431,29 @@ static void EmitVarAddrBySlot(Context *context, int slot, int param_count) {
 
     if (slot < param_count) {
         int32_t disp = 16 + 8 * slot;
-        EmitLeaRcxRbp(context, disp);
+        LEA_RCX_RBP(disp);
     } else {
         int local_index = slot - param_count;
         int32_t disp = -8 * (local_index + 1);
-        EmitLeaRcxRbp(context, disp);
+        LEA_RCX_RBP(disp);
     }
 }
 
 static void EmitPrologue(Context *context, int frame_size) {
     assert(context);
 
-    EmitPush(context, kRBP);                                 // push rbp
-    EmitMovRR(context, kRBP, kRSP);                          // mov rbp, rsp
+    PUSH(kRBP);                                   // push rbp
+    MOV_RR(kRBP, kRSP);                           // mov rbp, rsp
     if (frame_size > 0) {
-        EmitAddRegImm(context, kRSP, -(int64_t)frame_size);  // sub rsp, frame_size
+        ADD_R_IMM(kRSP, -(int64_t)frame_size);    // sub rsp, frame_size
     }
 }
 
 static void EmitEpilogue(Context *context) {
     assert(context);
 
-    EmitMovRR(context, kRSP, kRBP);                         // mov rsp, rbp
-    EmitPop(context, kRBP);                                 // pop rbp
+    MOV_RR(kRSP, kRBP);                 // mov rsp, rbp
+    POP(kRBP);                          // pop rbp
 }
 
 static void EmitStart(Context *context) {
@@ -474,19 +461,14 @@ static void EmitStart(Context *context) {
 
     context->b_start = CODE->size;
 
-    EmitAlignStack(context);
-    EmitAddRegImm(context, kRSP, -8);
+    ALIGN_STACK();
+    ADD_R_IMM(kRSP, -8);                // add rsp, -8 -> sub rsp, 8
 
-    Emit8(CODE, 0xE8);
-    RelocAdd(context, CODE->size, "main", kRel32);
-    Emit32(CODE, 0);
+    CALL("main");                       // call <label addr> ("main")
+    MOV_RR(kRDI, kRAX);                 // mov rdi, rax
+    MOV_R_IMM32(kRAX, 60);              // mov rax, 60
 
-    EmitMovRR(context, kRDI, kRAX);
-
-    Emit8(CODE, RexW(0, kRAX)); Emit8(CODE, 0xC7);
-    Emit8(CODE, ModRM(3, 0, kRAX)); Emit32(CODE, 60);
-
-    Emit8(CODE, 0x0F); Emit8(CODE, 0x05);
+    Emit8(CODE, 0x0F); Emit8(CODE, 0x05); // TODO syscall
 }
 
 static void BuildGOT(Context *context, PltGot *plt_got) {
@@ -494,7 +476,6 @@ static void BuildGOT(Context *context, PltGot *plt_got) {
     assert(plt_got);
 
     Buf *data = &context->data;
-
     while (data->size % 8) {
         Emit8(data, 0);
     }
@@ -533,11 +514,9 @@ static void EmitPltStub(Context *context, const char *label_name, const char *go
     *out_plt_off = CODE->size;
     LabelAdd(context, label_name, *out_plt_off);
 
-    Emit8(CODE, 0xFF);
-    Emit8(CODE, ModRM(0, 4, 5));
-    
+    JMP_RIP_REL32();
     RelocAdd(context, CODE->size, got_name, kGOTRel32);
-    Emit32(CODE, 0);
+    DWORD(0);
 }
 
 static void EmitPLT(Context *context, PltGot *plt_got) {
@@ -663,32 +642,32 @@ static void WriteElf(Context *context, const char *path) {
 static void WriteElfHeader(FILE *file, uint64_t entry) {
     assert(file);
 
-    Elf64_Ehdr elf_header = {};
+    Elf64_Ehdr eh = {};
 
-    elf_header.e_ident[EI_MAG0] = ELFMAG0;                // 0x7f
-    elf_header.e_ident[EI_MAG1] = ELFMAG1;                // 'E'
-    elf_header.e_ident[EI_MAG2] = ELFMAG2;                // 'L'
-    elf_header.e_ident[EI_MAG3] = ELFMAG3;                // 'F'
-    elf_header.e_ident[EI_CLASS] = ELFCLASS64;            // 64-bit format
-    elf_header.e_ident[EI_DATA] = ELFDATA2LSB;            // little-endian
-    elf_header.e_ident[EI_VERSION] = EV_CURRENT;          // current version
-    elf_header.e_ident[EI_OSABI] = ELFOSABI_SYSV;         // UNIX System V ABI
+    eh.e_ident[EI_MAG0] = ELFMAG0;          // 0x7f
+    eh.e_ident[EI_MAG1] = ELFMAG1;          // 'E'
+    eh.e_ident[EI_MAG2] = ELFMAG2;          // 'L'
+    eh.e_ident[EI_MAG3] = ELFMAG3;          // 'F'
+    eh.e_ident[EI_CLASS] = ELFCLASS64;      // 64-  bit format
+    eh.e_ident[EI_DATA] = ELFDATA2LSB;      // little-endian
+    eh.e_ident[EI_VERSION] = EV_CURRENT;    // current version
+    eh.e_ident[EI_OSABI] = ELFOSABI_SYSV;   // UNIX System V ABI
 
-    elf_header.e_type = ET_EXEC;                          // Executable
-    elf_header.e_machine = EM_X86_64;                     // AMD x86-64
-    elf_header.e_version = EV_CURRENT;                    // Current version
-    elf_header.e_entry = entry;
-    elf_header.e_page_headeroff = sizeof(Elf64_Ehdr);
-    elf_header.e_shoff = 0;
-    elf_header.e_flags = 0;
-    elf_header.e_elf_headersize = sizeof(Elf64_Ehdr);
-    elf_header.e_page_headerentsize = sizeof(Elf64_Phdr);
-    elf_header.e_page_headernum = 2;                      // number of sections
-    elf_header.e_shentsize = 0;
-    elf_header.e_shnum = 0;
-    elf_header.e_shstrndx = 0;
+    eh.e_type = ET_EXEC;                    // Executable
+    eh.e_machine = EM_X86_64;               // AMD x86-64
+    eh.e_version = EV_CURRENT;              // Current version
+    eh.e_entry = entry;                     //
+    eh.e_phoff = sizeof(Elf64_Ehdr);        //
+    eh.e_shoff = 0;                         //
+    eh.e_flags = 0;                         //
+    eh.e_ehsize = sizeof(Elf64_Ehdr);       //
+    eh.e_phentsize = sizeof(Elf64_Phdr);    //
+    eh.e_phnum = 2;                         // number of sections
+    eh.e_shentsize = 0;                     //
+    eh.e_shnum = 0;                         //
+    eh.e_shstrndx = 0;                      //
 
-    fwrite(&elf_header, sizeof(elf_header), 1, file);
+    fwrite(&eh, sizeof(eh), 1, file);
 }
 
 static void WriteCodeSegmentPhdr(FILE *file, size_t seg1) {
@@ -839,12 +818,10 @@ static void CodeGeneratePopToVar(Context *context, VariableArr *arr, LangNode_t 
     (void)info;
 
     int slot = GetVarSlot(arr, node);
-    EmitPop(context, kRAX);
-    EmitVarAddrBySlot(context, slot, sub->param_count);
+    POP(kRAX);
+    VAR_ADDR(slot, sub->param_count);
 
-    Emit8(CODE, RexW(kRAX, kRCX));
-    Emit8(CODE, 0x89);
-    Emit8(CODE, ModRM(0, kRAX, kRCX)); // mov [rcx], rax
+    MOV_MEM_R(kRCX, kRAX); // mov [rcx], rax
 }
 
 static void CodeGenerateAddrOf(Context *context, LangNode_t *var, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -856,8 +833,8 @@ static void CodeGenerateAddrOf(Context *context, LangNode_t *var, VariableArr *a
     (void)info;
 
     int slot = GetVarSlot(arr, var);
-    EmitVarAddrBySlot(context, slot, sub->param_count);
-    EmitPush(context, kRCX);
+    VAR_ADDR(slot, sub->param_count);
+    PUSH(kRCX);
 }
 
 static void CodeGenerateDeref(Context *context, LangNode_t *ptr, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -868,9 +845,8 @@ static void CodeGenerateDeref(Context *context, LangNode_t *ptr, VariableArr *ar
     assert(sub);
 
     CodeGenerateAddrOf(context, ptr, arr, info, sub);
-    EmitPop(context, kRCX);
-    Emit8(CODE, 0xFF);
-    Emit8(CODE, ModRM(0, 6, kRCX));
+    POP(kRCX);
+    PUSH_MEM(kRCX);
 }
 
 static void CodeGenerateAddrAssign(Context *context, LangNode_t *deref_node, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -881,11 +857,10 @@ static void CodeGenerateAddrAssign(Context *context, LangNode_t *deref_node, Var
     assert(sub);
 
     CodeGenerateExpr(context, deref_node->left, arr, info, sub);
-    EmitPop(context, kRCX);
-    EmitPop(context, kRAX);
-    Emit8(CODE, RexW(kRAX, kRCX));
-    Emit8(CODE, 0x89);
-    Emit8(CODE, ModRM(0, kRAX, kRCX));
+    POP(kRCX);
+    POP(kRAX);
+
+    MOV_MEM_R(kRCX, kRAX);
 }
 
 static void CodeGenerateBinOp(Context *context, LangNode_t *node, VariableArr *arr, AsmInfo *info, Sub *sub, OperationTypes op) {
@@ -897,47 +872,27 @@ static void CodeGenerateBinOp(Context *context, LangNode_t *node, VariableArr *a
 
     CodeGenerateExpr(context, node->left, arr, info, sub);
     CodeGenerateExpr(context, node->right, arr, info, sub);
-    EmitPop(context, kRBX);
-    EmitPop(context, kRAX);
+    POP(kRBX);
+    POP(kRAX);
 
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wswitch-enum"
     switch (op) {
-        case kOperationAdd:
-            Emit8(CODE, RexW(kRBX, kRAX));
-            Emit8(CODE, 0x01);
-            Emit8(CODE, ModRM(3, kRBX, kRAX));
-            break;
-
-        case kOperationSub:
-            Emit8(CODE, RexW(kRBX, kRAX));
-            Emit8(CODE, 0x29);
-            Emit8(CODE, ModRM(3, kRBX, kRAX));
-            break;
-
-        case kOperationMul:
-            Emit8(CODE, RexW(kRAX, kRBX));
-            Emit8(CODE, 0x0F);
-            Emit8(CODE, 0xAF);
-            Emit8(CODE, ModRM(3, kRAX, kRBX));
-            break;
-
-        case kOperationDiv:
-            Emit8(CODE, RexW(0, 0));
-            Emit8(CODE, 0x99);
-            Emit8(CODE, RexW(0, kRBX));
-            Emit8(CODE, 0xF7);
-            Emit8(CODE, ModRM(3, 7, kRBX));
-            break;
+        case kOperationAdd: ADD_RR (kRAX, kRBX); break;
+        case kOperationSub: SUB_RR (kRAX, kRBX); break;
+        case kOperationMul: IMUL_RR(kRAX, kRBX); break;
+        case kOperationDiv: IDIV_R (kRBX);       break;
 
         default: break;
     }
     #pragma GCC diagnostic pop
 
-    EmitPush(context, kRAX);
+    PUSH(kRAX);
 }
 
 static void EmitSaveRspToR13(Context *context) {
+    assert(context);
+
     Emit8(CODE, RexW(kRSP, kR13));
     Emit8(CODE, 0x89);
     Emit8(CODE, ModRM(3, kRSP, kR13));
@@ -957,14 +912,14 @@ static void CodeGeneratePrintInt(Context *context, LangNode_t *node, VariableArr
     assert(sub);
 
     CodeGenerateExpr(context, node->left, arr, info, sub);
-    EmitPop(context, kRSI);
-    EmitMovData(context, kRDI, "fmt_int");
+    POP(kRSI);
+    MOV_DATA(kRDI, "fmt_int");
 
-    EmitSaveRspToR13(context);
-    EmitAlignStack(context);
-    EmitXorEax(context);
-    EmitCall(context, "my_printf");
-    EmitRestoreRspFromR13(context);
+    SAVE_RSP_R13();
+    ALIGN_STACK();
+    XOR_EAX();
+    CALL("my_printf");
+    RESTORE_RSP_R13();
 }
 
 static void CodeGeneratePrintChar(Context *context, LangNode_t *node, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -975,24 +930,24 @@ static void CodeGeneratePrintChar(Context *context, LangNode_t *node, VariableAr
     assert(sub);
 
     CodeGenerateExpr(context, node->left, arr, info, sub);
-    EmitPop(context, kRSI);
-    EmitMovData(context, kRDI, "fmt_char");
+    POP(kRSI);
+    MOV_DATA(kRDI, "fmt_char");
 
-    EmitSaveRspToR13(context);
-    EmitAlignStack(context);
-    EmitXorEax(context);
-    EmitCall(context, "my_printf");
-    EmitRestoreRspFromR13(context);
+    SAVE_RSP_R13();
+    ALIGN_STACK();
+    XOR_EAX();
+    CALL("my_printf");
+    RESTORE_RSP_R13();
 }
 
 static void CodeGenerateReadInt(Context *context) {
     assert(context);
 
-    EmitSaveRspToR13(context);
-    EmitAlignStack(context);
-    EmitCall(context, "my_scanf");
-    EmitRestoreRspFromR13(context);
-    EmitPush(context, kRAX);
+    SAVE_RSP_R13();
+    ALIGN_STACK();
+    CALL("my_scanf");
+    RESTORE_RSP_R13();
+    PUSH(kRAX);
 }
 
 static void CodeGenerateDraw(Context *context, LangNode_t *node, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -1003,12 +958,11 @@ static void CodeGenerateDraw(Context *context, LangNode_t *node, VariableArr *ar
     assert(sub);
 
     CodeGenerateAddrOf(context, node->left, arr, info, sub);
-    EmitPop(context, kRDI);
-
-    EmitSaveRspToR13(context);
-    EmitAlignStack(context);
-    EmitCall(context, "my_draw");
-    EmitRestoreRspFromR13(context);
+    POP(kRDI);
+    SAVE_RSP_R13();
+    ALIGN_STACK();
+    CALL("my_draw");
+    RESTORE_RSP_R13();
 }
 
 static void CodeGenerateArrAssign(Context *context, LangNode_t *stmt, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -1020,31 +974,20 @@ static void CodeGenerateArrAssign(Context *context, LangNode_t *stmt, VariableAr
 
     CodeGenerateExpr(context, stmt->right, arr, info, sub);          // stack: [value]
     CodeGenerateExpr(context, stmt->left->right, arr, info, sub);    // stack: [value, index]
-    EmitPop(context, kRDI);                                          // rdi = index
-    EmitPop(context, kRAX);                                          // rax = value
+    POP(kRDI);                                                       // rdi = index
+    POP(kRAX);                                                       // rax = value
 
     int slot = GetVarSlot(arr, stmt->left->left);
     int local_index = slot - sub->param_count;
 
     // rcx = lea [rbp - 8 * (local_index + 1)]
     int32_t base_disp = -8 * (local_index + 1);
-    EmitLeaRcxRbp(context, base_disp);
+    LEA_RCX_RBP(base_disp);
 
-    // rdi = rdi * 8  -> shl rdi, 3
-    Emit8(CODE, RexW(0, kRDI));
-    Emit8(CODE, 0xC1);
-    Emit8(CODE, ModRM(3, 4, kRDI));   // /4 = SHL
-    Emit8(CODE, 3);
+    SHL_R_IMM8(kRDI, 3);   // shl rdi, 3
+    SUB_RR(kRCX, kRDI);    // sub rcx, rdi
 
-    // rcx = rcx - rdi  -> sub rcx, rdi
-    Emit8(CODE, RexW(kRDI, kRCX));
-    Emit8(CODE, 0x29);
-    Emit8(CODE, ModRM(3, kRDI, kRCX));
-
-    // mov [rcx], rax
-    Emit8(CODE, RexW(kRAX, kRCX));
-    Emit8(CODE, 0x89);
-    Emit8(CODE, ModRM(0, kRAX, kRCX));
+    MOV_MEM_R(kRCX, kRAX); // mov [rcx], rax
 }
 
 static void CodeGenerateArrDecl(Context *context, LangNode_t *stmt, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -1060,12 +1003,8 @@ static void CodeGenerateArrDecl(Context *context, LangNode_t *stmt, VariableArr 
 
     for (int i = 0; i < size; i++) {
         int slot = base_slot + i;
-        EmitVarAddrBySlot(context, slot, sub->param_count);
-        // mov qword ptr [rcx], 0
-        Emit8(CODE, RexW(0, kRCX));
-        Emit8(CODE, 0xC7);
-        Emit8(CODE, ModRM(0, 0, kRCX));
-        Emit32(CODE, 0);
+        VAR_ADDR(slot, sub->param_count);
+        MOV_MEM_IMM32(kRCX, 0); // mov qword ptr [rcx], 0
     }
 }
 
@@ -1086,11 +1025,11 @@ static void CodeGenerateIf(Context *context, LangNode_t *stmt, VariableArr *arr,
 
     CodeGenerateExpr(context, cond->left, arr, info, sub);
     CodeGenerateExpr(context, cond->right, arr, info, sub);
-    EmitPop(context, kRBX);
-    EmitPop(context, kRAX);
-    EmitCmpRaxRbx(context);
+    POP(kRBX);
+    POP(kRAX);
+    CMP_RAX_RBX();
 
-    EmitJCC(context, ChooseJCC(cond), else_label);
+    JCC(ChooseJCC(cond), else_label);
 
     if (has_else) {
         CodeGenerateStatement(context, stmt->right->left, arr, info, sub);
@@ -1098,7 +1037,7 @@ static void CodeGenerateIf(Context *context, LangNode_t *stmt, VariableArr *arr,
         CodeGenerateStatement(context, stmt->right, arr, info, sub);
     }
 
-    EmitJmp(context, end_label);
+    JMP(end_label);
     LabelAdd(context, else_label, CODE->size);
 
     if (has_else) {
@@ -1126,13 +1065,13 @@ static void CodeGenerateWhile(Context *context, LangNode_t *stmt, VariableArr *a
     LabelAdd(context, start_label, CODE->size);
     CodeGenerateExpr(context, stmt->left->left, arr, info, sub);
     CodeGenerateExpr(context, stmt->left->right, arr, info, sub);
-    EmitPop(context, kRBX);
-    EmitPop(context, kRAX);
+    POP(kRBX);
+    POP(kRAX);
 
-    EmitCmpRaxRbx(context);
-    EmitJCC(context, ChooseJCC(stmt->left), end_label);
+    CMP_RAX_RBX();
+    JCC(ChooseJCC(stmt->left), end_label);
     CodeGenerateStatement(context, stmt->right, arr, info, sub);
-    EmitJmp(context, start_label);
+    JMP(start_label);
     LabelAdd(context, end_label, CODE->size);
 }
 
@@ -1144,9 +1083,9 @@ static void CodeGenerateReturn(Context *context, LangNode_t *stmt, VariableArr *
     assert(sub);
 
     CodeGenerateExpr(context, stmt->left, arr, info, sub);
-    EmitPop(context, kRAX);
-    EmitEpilogue(context);
-    EmitRet(context);
+    POP(kRAX);
+    EPILOGUE();
+    RET();
 }
 
 static void CodeGenerateParamsToStack(Context *context, LangNode_t *args, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -1180,23 +1119,20 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *ar
     switch (expr->type) {
         case kNumber: {
             int64_t number = (int64_t)expr->value.number;
-            if (number >= 0 && number <= 0x7FFFFFFF) {
-                Emit8(CODE, RexW(0, kRAX));
-                Emit8(CODE, 0xC7);
-                Emit8(CODE, ModRM(3, 0, kRAX));
-                Emit32(CODE, (uint32_t)(int32_t)number);
+            if (number >= INT32_MIN && number <= INT32_MAX) {
+                MOV_R_IMM32(kRAX, number);
             } else {
-                EmitMovR64Imm64(context, kRAX, number);
+                MOV_R_IMM64(kRAX, number);
             }
 
-            EmitPush(context, kRAX);
+            PUSH(kRAX);
             break;
         }
 
         case kVariable: {
             int slot = GetVarSlot(arr, expr);
-            EmitVarAddrBySlot(context, slot, sub->param_count);
-            Emit8(CODE, 0xFF); Emit8(CODE, ModRM(0, 6, kRCX)); // push qword [rcx]
+            VAR_ADDR(slot, sub->param_count);
+            PUSH_MEM(kRCX);
             break;
         }
 
@@ -1218,20 +1154,13 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *ar
 
                 case kOperationSQRT:
                     CodeGenerateExpr(context, expr->left, arr, info, sub);
-                    EmitPop(context, kRAX);
+                    POP(kRAX);
 
-                    // cvtsi2sd xmm0, rax
-                    Emit8(CODE, 0xF2); Emit8(CODE, RexW(0, kRAX));
-                    Emit8(CODE, 0x0F); Emit8(CODE, 0x2A); Emit8(CODE, ModRM(3, 0, kRAX));
+                    CVTSI2SD_XMM0_R(kRAX);   // xmm0 = (double)rax
+                    SQRTSD_XMM_XMM(0, 0);    // xmm0 = sqrt(xmm0)
+                    CVTTSD2SI_R_XMM0(kRAX);  // rax = (int64_t)xmm0
 
-                    // sqrtsd xmm0, xmm0
-                    Emit8(CODE, 0xF2); Emit8(CODE, 0x0F); Emit8(CODE, 0x51); Emit8(CODE, ModRM(3, 0, 0));
-
-                    // cvttsd2si rax, xmm0
-                    Emit8(CODE, 0xF2); Emit8(CODE, RexW(kRAX, 0)); Emit8(CODE, 0x0F); Emit8(CODE, 0x2C);
-                    Emit8(CODE, ModRM(3, kRAX, 0));
-
-                    EmitPush(context, kRAX);
+                    PUSH(kRAX);
                     break;
 
                 case kOperationCallAddr:
@@ -1244,12 +1173,12 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *ar
                     const char *callee = arr->var_array[expr->left->value.pos].variable_name;
                     int num_args = CountArgs(expr->right);
                     CodeGenerateParamsToStack(context, expr->right, arr, info, sub);
-                    EmitCall(context, callee);
+                    CALL(callee);
                     if (num_args > 0) {
-                        EmitAddRegImm(context, kRSP, (int64_t)(num_args * 8));
+                        ADD_R_IMM(kRSP, (num_args * 8));
                     }
 
-                    EmitPush(context, kRAX);
+                    PUSH(kRAX);
                     break;
                 }
 
@@ -1258,26 +1187,14 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *ar
                     int local_index = slot - sub->param_count;
 
                     CodeGenerateExpr(context, expr->right, arr, info, sub);
-                    EmitPop(context, kRDI);   // rdi = index
+                    POP(kRDI);              // rdi = index
 
-                    // rcx = lea [rbp - 8*(local_index + 1)]
+                    // rcx = lea [rbp - 8 * (local_index + 1)]
                     int32_t base_disp = -8 * (local_index + 1);
-                    EmitLeaRcxRbp(context, base_disp);
-
-                    // rdi <<= 3
-                    Emit8(CODE, RexW(0, kRDI));
-                    Emit8(CODE, 0xC1);
-                    Emit8(CODE, ModRM(3, 4, kRDI));
-                    Emit8(CODE, 3);
-
-                    // rcx -= rdi
-                    Emit8(CODE, RexW(kRDI, kRCX));
-                    Emit8(CODE, 0x29);
-                    Emit8(CODE, ModRM(3, kRDI, kRCX));
-
-                    // push qword [rcx]
-                    Emit8(CODE, 0xFF);
-                    Emit8(CODE, ModRM(0, 6, kRCX));
+                    LEA_RCX_RBP(base_disp);
+                    SHL_R_IMM8(kRDI, 3); // rdi <<= 3
+                    SUB_RR(kRCX, kRDI);  // rcx -= rdi
+                    PUSH_MEM(kRCX);      // push qword [rcx]
                     break;
                 }
 
@@ -1304,7 +1221,7 @@ static void CodeGenerateStatement(Context *context, LangNode_t *stmt, VariableAr
             #pragma GCC diagnostic ignored "-Wswitch-enum"
             switch (stmt->value.operation) {
                 case kOperationHLT:
-                    EmitCall(context, "my_exit");
+                    CALL("my_exit");
                     break;
 
                 case kOperationCallAddr:
@@ -1321,7 +1238,7 @@ static void CodeGenerateStatement(Context *context, LangNode_t *stmt, VariableAr
                     CodeGenerateParamsToStack(context, stmt->right, arr, info, sub);
                     EmitCall(context, callee);
                     if (num_args > 0) {
-                        EmitAddRegImm(context, kRSP, (int64_t)(num_args * 8));
+                        ADD_R_IMM(kRSP, (int64_t)(num_args * 8));
                     }
 
                     break;
@@ -1398,11 +1315,8 @@ static void CodeGenerateStatement(Context *context, LangNode_t *stmt, VariableAr
 
         case kNumber: {
             int64_t number = (int64_t)stmt->value.number;
-            Emit8(CODE, RexW(0, kRAX));
-            Emit8(CODE, 0xC7);
-            Emit8(CODE, ModRM(3, 0, kRAX));
-            Emit32(CODE, (uint32_t)(int32_t)number);
-            EmitPush(context, kRAX);
+            MOV_R_IMM32(kRAX, number);
+            PUSH(kRAX);
             break;
         }
 
@@ -1479,14 +1393,14 @@ static void CodeGenerateFunction(Context *context, LangNode_t *func_node, Variab
         LabelAdd(context, "main", CODE->size);
     }
 
-    EmitPrologue(context, frame_size);
+    PROLOGUE(frame_size);
     CodeGenerateStatement(context, body, arr, info, &sub);
-    EmitEpilogue(context);
+    EPILOGUE();
 
     if (is_main) {
-        EmitCall(context, "my_exit");
+        CALL("my_exit");
     } else {
-        EmitRet(context);
+        RET();
     }
 }
 
@@ -1531,14 +1445,14 @@ static uint8_t* ReadELFToMemory(const char *path, long *out_size) {
         return NULL;
     }
 
-    uint8_t *file_buf = (uint8_t *)malloc(file_size);
+    uint8_t *file_buf = (uint8_t *) malloc ((size_t)file_size);
     if (!file_buf) {
         perror("Error malloc file_buf.\n");
         fclose(file);
         return NULL;
     }
 
-    if (fread(file_buf, 1, file_size, file) != (size_t)file_size) {
+    if (fread(file_buf, 1, (size_t)file_size, file) != (size_t)file_size) {
         fprintf(stderr, "%s: failed to read file.\n", path);
         free(file_buf);
         fclose(file);
@@ -1662,8 +1576,6 @@ static int LoadLib(LibBlob *blob, const char *path) {
     Elf64_Shdr *section_header = (Elf64_Shdr *)(file_buf + elf_header->e_shoff);                            // this is the 
     const char *shstr = (const char *)(file_buf + section_header[elf_header->e_shstrndx].sh_offset);        // e_shstrndx -> index of zero elem in s_table
     // so there we get .shstrtab pointer
-    Elf64_Shdr *text_sh = NULL, *symtab_sh = NULL, *strtab_sh = NULL, *rela_sh = NULL;
-    int text_index = -1;
 
     FoundSections found = FindSections(elf_header, section_header, shstr);
     if (!found.text || !found.symtab || !found.strtab) {
