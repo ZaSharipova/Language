@@ -13,6 +13,8 @@
 #include "Common/CommonBackFunctions.h"
 #include "Back-End/DSL.h"
 
+#define CODE (&context->code)
+
 #define STANDART_FUNCTIONS_NUMBER 4
 #define REGS_NUMBER 35
 static const struct RegInfo regs[REGS_NUMBER] = {
@@ -103,7 +105,7 @@ static void MergeAndPatchLibrary(Context *context, LibBlob *blob, size_t *blob_b
 
     *blob_base = context->code.size;
 
-    BufGrow(&context->code, blob->size);
+    BufGrow(CODE, blob->size);
     memcpy(context->code.data + context->code.size, blob->data, blob->size);
     context->code.size += blob->size;
 
@@ -117,7 +119,7 @@ static void MergeAndPatchLibrary(Context *context, LibBlob *blob, size_t *blob_b
         size_t patch_offset = *blob_base + blob->relocs[i];
         uint64_t current_value = 0;
         memcpy(&current_value, context->code.data + patch_offset, 8);
-        Patch64(&context->code, patch_offset, current_value - blob->link_base + blob_vaddr);
+        Patch64(CODE, patch_offset, current_value - blob->link_base + blob_vaddr);
     }
 }
 
@@ -225,14 +227,14 @@ static void ContextInit(Context *context) {
     assert(context);
 
     memset(context, 0, sizeof(*context));
-    BufInit(&context->code, 131072);
+    BufInit(CODE, 131072);
     BufInit(&context->data, 512);
 }
 
 static void ContextFree(Context *context) {
     assert(context);
 
-    BufFree(&context->code);
+    BufFree(CODE);
     BufFree(&context->data);
 }
 
@@ -288,8 +290,6 @@ static uint8_t RexW(int reg, int rm) {
     return result;
 }
 
-#define CODE (&context->code)
-
 static void EmitMovR64Imm64(Context *context, int reg, int64_t value) {
     assert(context);
 
@@ -331,15 +331,15 @@ static void EmitAddRegImm(Context *context, int reg, int64_t imm) {
     int64_t abs_value = (imm > 0) ? imm : -imm;
 
     if (abs_value <= 127) {
-        Emit8(CODE, RexW(0, reg));
-        Emit8(CODE, 0x83);
-        Emit8(CODE, ModRM(3, slash, reg));
-        Emit8(CODE, (uint8_t)(int8_t)abs_value);
+        BYTE(RexW(0, reg));
+        BYTE(0x83);
+        BYTE(ModRM(3, slash, reg));
+        BYTE(abs_value);
     } else {
-        Emit8(CODE, RexW(0, reg));
-        Emit8(CODE, 0x81);
-        Emit8(CODE, ModRM(3, slash, reg));
-        Emit32(CODE, (uint32_t)(int32_t)abs_value);
+        BYTE(RexW(0, reg));
+        BYTE(0x81);
+        BYTE(ModRM(3, slash, reg));
+        DWORD(abs_value);
     }
 }
 
@@ -347,50 +347,51 @@ static void EmitCall(Context *context, const char *name) {
     assert(context);
     assert(name);
 
-    Emit8(CODE, 0xE8);
+    BYTE(0xE8);
     RelocAdd(context, CODE->size, name, kRel32);
-    Emit32(CODE, 0);
+    DWORD(0);
 }
 
 static void EmitJmp(Context *context, const char *name) {
     assert(context);
     assert(name);
 
-    Emit8(CODE, 0xE9);
+    BYTE(0xE9);
     RelocAdd(context, CODE->size, name, kRel32);
-    Emit32(CODE, 0);
+    DWORD(0);
 }
 
 static void EmitJCC(Context *context, uint8_t cc, const char *name) {
     assert(context);
     assert(name);
 
-    Emit8(CODE, 0x0F); Emit8(CODE, cc);
+    BYTE(0x0F); BYTE(cc);
     RelocAdd(context, CODE->size, name, kRel32);
-    Emit32(CODE, 0);
+    DWORD(0);
 }
 
 static void EmitMovData(Context *context, int reg, const char *symbol) {
     assert(context);
     assert(symbol);
 
-    EmitMovR64Imm64(context, reg, 0);
+    MOV_R_IMM64(reg, 0);
+    //EmitMovR64Imm64(context, reg, 0);
     RelocAdd(context, CODE->size - 8, symbol, kAbs64);
 }
 
 static void EmitAlignStack(Context *context) {
     assert(context);
 
-    Emit8(CODE, RexW(0, kRSP));
-    Emit8(CODE, 0x83);
-    Emit8(CODE, ModRM(3, 4, kRSP));
-    Emit8(CODE, 0xF0);
+    BYTE(RexW(0, kRSP));
+    BYTE(0x83);
+    BYTE(ModRM(3, 4, kRSP));
+    BYTE(0xF0);
 }
 
 static void EmitRet(Context *context) {
     assert(context);
 
-    Emit8(CODE, 0xC3);
+    BYTE(0xC3);
 }
 
 /* -----------------------------------------------------------------------------------
@@ -415,14 +416,14 @@ static void EmitRet(Context *context) {
 static void EmitLeaRcxRbp(Context *context, int32_t disp) {
     assert(context);
 
-    Emit8(CODE, RexW(kRCX, kRBP));        // REX.W
-    Emit8(CODE, 0x8D);                    // lea
+    BYTE(RexW(kRCX, kRBP));        // REX.W
+    BYTE(0x8D);                    // lea
     if (disp >= -128 && disp <= 127) {
-        Emit8(CODE, ModRM(1, kRCX, kRBP));
-        Emit8(CODE, (uint8_t)(int8_t)disp);
+        BYTE(ModRM(1, kRCX, kRBP));
+        BYTE((int8_t)disp);
     } else {
-        Emit8(CODE, ModRM(2, kRCX, kRBP));
-        Emit32(CODE, (uint32_t)disp);
+        BYTE(ModRM(2, kRCX, kRBP));
+        DWORD(disp);
     }
 }
 
@@ -431,11 +432,11 @@ static void EmitVarAddrBySlot(Context *context, int slot, int param_count) {
 
     if (slot < param_count) {
         int32_t disp = 16 + 8 * slot;
-        LEA_RCX_RBP(disp);
+        LEA_RCX_RBP(disp);                      // rcx = lea [rbp + disp]
     } else {
         int local_index = slot - param_count;
         int32_t disp = -8 * (local_index + 1);
-        LEA_RCX_RBP(disp);
+        LEA_RCX_RBP(disp);                      // rcx = lea [rbp + disp]
     }
 }
 
@@ -468,7 +469,7 @@ static void EmitStart(Context *context) {
     MOV_RR(kRDI, kRAX);                 // mov rdi, rax
     MOV_R_IMM32(kRAX, 60);              // mov rax, 60
 
-    Emit8(CODE, 0x0F); Emit8(CODE, 0x05); // TODO syscall
+    CALL("my_exit");                    // call <label addr> ("my_exit")
 }
 
 static void BuildGOT(Context *context, PltGot *plt_got) {
@@ -477,7 +478,7 @@ static void BuildGOT(Context *context, PltGot *plt_got) {
 
     Buf *data = &context->data;
     while (data->size % 8) {
-        Emit8(data, 0);
+        BYTE(0);
     }
 
     plt_got->got_off = data->size;
@@ -592,17 +593,17 @@ static void LinkRelocs(Context *context, PltGot *plt_got, uint64_t data_vaddr) {
                 continue;
             }
 
-            Patch32(&context->code, rel->offset, (uint32_t)(sym_addr - patch_rip));
+            Patch32(CODE, rel->offset, (uint32_t)(sym_addr - patch_rip));
 
         } else if (rel->type == kAbs64) {
-            Patch64(&context->code, rel->offset, sym_addr);
+            Patch64(CODE, rel->offset, sym_addr);
         } else if (rel->type == kGOTRel32) {
             if (!sym_addr) {
                 fprintf(stderr, "Unknown GOT sym: %s.\n", rel->name);
                 continue;
             }
 
-            Patch32(&context->code, rel->offset, (uint32_t)(sym_addr - patch_rip));
+            Patch32(CODE, rel->offset, (uint32_t)(sym_addr - patch_rip));
         }
     }
 }
@@ -818,10 +819,10 @@ static void CodeGeneratePopToVar(Context *context, VariableArr *arr, LangNode_t 
     (void)info;
 
     int slot = GetVarSlot(arr, node);
-    POP(kRAX);
+    POP(kRAX);                              // pop rax
     VAR_ADDR(slot, sub->param_count);
 
-    MOV_MEM_R(kRCX, kRAX); // mov [rcx], rax
+    MOV_MEM_R(kRCX, kRAX);                  // mov [rcx], rax
 }
 
 static void CodeGenerateAddrOf(Context *context, LangNode_t *var, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -833,8 +834,8 @@ static void CodeGenerateAddrOf(Context *context, LangNode_t *var, VariableArr *a
     (void)info;
 
     int slot = GetVarSlot(arr, var);
-    VAR_ADDR(slot, sub->param_count);
-    PUSH(kRCX);
+    VAR_ADDR(slot, sub->param_count);   // rcx = lea [rbp + param_count]
+    PUSH(kRCX);                         // push rcx
 }
 
 static void CodeGenerateDeref(Context *context, LangNode_t *ptr, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -845,8 +846,8 @@ static void CodeGenerateDeref(Context *context, LangNode_t *ptr, VariableArr *ar
     assert(sub);
 
     CodeGenerateAddrOf(context, ptr, arr, info, sub);
-    POP(kRCX);
-    PUSH_MEM(kRCX);
+    POP(kRCX);                          // pop rcx
+    PUSH_MEM(kRCX);                     // push qword [rcx]
 }
 
 static void CodeGenerateAddrAssign(Context *context, LangNode_t *deref_node, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -857,10 +858,10 @@ static void CodeGenerateAddrAssign(Context *context, LangNode_t *deref_node, Var
     assert(sub);
 
     CodeGenerateExpr(context, deref_node->left, arr, info, sub);
-    POP(kRCX);
-    POP(kRAX);
+    POP(kRCX);                          // pop rcx
+    POP(kRAX);                          // pop rax
 
-    MOV_MEM_R(kRCX, kRAX);
+    MOV_MEM_R(kRCX, kRAX);              // mov [rcx], rax
 }
 
 static void CodeGenerateBinOp(Context *context, LangNode_t *node, VariableArr *arr, AsmInfo *info, Sub *sub, OperationTypes op) {
@@ -872,36 +873,34 @@ static void CodeGenerateBinOp(Context *context, LangNode_t *node, VariableArr *a
 
     CodeGenerateExpr(context, node->left, arr, info, sub);
     CodeGenerateExpr(context, node->right, arr, info, sub);
-    POP(kRBX);
-    POP(kRAX);
+    POP(kRBX);                          // pop rbx
+    POP(kRAX);                          // pop rax
 
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wswitch-enum"
     switch (op) {
-        case kOperationAdd: ADD_RR (kRAX, kRBX); break;
-        case kOperationSub: SUB_RR (kRAX, kRBX); break;
-        case kOperationMul: IMUL_RR(kRAX, kRBX); break;
-        case kOperationDiv: IDIV_R (kRBX);       break;
+        case kOperationAdd: ADD_RR (kRAX, kRBX); break; // add rax, rbx
+        case kOperationSub: SUB_RR (kRAX, kRBX); break; // sub rax, rbx
+        case kOperationMul: IMUL_RR(kRAX, kRBX); break; // imul rax, rbx
+        case kOperationDiv: IDIV_R (kRBX);       break; // cqo; idiv rbx
 
         default: break;
     }
     #pragma GCC diagnostic pop
 
-    PUSH(kRAX);
+    PUSH(kRAX);                                         // push rax
 }
 
 static void EmitSaveRspToR13(Context *context) {
     assert(context);
 
-    Emit8(CODE, RexW(kRSP, kR13));
-    Emit8(CODE, 0x89);
-    Emit8(CODE, ModRM(3, kRSP, kR13));
+    MOV_RR(kR13, kRSP);   // mov r13, rsp
 }
 
 static void EmitRestoreRspFromR13(Context *context) {
-    Emit8(CODE, RexW(kR13, kRSP));
-    Emit8(CODE, 0x89);
-    Emit8(CODE, ModRM(3, kR13, kRSP));
+    assert(context);
+
+    MOV_RR(kRSP, kR13);   // mov rsp, r13
 }
 
 static void CodeGeneratePrintInt(Context *context, LangNode_t *node, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -912,14 +911,14 @@ static void CodeGeneratePrintInt(Context *context, LangNode_t *node, VariableArr
     assert(sub);
 
     CodeGenerateExpr(context, node->left, arr, info, sub);
-    POP(kRSI);
-    MOV_DATA(kRDI, "fmt_int");
+    POP(kRSI);                                          // pop rsi
+    MOV_DATA(kRDI, "fmt_int");                          // mov rdi, <addr of label fmt_int>
 
-    SAVE_RSP_R13();
+    SAVE_RSP_R13();                                     // mov r13, rsp
     ALIGN_STACK();
-    XOR_EAX();
-    CALL("my_printf");
-    RESTORE_RSP_R13();
+    XOR_EAX();                                          // xor eax, eax
+    CALL("my_printf");                                  // call <addr of label "my_printf"> -> from standard mylib.elf
+    RESTORE_RSP_R13();                                  // mov rsp, r13
 }
 
 static void CodeGeneratePrintChar(Context *context, LangNode_t *node, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -930,24 +929,24 @@ static void CodeGeneratePrintChar(Context *context, LangNode_t *node, VariableAr
     assert(sub);
 
     CodeGenerateExpr(context, node->left, arr, info, sub);
-    POP(kRSI);
-    MOV_DATA(kRDI, "fmt_char");
+    POP(kRSI);                                          // pop rsi
+    MOV_DATA(kRDI, "fmt_char");                         // mov rdi, <addr of label fmt_char>
 
-    SAVE_RSP_R13();
+    SAVE_RSP_R13();                                     // mov r13, rsp
     ALIGN_STACK();
-    XOR_EAX();
-    CALL("my_printf");
-    RESTORE_RSP_R13();
+    XOR_EAX();                                          // xor eax, eax
+    CALL("my_printf");                                  // call <addr of label "my_printf"> -> from standard mylib.elf
+    RESTORE_RSP_R13();                                  // mov rsp, r13
 }
 
 static void CodeGenerateReadInt(Context *context) {
     assert(context);
 
-    SAVE_RSP_R13();
+    SAVE_RSP_R13();                                     // mov r13, rsp
     ALIGN_STACK();
-    CALL("my_scanf");
-    RESTORE_RSP_R13();
-    PUSH(kRAX);
+    CALL("my_scanf");                                   // mov rdi, <addr of label "my_scanf"> -> from standard mylib.elf 
+    RESTORE_RSP_R13();                                  // mov rsp, r13
+    PUSH(kRAX);                                         // push rax
 }
 
 static void CodeGenerateDraw(Context *context, LangNode_t *node, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -958,11 +957,11 @@ static void CodeGenerateDraw(Context *context, LangNode_t *node, VariableArr *ar
     assert(sub);
 
     CodeGenerateAddrOf(context, node->left, arr, info, sub);
-    POP(kRDI);
-    SAVE_RSP_R13();
+    POP(kRDI);                                          // pop rdi
+    SAVE_RSP_R13();                                     // mov r13, rsp
     ALIGN_STACK();
-    CALL("my_draw");
-    RESTORE_RSP_R13();
+    CALL("my_draw");                                    // call <addr of label "my_draw"> -> from standard mylib.elf
+    RESTORE_RSP_R13();                                  // mov rsp, r13
 }
 
 static void CodeGenerateArrAssign(Context *context, LangNode_t *stmt, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -982,12 +981,12 @@ static void CodeGenerateArrAssign(Context *context, LangNode_t *stmt, VariableAr
 
     // rcx = lea [rbp - 8 * (local_index + 1)]
     int32_t base_disp = -8 * (local_index + 1);
-    LEA_RCX_RBP(base_disp);
+    LEA_RCX_RBP(base_disp);                                         // lea rcx, [rbp + base_disp]
 
-    SHL_R_IMM8(kRDI, 3);   // shl rdi, 3
-    SUB_RR(kRCX, kRDI);    // sub rcx, rdi
+    SHL_R_IMM8(kRDI, 3);                                            // shl rdi, 3
+    SUB_RR(kRCX, kRDI);                                             // sub rcx, rdi
 
-    MOV_MEM_R(kRCX, kRAX); // mov [rcx], rax
+    MOV_MEM_R(kRCX, kRAX);                                          // mov [rcx], rax
 }
 
 static void CodeGenerateArrDecl(Context *context, LangNode_t *stmt, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -1003,8 +1002,8 @@ static void CodeGenerateArrDecl(Context *context, LangNode_t *stmt, VariableArr 
 
     for (int i = 0; i < size; i++) {
         int slot = base_slot + i;
-        VAR_ADDR(slot, sub->param_count);
-        MOV_MEM_IMM32(kRCX, 0); // mov qword ptr [rcx], 0
+        VAR_ADDR(slot, sub->param_count);               // rcx = lea [rbp + param_count]
+        MOV_MEM_IMM32(kRCX, 0);                         // mov qword ptr [rcx], 0
     }
 }
 
@@ -1025,11 +1024,11 @@ static void CodeGenerateIf(Context *context, LangNode_t *stmt, VariableArr *arr,
 
     CodeGenerateExpr(context, cond->left, arr, info, sub);
     CodeGenerateExpr(context, cond->right, arr, info, sub);
-    POP(kRBX);
-    POP(kRAX);
-    CMP_RAX_RBX();
+    POP(kRBX);                                          // pop rbx
+    POP(kRAX);                                          // pop rax
+    CMP_RAX_RBX();                                      // cmp rax, rbx
 
-    JCC(ChooseJCC(cond), else_label);
+    JCC(ChooseJCC(cond), else_label);                   // jcc
 
     if (has_else) {
         CodeGenerateStatement(context, stmt->right->left, arr, info, sub);
@@ -1037,7 +1036,7 @@ static void CodeGenerateIf(Context *context, LangNode_t *stmt, VariableArr *arr,
         CodeGenerateStatement(context, stmt->right, arr, info, sub);
     }
 
-    JMP(end_label);
+    JMP(end_label);                                     // jmp <addr of label called end_label>
     LabelAdd(context, else_label, CODE->size);
 
     if (has_else) {
@@ -1065,13 +1064,13 @@ static void CodeGenerateWhile(Context *context, LangNode_t *stmt, VariableArr *a
     LabelAdd(context, start_label, CODE->size);
     CodeGenerateExpr(context, stmt->left->left, arr, info, sub);
     CodeGenerateExpr(context, stmt->left->right, arr, info, sub);
-    POP(kRBX);
-    POP(kRAX);
+    POP(kRBX);                                         // pop rbx
+    POP(kRAX);                                         // pop rax
 
-    CMP_RAX_RBX();
+    CMP_RAX_RBX();                                     // cmp rax, rbx
     JCC(ChooseJCC(stmt->left), end_label);
     CodeGenerateStatement(context, stmt->right, arr, info, sub);
-    JMP(start_label);
+    JMP(start_label);                                  // jmp <addr with label called start_label>
     LabelAdd(context, end_label, CODE->size);
 }
 
@@ -1083,9 +1082,9 @@ static void CodeGenerateReturn(Context *context, LangNode_t *stmt, VariableArr *
     assert(sub);
 
     CodeGenerateExpr(context, stmt->left, arr, info, sub);
-    POP(kRAX);
-    EPILOGUE();
-    RET();
+    POP(kRAX);                                      // pop rax
+    EPILOGUE();                                     // do prologue things
+    RET();                                          // ret
 }
 
 static void CodeGenerateParamsToStack(Context *context, LangNode_t *args, VariableArr *arr, AsmInfo *info, Sub *sub) {
@@ -1236,9 +1235,9 @@ static void CodeGenerateStatement(Context *context, LangNode_t *stmt, VariableAr
                     const char *callee = arr->var_array[stmt->left->value.pos].variable_name;
                     int num_args = CountArgs(stmt->right);
                     CodeGenerateParamsToStack(context, stmt->right, arr, info, sub);
-                    EmitCall(context, callee);
+                    CALL(callee);
                     if (num_args > 0) {
-                        ADD_R_IMM(kRSP, (int64_t)(num_args * 8));
+                        ADD_R_IMM(kRSP, (int64_t)(num_args * 8)); // add rsp, (num_args * 8)
                     }
 
                     break;
@@ -1315,8 +1314,8 @@ static void CodeGenerateStatement(Context *context, LangNode_t *stmt, VariableAr
 
         case kNumber: {
             int64_t number = (int64_t)stmt->value.number;
-            MOV_R_IMM32(kRAX, number);
-            PUSH(kRAX);
+            MOV_R_IMM32(kRAX, number);                      // mov rax, number
+            PUSH(kRAX);                                     // push rax
             break;
         }
 
@@ -1398,9 +1397,9 @@ static void CodeGenerateFunction(Context *context, LangNode_t *func_node, Variab
     EPILOGUE();
 
     if (is_main) {
-        CALL("my_exit");
+        CALL("my_exit");                // call <addr label> ("my_exit")
     } else {
-        RET();
+        RET();                          // ret
     }
 }
 
