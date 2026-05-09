@@ -1,3 +1,38 @@
+/*
+ * TreeToBin.c: переводит AST в готовый ELF-файл под Linux x86-64
+ *
+ * Все байтовые константы, формулы REX/ModRM/SIB и форматы инструкций
+ * соответствуют методичке `x86_64_bytecode.md` (см. репозиторий)
+ * В комментариях ниже ссылки вида "методичка: гл. 3.4" указывают на
+ * нужную главу, там лежит разбор соответствующего опкода
+ *
+ * Что делает код по шагам:
+ *   1. ContextInit / BuildData / BuildGOT: буферы кода/данных,
+ *      форматы printf и пустые слоты GOT (методичка: гл. 17, 18, 19)
+ *   2. LoadLib: читает my_lib.elf, достаёт оттуда .text, символы и
+ *      релокации стандартных функций (методичка: гл. 19)
+ *   3. MergeAndPatchLibrary: приклеивает .text библиотеки к нашему
+ *      сегменту кода и правит релокации под новый vaddr
+ *   4. EmitPLT: `jmp [rip+got_slot]` для каждой стандартной функции
+ *      (методичка: гл. 6.1, 12.3)
+ *   5. EmitStart: точка входа, выравниваем стек, call main, exit
+ *   6. CodeGenerateProgram: проходим по дереву и пишем инструкции
+ *   7. FinalizeAndWrite: заполняем GOT, патчим релокации,
+ *      записываем ELF на диск (методичка: гл. 17, 18)
+ *
+ * Как работают вызовы функций:
+ *   - аргументы передаются через стек (push в обратном порядке);
+ *   - возвращаемое значение лежит в rax;
+ *   - r13: туда сохраняем rsp вокруг вызовов в библиотеку;
+ *   - rcx: scratch для адресации переменных через rbp
+ *
+ * Расклад кадра (см. также EmitVarAddrBySlot):
+ *   [rbp + 16 + 8*i]: i-й параметр
+ *   [rbp + 8]:        return address
+ *   [rbp]:            saved caller's rbp
+ *   [rbp - 8*1..]:    локальные переменные / массивы
+ */
+
 #include "Back-End/TreeToBin.h"
 
 #include <assert.h>
@@ -17,6 +52,9 @@
 
 #define STANDART_FUNCTIONS_NUMBER 4
 #define REGS_NUMBER 35
+
+// Таблица всех регистров x86-64 (имя, код, ширина в битах)
+// См. методичка, гл. 7
 static const struct RegInfo regs[REGS_NUMBER] = {
     {"rax",   0, 64}, {"rcx",   1, 64}, {"rdx",   2, 64}, {"rbx",   3, 64},
     {"rsp",   4, 64}, {"rbp",   5, 64}, {"rsi",   6, 64}, {"rdi",   7, 64},
@@ -43,23 +81,7 @@ static void EmitPLT(Context *context, PltGot *plt_got);
 static void EmitStart(Context *context);
 static void CodeGenerateProgram(Context *context, LangNode_t *root, VariableArr *arr, AsmInfo *info);
 
-// static void DumpLibRelocs(const LibBlob *blob) {
-//     assert(blob);
-
-//     fprintf(stderr, " Lib relocations (%u total) \n", blob->reloc_count);
-//     fprintf(stderr, "link_base = 0x%lx, blob size = %zu\n",
-//             (unsigned long)blob->link_base, blob->size);
-
-//     for (uint32_t i = 0; i < blob->reloc_count; i++) {
-//         uint32_t off = blob->relocs[i];
-//         uint64_t value = 0;
-//         memcpy(&value, blob->data + off, 8);
-
-//         fprintf(stderr, "  [%3u] off=0x%08x  qword=0x%016lx\n",
-//                 i, off, (unsigned long)value);
-//     }
-// }
-
+// Точка входа: компилирует AST в готовый ELF по пути elf_path
 void CompileTreeToELF(LangNode_t *root, VariableArr *arr, const char *elf_path) {
     assert(root);
     assert(arr);
@@ -77,8 +99,6 @@ void CompileTreeToELF(LangNode_t *root, VariableArr *arr, const char *elf_path) 
         ContextFree(&context);
         return;
     }
-
-    // DumpLibRelocs(&blob);
 
     size_t blob_base = 0;
     MergeAndPatchLibrary(&context, &blob, &blob_base);
@@ -98,6 +118,8 @@ void CompileTreeToELF(LangNode_t *root, VariableArr *arr, const char *elf_path) 
 static void BufGrow(Buf *buf, size_t need);
 static void Patch64(Buf *buf, size_t offset, uint64_t value);
 
+// Приклеиваем .text загруженной библиотеки к нашему сегменту кода и
+// пересчитываем её абсолютные релокации под новый vaddr
 static void MergeAndPatchLibrary(Context *context, LibBlob *blob, size_t *blob_base) {
     assert(context);
     assert(blob);
@@ -110,10 +132,11 @@ static void MergeAndPatchLibrary(Context *context, LibBlob *blob, size_t *blob_b
     context->code.size += blob->size;
 
     context->b_printf = *blob_base + blob->printf_off;
-    context->b_scanf = *blob_base + blob->scanf_off;
-    context->b_exit = *blob_base + blob->exit_off;
-    context->b_draw = *blob_base + blob->draw_off;
+    context->b_scanf  = *blob_base + blob->scanf_off;
+    context->b_exit   = *blob_base + blob->exit_off;
+    context->b_draw   = *blob_base + blob->draw_off;
 
+    // Сдвигаем абсолютные адреса внутри .text с link-time vaddr на наш
     uint64_t blob_vaddr = ELF_BASE + HDRS_TOTAL + *blob_base;
     for (uint32_t i = 0; i < blob->reloc_count; i++) {
         size_t patch_offset = *blob_base + blob->relocs[i];
@@ -126,6 +149,8 @@ static void MergeAndPatchLibrary(Context *context, LibBlob *blob, size_t *blob_b
 static void LinkRelocs(Context *context, PltGot *plt_got, uint64_t data_vaddr);
 static void WriteElf(Context *context, const char *path);
 
+// Заполняем GOT адресами стандартных функций, обрабатываем все
+// накопленные релокации и пишем готовый ELF на диск
 static void FinalizeAndWrite(Context *context, PltGot *plt_got, const char *elf_path) {
     assert(context);
     assert(plt_got);
@@ -136,6 +161,7 @@ static void FinalizeAndWrite(Context *context, PltGot *plt_got, const char *elf_
     uint64_t data_vaddr = ELF_BASE + data_offset;
     uint64_t base = ELF_BASE + HDRS_TOTAL;
 
+    // Записываем в подготовленные слоты GOT реальные vaddr функций
     uint64_t addrs[STANDART_FUNCTIONS_NUMBER] = {
         base + context->b_printf,
         base + context->b_scanf,
@@ -167,7 +193,6 @@ static void BufInit(Buf *buf, size_t capacity) {
 
 static void BufFree(Buf *buf) {
     assert(buf);
-
     free(buf->data);
 }
 
@@ -187,6 +212,8 @@ static void BufGrow(Buf *buf, size_t need) {
 
     buf->data = ptr;
 }
+
+// Дописываем в конец буфера 1/4/8 байт (little-endian, методичка: гл. 15)
 
 static void Emit8(Buf *buf, uint8_t value) {
     assert(buf);
@@ -211,17 +238,19 @@ static void Emit64(Buf *buf, uint64_t value) {
     buf->size += 8;
 }
 
+// Перезаписываем 4/8 байт по фиксированному смещению (для патчинга
+// forward-переходов и релокаций; методичка: гл. 12.2)
+
 static void Patch32(Buf *buf, size_t offset, uint32_t value) {
     assert(buf);
-
     memcpy(buf->data + offset, &value, 4);
 }
 
 static void Patch64(Buf *buf, size_t offset, uint64_t value) {
     assert(buf);
-
     memcpy(buf->data + offset, &value, 8);
 }
+
 
 static void ContextInit(Context *context) {
     assert(context);
@@ -233,11 +262,11 @@ static void ContextInit(Context *context) {
 
 static void ContextFree(Context *context) {
     assert(context);
-
     BufFree(CODE);
     BufFree(&context->data);
 }
 
+// Регистрируем метку: имя и текущее смещение в буфере кода
 static void LabelAdd(Context *context, const char *name, size_t offset) {
     assert(context);
     assert(name);
@@ -261,6 +290,9 @@ static int LabelFind(Context *context, const char *name) {
     return -1;
 }
 
+// Регистрируем релокацию (rel32 / abs64 / GOT-rel32) на символ
+// с именем name; реальные значения подставит LinkRelocs
+// См. методичка: гл. 12.2 (patch-холдеры)
 static void RelocAdd(Context *context, size_t offset, const char *name, RelocType type) {
     assert(context);
     assert(name);
@@ -273,56 +305,61 @@ static void RelocAdd(Context *context, size_t offset, const char *name, RelocTyp
     context->number_relocs++;
 }
 
+
 static uint8_t ModRM(int mod, int reg, int rm) {
     return (uint8_t)((mod << 6) | ((reg & 7) << 3) | (rm & 7));
 }
 
-// static uint8_t Sib(int scale, int index, int base) {
-//     return (uint8_t)((scale << 6) | ((index & 7) << 3) | (base & 7));
-// }
-
+// REX с включённым W-битом + R/B по необходимости. См. методичка, гл. 3.2
 static uint8_t RexW(int reg, int rm) {
-    uint8_t result = 0x48;
+    uint8_t result = REX_W_BYTE;
 
-    if (reg >= 8) result |= 0x04;
-    if (rm  >= 8) result |= 0x01;
+    if (reg >= 8) result |= REX_R_BIT;
+    if (rm  >= 8) result |= REX_B_BIT;
 
     return result;
 }
 
+
+// mov r64, imm64  (REX.W + B8+r + imm64). Методичка: гл. 8.2
 static void EmitMovR64Imm64(Context *context, int reg, int64_t value) {
     assert(context);
 
-    uint8_t rex = 0x48;
-    if (reg >= 8) rex |= 0x01;
+    uint8_t rex = REX_W_BYTE;
+    if (reg >= 8) rex |= REX_B_BIT;
 
     Emit8(CODE, rex);
-    Emit8(CODE, (uint8_t)(0xB8 + (reg & 7)));
+    Emit8(CODE, (uint8_t)(OP_MOV_R64_IMM64 + (reg & 7)));
     Emit64(CODE, (uint64_t)value);
 }
 
+// push r64. Методичка: гл. 9.1, 9.2
 static void EmitPush(Context *context, int reg) {
     assert(context);
 
-    if (reg >= 8) Emit8(CODE, 0x41);
-    Emit8(CODE, (uint8_t)(0x50 + (reg & 7)));
+    if (reg >= 8) Emit8(CODE, REX_B_BYTE);
+    Emit8(CODE, (uint8_t)(OP_PUSH_R + (reg & 7)));
 }
 
+// pop r64. Методичка: гл. 9.1, 9.2
 static void EmitPop(Context *context, int reg) {
     assert(context);
 
-    if (reg >= 8) Emit8(CODE, 0x41);
-    Emit8(CODE, (uint8_t)(0x58 + (reg & 7)));
+    if (reg >= 8) Emit8(CODE, REX_B_BYTE);
+    Emit8(CODE, (uint8_t)(OP_POP_R + (reg & 7)));
 }
 
+// mov dst, src  (REX.W 89 /r). Методичка: гл. 8.4
 static void EmitMovRR(Context *context, int dst, int src) {
     assert(context);
 
     Emit8(CODE, RexW(src, dst));
-    Emit8(CODE, 0x89);
+    Emit8(CODE, OP_MOV_RM_R);
     Emit8(CODE, ModRM(3, src, dst));
 }
 
+// add/sub reg, imm: сами выбираем ширину imm8 или imm32
+// /0 = add, /5 = sub. Методичка: гл. 10.1, 10.2
 static void EmitAddRegImm(Context *context, int reg, int64_t imm) {
     assert(context);
     if (imm == 0) return;
@@ -332,146 +369,160 @@ static void EmitAddRegImm(Context *context, int reg, int64_t imm) {
 
     if (abs_value <= 127) {
         BYTE(RexW(0, reg));
-        BYTE(0x83);
+        BYTE(OP_ADD_RM_IMM8);
         BYTE(ModRM(3, slash, reg));
         BYTE(abs_value);
     } else {
         BYTE(RexW(0, reg));
-        BYTE(0x81);
+        BYTE(OP_ADD_RM_IMM32);
         BYTE(ModRM(3, slash, reg));
         DWORD(abs_value);
     }
 }
 
+// call rel32: оставляем плейсхолдер 0, регистрируем kRel32-релокацию
+// Методичка: гл. 12 (общее), 12.2 (патчинг)
 static void EmitCall(Context *context, const char *name) {
     assert(context);
     assert(name);
 
-    BYTE(0xE8);
+    BYTE(OP_CALL_REL32);
     RelocAdd(context, CODE->size, name, kRel32);
     DWORD(0);
 }
 
+// jmp rel32. Методичка: гл. 12
 static void EmitJmp(Context *context, const char *name) {
     assert(context);
     assert(name);
 
-    BYTE(0xE9);
+    BYTE(OP_JMP_REL32);
     RelocAdd(context, CODE->size, name, kRel32);
     DWORD(0);
 }
 
+// jcc rel32 (0F 8X). cc выбирается в ChooseJCC. Методичка: гл. 12.1
 static void EmitJCC(Context *context, uint8_t cc, const char *name) {
     assert(context);
     assert(name);
 
-    BYTE(0x0F); BYTE(cc);
+    BYTE(OP_TWO_BYTE_PREFIX); BYTE(cc);
     RelocAdd(context, CODE->size, name, kRel32);
     DWORD(0);
 }
 
+// mov reg, imm64 с релокацией kAbs64 на символ в data-сегменте
+// (адрес дописывается в LinkRelocs)
 static void EmitMovData(Context *context, int reg, const char *symbol) {
     assert(context);
     assert(symbol);
 
     MOV_R_IMM64(reg, 0);
-    //EmitMovR64Imm64(context, reg, 0);
     RelocAdd(context, CODE->size - 8, symbol, kAbs64);
 }
 
+// and rsp, -16: выравниваем стек на 16 байт перед call
+// Методичка: гл. 14.3
 static void EmitAlignStack(Context *context) {
     assert(context);
 
     BYTE(RexW(0, kRSP));
-    BYTE(0x83);
-    BYTE(ModRM(3, 4, kRSP));
-    BYTE(0xF0);
+    BYTE(OP_ADD_RM_IMM8);
+    BYTE(ModRM(3, 4, kRSP));    // /4 = and
+    BYTE(IMM8_MINUS_16);
 }
 
+// ret. Методичка: гл. 13
 static void EmitRet(Context *context) {
     assert(context);
-
-    BYTE(0xC3);
+    BYTE(OP_RET);
 }
 
-/* -----------------------------------------------------------------------------------
- * Variable addressing on the stack.
+/*
+ * Адресация переменных в кадре функции
  *
- * Function frame layout:
- *   [rbp + 16 + 8 * i] -- i-th parameter (i = 0 .. param_count - 1)
+ *   [rbp + 16 + 8 * i] -- i-й параметр (i = 0 .. param_count - 1)
  *   [rbp + 8]          -- return address
  *   [rbp]              -- saved caller's rbp
- *   [rbp - 8 * 1]      -- 0th local cell
- *   [rbp - 8 * 2]      -- 1st local cell
+ *   [rbp - 8 * 1]      -- 0-я локальная ячейка
  *   ...
- *   [rbp - frame_size] -- last local cell
+ *   [rbp - frame_size] -- последняя локальная ячейка
  *
- * Variable slot identifier (pos_in_code):
- *   0 .. param_count - 1 -> parameters (read from [rbp + 16 + ...])
- *   >= param_count       -> locals (read from [rbp - 8 * ((slot - param_count) + 1)])
- * ------------------------------------------------------------------------------------
+ * Slot (pos_in_code):
+ *   0 .. param_count-1: параметры       ([rbp + 16 + 8*slot])
+ *   >= param_count    : локальные       ([rbp - 8*((slot - param_count) + 1)])
  */
 
-// rcx = lea [rbp + disp]
+// lea rcx, [rbp + disp]. Используем disp8 если |disp| <= 127, иначе disp32
+// Методичка: гл. 11 (LEA), 4.3 (mod)
 static void EmitLeaRcxRbp(Context *context, int32_t disp) {
     assert(context);
 
-    BYTE(RexW(kRCX, kRBP));        // REX.W
-    BYTE(0x8D);                    // lea
+    BYTE(RexW(kRCX, kRBP));
+    BYTE(OP_LEA);
     if (disp >= -128 && disp <= 127) {
-        BYTE(ModRM(1, kRCX, kRBP));
+        BYTE(ModRM(1, kRCX, kRBP));             // mod=1, disp8
         BYTE((int8_t)disp);
     } else {
-        BYTE(ModRM(2, kRCX, kRBP));
+        BYTE(ModRM(2, kRCX, kRBP));             // mod=2, disp32
         DWORD(disp);
     }
 }
 
+// rcx = адрес ячейки переменной по её slot'у
 static void EmitVarAddrBySlot(Context *context, int slot, int param_count) {
     assert(context);
 
     if (slot < param_count) {
         int32_t disp = 16 + 8 * slot;
-        LEA_RCX_RBP(disp);                      // rcx = lea [rbp + disp]
+        LEA_RCX_RBP(disp);
     } else {
         int local_index = slot - param_count;
         int32_t disp = -8 * (local_index + 1);
-        LEA_RCX_RBP(disp);                      // rcx = lea [rbp + disp]
+        LEA_RCX_RBP(disp);
     }
 }
 
+// push rbp; mov rbp, rsp; sub rsp, frame_size
+// Методичка: гл. 14.5
 static void EmitPrologue(Context *context, int frame_size) {
     assert(context);
 
-    PUSH(kRBP);                                   // push rbp
-    MOV_RR(kRBP, kRSP);                           // mov rbp, rsp
+    PUSH(kRBP);
+    MOV_RR(kRBP, kRSP);
     if (frame_size > 0) {
-        ADD_R_IMM(kRSP, -(int64_t)frame_size);    // sub rsp, frame_size
+        ADD_R_IMM(kRSP, -(int64_t)frame_size);
     }
 }
 
+// mov rsp, rbp; pop rbp. Методичка: гл. 14.5
 static void EmitEpilogue(Context *context) {
     assert(context);
 
-    MOV_RR(kRSP, kRBP);                 // mov rsp, rbp
-    POP(kRBP);                          // pop rbp
+    MOV_RR(kRSP, kRBP);
+    POP(kRBP);
 }
 
+// Точка входа _start: выравнивает стек, зовёт main, передаёт код
+// возврата в my_exit (PLT-стаб, оттуда в libmy.exit, потом syscall)
 static void EmitStart(Context *context) {
     assert(context);
 
     context->b_start = CODE->size;
 
     ALIGN_STACK();
-    ADD_R_IMM(kRSP, -8);                // add rsp, -8 -> sub rsp, 8
+    ADD_R_IMM(kRSP, -8);                // выравнивание под call
 
-    CALL("main");                       // call <label addr> ("main")
-    MOV_RR(kRDI, kRAX);                 // mov rdi, rax
-    MOV_R_IMM32(kRAX, 60);              // mov rax, 60
+    CALL("main");                       // rax = main()
+    MOV_RR(kRDI, kRAX);                 // rdi = код возврата
+    MOV_R_IMM32(kRAX, 60);              // rax = SYS_exit (резерв, см. my_exit)
 
-    CALL("my_exit");                    // call <label addr> ("my_exit")
+    CALL("my_exit");                    // exit через библиотеку
 }
 
+
+// Резервируем 4 слота GOT по 8 байт. Реальные адреса
+// вписываются в FinalizeAndWrite. Методичка: гл. 19.4 (.got)
 static void BuildGOT(Context *context, PltGot *plt_got) {
     assert(context);
     assert(plt_got);
@@ -489,6 +540,8 @@ static void BuildGOT(Context *context, PltGot *plt_got) {
     Emit64(data, 3);
 }
 
+// Кладём в data-сегмент строковые форматы для printf:
+// "%d\0" и "%c\0". Их offset'ы лежат в context->fmt_*_off
 static void BuildData(Context *context) {
     assert(context);
 
@@ -498,14 +551,15 @@ static void BuildData(Context *context) {
     Emit8(data, '%');  Emit8(data, 'd'); Emit8(data, 0);
 
     context->fmt_char_off = data->size;
-    Emit8(data, '%');  Emit8(data, 'c');
-    Emit8(data, 0);
+    Emit8(data, '%');  Emit8(data, 'c'); Emit8(data, 0);
 
     while (data->size % 8) {
         Emit8(data, 0);
     }
 }
 
+// PLT-stub: jmp qword [rip + got_slot]. После загрузки в GOT уже
+// лежит реальный адрес функции. Методичка: гл. 6.1, 12.3
 static void EmitPltStub(Context *context, const char *label_name, const char *got_name, size_t *out_plt_off) {
     assert(context);
     assert(label_name);
@@ -515,11 +569,12 @@ static void EmitPltStub(Context *context, const char *label_name, const char *go
     *out_plt_off = CODE->size;
     LabelAdd(context, label_name, *out_plt_off);
 
-    JMP_RIP_REL32();
+    JMP_RIP_REL32();                                         // FF 25 ...
     RelocAdd(context, CODE->size, got_name, kGOTRel32);
     DWORD(0);
 }
 
+// Делаем PLT-стаб для каждой стандартной функции
 static void EmitPLT(Context *context, PltGot *plt_got) {
     assert(context);
     assert(plt_got);
@@ -529,6 +584,7 @@ static void EmitPLT(Context *context, PltGot *plt_got) {
     EmitPltStub(context, "my_exit",   "__got_exit",   &plt_got->plt_exit);
     EmitPltStub(context, "my_draw",   "__got_draw",   &plt_got->plt_draw);
 }
+
 
 static int ResolveDataSym(Context *context, const char *name, size_t *out) {
     assert(context);
@@ -548,6 +604,8 @@ static int ResolveDataSym(Context *context, const char *name, size_t *out) {
     return 0;
 }
 
+// По имени символа в релокации возвращаем его абсолютный vaddr
+// Поддерживает: GOT-слоты, символы из data-сегмента, метки в коде
 static uint64_t GetSymbolAddress(Context *context, PltGot *plt_got, Relocation *rel, uint64_t data_vaddr) {
     assert(context);
     assert(plt_got);
@@ -578,6 +636,11 @@ static uint64_t GetSymbolAddress(Context *context, PltGot *plt_got, Relocation *
     return 0;
 }
 
+// Проходим по всем накопленным релокациям и подставляем настоящие адреса:
+//   kRel32:    call/jmp/jcc rel32 и RIP-relative
+//   kAbs64:    abs64 (для mov r64, imm64 с символом)
+//   kGOTRel32: RIP-relative до конкретного GOT-слота
+// Методичка: гл. 12 (rel32), гл. 6 (RIP-relative)
 static void LinkRelocs(Context *context, PltGot *plt_got, uint64_t data_vaddr) {
     assert(context);
     assert(plt_got);
@@ -585,7 +648,7 @@ static void LinkRelocs(Context *context, PltGot *plt_got, uint64_t data_vaddr) {
     for (int i = 0; i < context->number_relocs; i++) {
         Relocation *rel = &context->relocs[i];
         uint64_t sym_addr = GetSymbolAddress(context, plt_got, rel, data_vaddr);
-        uint64_t patch_rip = ELF_BASE + HDRS_TOTAL + rel->offset + 4;
+        uint64_t patch_rip = ELF_BASE + HDRS_TOTAL + rel->offset + 4;   // +4: после rel32
 
         if (rel->type == kRel32) {
             if (!sym_addr) {
@@ -594,7 +657,6 @@ static void LinkRelocs(Context *context, PltGot *plt_got, uint64_t data_vaddr) {
             }
 
             Patch32(CODE, rel->offset, (uint32_t)(sym_addr - patch_rip));
-
         } else if (rel->type == kAbs64) {
             Patch64(CODE, rel->offset, sym_addr);
         } else if (rel->type == kGOTRel32) {
@@ -608,11 +670,14 @@ static void LinkRelocs(Context *context, PltGot *plt_got, uint64_t data_vaddr) {
     }
 }
 
+
 static void WriteElfHeader(FILE *file, uint64_t entry);
 static void WriteCodeSegmentPhdr(FILE *file, size_t seg1);
 static void WriteDataSegmentPhdr(FILE *file, size_t data_off, uint64_t data_vaddr, size_t data_size);
 static void WritePadding(FILE *file, size_t pad);
 
+// Собираем финальный ELF: Ehdr + 2 Phdr + код + padding + data
+// Методичка: гл. 16.3, 21.1
 static void WriteElf(Context *context, const char *path) {
     assert(context);
     assert(path);
@@ -634,77 +699,81 @@ static void WriteElf(Context *context, const char *path) {
 
     fwrite(context->code.data, 1, context->code.size, file);
 
-    WritePadding(file, data_off - seg1);
+    WritePadding(file, data_off - seg1);                    // выравнивание data на страницу
     fwrite(context->data.data, 1, context->data.size, file);
 
     fclose(file);
 }
 
+// Elf64_Ehdr: магия + класс + точка входа + offset Phdr. Методичка: гл. 17
 static void WriteElfHeader(FILE *file, uint64_t entry) {
     assert(file);
 
     Elf64_Ehdr eh = {};
 
-    eh.e_ident[EI_MAG0] = ELFMAG0;          // 0x7f
-    eh.e_ident[EI_MAG1] = ELFMAG1;          // 'E'
-    eh.e_ident[EI_MAG2] = ELFMAG2;          // 'L'
-    eh.e_ident[EI_MAG3] = ELFMAG3;          // 'F'
-    eh.e_ident[EI_CLASS] = ELFCLASS64;      // 64-  bit format
-    eh.e_ident[EI_DATA] = ELFDATA2LSB;      // little-endian
-    eh.e_ident[EI_VERSION] = EV_CURRENT;    // current version
-    eh.e_ident[EI_OSABI] = ELFOSABI_SYSV;   // UNIX System V ABI
+    eh.e_ident[EI_MAG0]    = ELFMAG0;          // 0x7F
+    eh.e_ident[EI_MAG1]    = ELFMAG1;          // 'E'
+    eh.e_ident[EI_MAG2]    = ELFMAG2;          // 'L'
+    eh.e_ident[EI_MAG3]    = ELFMAG3;          // 'F'
+    eh.e_ident[EI_CLASS]   = ELFCLASS64;
+    eh.e_ident[EI_DATA]    = ELFDATA2LSB;      // little-endian
+    eh.e_ident[EI_VERSION] = EV_CURRENT;
+    eh.e_ident[EI_OSABI]   = ELFOSABI_SYSV;
 
-    eh.e_type = ET_EXEC;                    // Executable
-    eh.e_machine = EM_X86_64;               // AMD x86-64
-    eh.e_version = EV_CURRENT;              // Current version
-    eh.e_entry = entry;                     //
-    eh.e_phoff = sizeof(Elf64_Ehdr);        //
-    eh.e_shoff = 0;                         //
-    eh.e_flags = 0;                         //
-    eh.e_ehsize = sizeof(Elf64_Ehdr);       //
-    eh.e_phentsize = sizeof(Elf64_Phdr);    //
-    eh.e_phnum = 2;                         // number of sections
-    eh.e_shentsize = 0;                     //
-    eh.e_shnum = 0;                         //
-    eh.e_shstrndx = 0;                      //
+    eh.e_type      = ET_EXEC;
+    eh.e_machine   = EM_X86_64;
+    eh.e_version   = EV_CURRENT;
+    eh.e_entry     = entry;
+    eh.e_phoff     = sizeof(Elf64_Ehdr);
+    eh.e_shoff     = 0;                        // секций нет
+    eh.e_flags     = 0;
+    eh.e_ehsize    = sizeof(Elf64_Ehdr);
+    eh.e_phentsize = sizeof(Elf64_Phdr);
+    eh.e_phnum     = 2;                        // code + data
+    eh.e_shentsize = 0;
+    eh.e_shnum     = 0;
+    eh.e_shstrndx  = 0;
 
     fwrite(&eh, sizeof(eh), 1, file);
 }
 
+// PT_LOAD для кода (R/W/X). Методичка: гл. 18.2, 18.3
 static void WriteCodeSegmentPhdr(FILE *file, size_t seg1) {
     assert(file);
 
     Elf64_Phdr page_header = {};
 
-    page_header.p_type = PT_LOAD;
-    page_header.p_flags = PF_R | PF_W | PF_X;
+    page_header.p_type   = PT_LOAD;
+    page_header.p_flags  = PF_R | PF_W | PF_X;
     page_header.p_offset = 0;
-    page_header.p_vaddr = ELF_BASE;
-    page_header.p_paddr = ELF_BASE;
+    page_header.p_vaddr  = ELF_BASE;
+    page_header.p_paddr  = ELF_BASE;
     page_header.p_filesz = seg1;
-    page_header.p_memsz = seg1;
-    page_header.p_align = PAGE_SIZE;
+    page_header.p_memsz  = seg1;
+    page_header.p_align  = PAGE_SIZE;
 
     fwrite(&page_header, sizeof(page_header), 1, file);
 }
 
+// PT_LOAD для data (R/W). Методичка: гл. 18.4 (offset vs vaddr)
 static void WriteDataSegmentPhdr(FILE *file, size_t data_off, uint64_t data_vaddr, size_t data_size) {
     assert(file);
 
     Elf64_Phdr page_header = {};
 
-    page_header.p_type = PT_LOAD;
-    page_header.p_flags = PF_R | PF_W;
+    page_header.p_type   = PT_LOAD;
+    page_header.p_flags  = PF_R | PF_W;
     page_header.p_offset = data_off;
-    page_header.p_vaddr = data_vaddr;
-    page_header.p_paddr = data_vaddr;
+    page_header.p_vaddr  = data_vaddr;
+    page_header.p_paddr  = data_vaddr;
     page_header.p_filesz = data_size;
-    page_header.p_memsz = data_size;
-    page_header.p_align = PAGE_SIZE;
+    page_header.p_memsz  = data_size;
+    page_header.p_align  = PAGE_SIZE;
 
     fwrite(&page_header, sizeof(page_header), 1, file);
 }
 
+// Дописываем pad нулей для выравнивания data-сегмента на страницу
 static void WritePadding(FILE *file, size_t pad) {
     assert(file);
     if (pad == 0) return;
@@ -719,6 +788,7 @@ static void WritePadding(FILE *file, size_t pad) {
     free(zeroes);
 }
 
+
 static void MakeLabel(char *buf, size_t size, const char *prefix, int number) {
     assert(buf);
     assert(prefix);
@@ -726,23 +796,28 @@ static void MakeLabel(char *buf, size_t size, const char *prefix, int number) {
     snprintf(buf, size, "__%s_%d", prefix, number);
 }
 
+// Выбираем условный jcc по операции сравнения. Опкоды лежат в методичке, гл. 12.1
+// Логика инвертирована: на условии "истина" мы НЕ прыгаем, а на "ложь"
+// прыгаем в else или конец цикла
 static uint8_t ChooseJCC(LangNode_t *cond) {
-    if (!cond || cond->type != kOperation) return 0x84;
+    if (!cond || cond->type != kOperation) return JCC_JE;
 
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wswitch-enum"
     switch (cond->value.operation) {
-        case kOperationA:  return 0x8E;
-        case kOperationAE: return 0x8C;
-        case kOperationB:  return 0x8D;
-        case kOperationBE: return 0x8F;
-        case kOperationE:  return 0x85;
-        case kOperationNE: return 0x84;
-        default:           return 0x84;
+        case kOperationA:  return JCC_JLE;      // >  не прыгаем; иначе jle
+        case kOperationAE: return JCC_JL;       // >= не прыгаем; иначе jl
+        case kOperationB:  return JCC_JGE;      // <  не прыгаем; иначе jge
+        case kOperationBE: return JCC_JG;       // <= не прыгаем; иначе jg
+        case kOperationE:  return JCC_JNE;      // == не прыгаем; иначе jne
+        case kOperationNE: return JCC_JE;       // != не прыгаем; иначе je
+        default:           return JCC_JE;
     }
     #pragma GCC diagnostic pop
 }
 
+// Считаем локальные слоты (включая массивы) в теле функции,
+// заодно заполняем pos_in_code для каждой переменной
 static void CountLocalSlots(LangNode_t *node, VariableArr *arr, AsmInfo *info) {
     if (!node) return;
 
@@ -779,6 +854,7 @@ static void CountLocalSlots(LangNode_t *node, VariableArr *arr, AsmInfo *info) {
     CountLocalSlots(node->right, arr, info);
 }
 
+// Ищем slot переменной по узлу AST
 static int GetVarSlot(VariableArr *arr, LangNode_t *node) {
     assert(arr);
     assert(node);
@@ -809,7 +885,7 @@ static int GetVarSlot(VariableArr *arr, LangNode_t *node) {
 static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *arr, AsmInfo *info, Sub *sub);
 static void CodeGenerateStatement(Context *context, LangNode_t *stmt, VariableArr *arr, AsmInfo *info, Sub *sub);
 
-// pop rax; mov [rcx_addr_of(var)], rax
+// pop rax; rcx = &var; mov [rcx], rax: снимаем верхушку стека в переменную
 static void CodeGeneratePopToVar(Context *context, VariableArr *arr, LangNode_t *node, AsmInfo *info, Sub *sub) {
     assert(context);
     assert(arr);
@@ -819,12 +895,12 @@ static void CodeGeneratePopToVar(Context *context, VariableArr *arr, LangNode_t 
     (void)info;
 
     int slot = GetVarSlot(arr, node);
-    POP(kRAX);                              // pop rax
+    POP(kRAX);
     VAR_ADDR(slot, sub->param_count);
-
-    MOV_MEM_R(kRCX, kRAX);                  // mov [rcx], rax
+    MOV_MEM_R(kRCX, kRAX);
 }
 
+// Кладём на стек адрес переменной (для &var и индексирования)
 static void CodeGenerateAddrOf(Context *context, LangNode_t *var, VariableArr *arr, AsmInfo *info, Sub *sub) {
     assert(context);
     assert(var);
@@ -834,10 +910,11 @@ static void CodeGenerateAddrOf(Context *context, LangNode_t *var, VariableArr *a
     (void)info;
 
     int slot = GetVarSlot(arr, var);
-    VAR_ADDR(slot, sub->param_count);   // rcx = lea [rbp + param_count]
-    PUSH(kRCX);                         // push rcx
+    VAR_ADDR(slot, sub->param_count);
+    PUSH(kRCX);
 }
 
+// Разыменование указателя: на верхушке стека был адрес, кладём вместо него значение по этому адресу
 static void CodeGenerateDeref(Context *context, LangNode_t *ptr, VariableArr *arr, AsmInfo *info, Sub *sub) {
     assert(context);
     assert(ptr);
@@ -846,10 +923,11 @@ static void CodeGenerateDeref(Context *context, LangNode_t *ptr, VariableArr *ar
     assert(sub);
 
     CodeGenerateAddrOf(context, ptr, arr, info, sub);
-    POP(kRCX);                          // pop rcx
-    PUSH_MEM(kRCX);                     // push qword [rcx]
+    POP(kRCX);
+    PUSH_MEM(kRCX);
 }
 
+// *p = value: справа на стеке value, слева узел разыменования
 static void CodeGenerateAddrAssign(Context *context, LangNode_t *deref_node, VariableArr *arr, AsmInfo *info, Sub *sub) {
     assert(context);
     assert(deref_node);
@@ -858,12 +936,13 @@ static void CodeGenerateAddrAssign(Context *context, LangNode_t *deref_node, Var
     assert(sub);
 
     CodeGenerateExpr(context, deref_node->left, arr, info, sub);
-    POP(kRCX);                          // pop rcx
-    POP(kRAX);                          // pop rax
-
-    MOV_MEM_R(kRCX, kRAX);              // mov [rcx], rax
+    POP(kRCX);                          // адрес
+    POP(kRAX);                          // значение
+    MOV_MEM_R(kRCX, kRAX);
 }
 
+// Бинарная операция: rax = rax `op` rbx, потом push rax
+// IDIV затирает rdx (cqo делает sign-extend rax в rdx:rax). Методичка, гл. 10.5
 static void CodeGenerateBinOp(Context *context, LangNode_t *node, VariableArr *arr, AsmInfo *info, Sub *sub, OperationTypes op) {
     assert(context);
     assert(node);
@@ -873,36 +952,40 @@ static void CodeGenerateBinOp(Context *context, LangNode_t *node, VariableArr *a
 
     CodeGenerateExpr(context, node->left, arr, info, sub);
     CodeGenerateExpr(context, node->right, arr, info, sub);
-    POP(kRBX);                          // pop rbx
-    POP(kRAX);                          // pop rax
+    POP(kRBX);
+    POP(kRAX);
 
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wswitch-enum"
     switch (op) {
-        case kOperationAdd: ADD_RR (kRAX, kRBX); break; // add rax, rbx
-        case kOperationSub: SUB_RR (kRAX, kRBX); break; // sub rax, rbx
-        case kOperationMul: IMUL_RR(kRAX, kRBX); break; // imul rax, rbx
-        case kOperationDiv: IDIV_R (kRBX);       break; // cqo; idiv rbx
+        case kOperationAdd: ADD_RR (kRAX, kRBX); break;
+        case kOperationSub: SUB_RR (kRAX, kRBX); break;
+        case kOperationMul: IMUL_RR(kRAX, kRBX); break;
+        case kOperationDiv: IDIV_R (kRBX);       break;
 
         default: break;
     }
     #pragma GCC diagnostic pop
 
-    PUSH(kRAX);                                         // push rax
+    PUSH(kRAX);
 }
+
+// Сохраняем и восстанавливаем rsp через r13. Эту пару зовём вокруг
+// ALIGN_STACK + CALL в библиотеку, чтобы корректно вернуть стек
+// после сдвига от and rsp, -16
 
 static void EmitSaveRspToR13(Context *context) {
     assert(context);
-
-    MOV_RR(kR13, kRSP);   // mov r13, rsp
+    MOV_RR(kR13, kRSP);
 }
 
 static void EmitRestoreRspFromR13(Context *context) {
     assert(context);
-
-    MOV_RR(kRSP, kR13);   // mov rsp, r13
+    MOV_RR(kRSP, kR13);
 }
 
+// print(int): rsi = значение, rdi = "%d", xor eax (нет xmm-args)
+// Методичка: гл. 14.1, 14.3
 static void CodeGeneratePrintInt(Context *context, LangNode_t *node, VariableArr *arr, AsmInfo *info, Sub *sub) {
     assert(context);
     assert(node);
@@ -911,16 +994,17 @@ static void CodeGeneratePrintInt(Context *context, LangNode_t *node, VariableArr
     assert(sub);
 
     CodeGenerateExpr(context, node->left, arr, info, sub);
-    POP(kRSI);                                          // pop rsi
-    MOV_DATA(kRDI, "fmt_int");                          // mov rdi, <addr of label fmt_int>
+    POP(kRSI);
+    MOV_DATA(kRDI, "fmt_int");
 
-    SAVE_RSP_R13();                                     // mov r13, rsp
+    SAVE_RSP_R13();
     ALIGN_STACK();
-    XOR_EAX();                                          // xor eax, eax
-    CALL("my_printf");                                  // call <addr of label "my_printf"> -> from standard mylib.elf
-    RESTORE_RSP_R13();                                  // mov rsp, r13
+    XOR_EAX();
+    CALL("my_printf");
+    RESTORE_RSP_R13();
 }
 
+// print(char): то же, но формат "%c"
 static void CodeGeneratePrintChar(Context *context, LangNode_t *node, VariableArr *arr, AsmInfo *info, Sub *sub) {
     assert(context);
     assert(node);
@@ -929,26 +1013,28 @@ static void CodeGeneratePrintChar(Context *context, LangNode_t *node, VariableAr
     assert(sub);
 
     CodeGenerateExpr(context, node->left, arr, info, sub);
-    POP(kRSI);                                          // pop rsi
-    MOV_DATA(kRDI, "fmt_char");                         // mov rdi, <addr of label fmt_char>
+    POP(kRSI);
+    MOV_DATA(kRDI, "fmt_char");
 
-    SAVE_RSP_R13();                                     // mov r13, rsp
+    SAVE_RSP_R13();
     ALIGN_STACK();
-    XOR_EAX();                                          // xor eax, eax
-    CALL("my_printf");                                  // call <addr of label "my_printf"> -> from standard mylib.elf
-    RESTORE_RSP_R13();                                  // mov rsp, r13
+    XOR_EAX();
+    CALL("my_printf");
+    RESTORE_RSP_R13();
 }
 
+// read(int): значение возвращается в rax, потом push rax
 static void CodeGenerateReadInt(Context *context) {
     assert(context);
 
-    SAVE_RSP_R13();                                     // mov r13, rsp
+    SAVE_RSP_R13();
     ALIGN_STACK();
-    CALL("my_scanf");                                   // mov rdi, <addr of label "my_scanf"> -> from standard mylib.elf 
-    RESTORE_RSP_R13();                                  // mov rsp, r13
-    PUSH(kRAX);                                         // push rax
+    CALL("my_scanf");
+    RESTORE_RSP_R13();
+    PUSH(kRAX);
 }
 
+// draw(arr): rdi = адрес массива
 static void CodeGenerateDraw(Context *context, LangNode_t *node, VariableArr *arr, AsmInfo *info, Sub *sub) {
     assert(context);
     assert(node);
@@ -957,13 +1043,16 @@ static void CodeGenerateDraw(Context *context, LangNode_t *node, VariableArr *ar
     assert(sub);
 
     CodeGenerateAddrOf(context, node->left, arr, info, sub);
-    POP(kRDI);                                          // pop rdi
-    SAVE_RSP_R13();                                     // mov r13, rsp
+    POP(kRDI);
+    SAVE_RSP_R13();
     ALIGN_STACK();
-    CALL("my_draw");                                    // call <addr of label "my_draw"> -> from standard mylib.elf
-    RESTORE_RSP_R13();                                  // mov rsp, r13
+    CALL("my_draw");
+    RESTORE_RSP_R13();
 }
 
+// arr[index] = value: rax = value, rdi = index;
+// адрес ячейки = base - 8*index, где base = lea [rbp - 8*(local_index+1)]
+// Методичка: гл. 5.1, 11
 static void CodeGenerateArrAssign(Context *context, LangNode_t *stmt, VariableArr *arr, AsmInfo *info, Sub *sub) {
     assert(context);
     assert(stmt);
@@ -973,22 +1062,20 @@ static void CodeGenerateArrAssign(Context *context, LangNode_t *stmt, VariableAr
 
     CodeGenerateExpr(context, stmt->right, arr, info, sub);          // stack: [value]
     CodeGenerateExpr(context, stmt->left->right, arr, info, sub);    // stack: [value, index]
-    POP(kRDI);                                                       // rdi = index
-    POP(kRAX);                                                       // rax = value
+    POP(kRDI);
+    POP(kRAX);
 
     int slot = GetVarSlot(arr, stmt->left->left);
     int local_index = slot - sub->param_count;
-
-    // rcx = lea [rbp - 8 * (local_index + 1)]
     int32_t base_disp = -8 * (local_index + 1);
-    LEA_RCX_RBP(base_disp);                                         // lea rcx, [rbp + base_disp]
 
-    SHL_R_IMM8(kRDI, 3);                                            // shl rdi, 3
-    SUB_RR(kRCX, kRDI);                                             // sub rcx, rdi
-
-    MOV_MEM_R(kRCX, kRAX);                                          // mov [rcx], rax
+    LEA_RCX_RBP(base_disp);
+    SHL_R_IMM8(kRDI, 3);                // rdi *= 8
+    SUB_RR(kRCX, kRDI);                 // rcx = base - 8*index
+    MOV_MEM_R(kRCX, kRAX);
 }
 
+// Объявление массива: зануляем size слотов подряд начиная с base_slot
 static void CodeGenerateArrDecl(Context *context, LangNode_t *stmt, VariableArr *arr, AsmInfo *info, Sub *sub) {
     assert(context);
     assert(stmt);
@@ -1002,11 +1089,17 @@ static void CodeGenerateArrDecl(Context *context, LangNode_t *stmt, VariableArr 
 
     for (int i = 0; i < size; i++) {
         int slot = base_slot + i;
-        VAR_ADDR(slot, sub->param_count);               // rcx = lea [rbp + param_count]
-        MOV_MEM_IMM32(kRCX, 0);                         // mov qword ptr [rcx], 0
+        VAR_ADDR(slot, sub->param_count);
+        MOV_MEM_IMM32(kRCX, 0);
     }
 }
 
+// if (cond) { then } [else { else }]:
+//   считаем cond, потом cmp rax, rbx, потом jcc else_label
+//   then; jmp end_label
+//   else_label: else
+//   end_label:
+// Forward-переходы патчатся через kRel32-релокации. Методичка: гл. 12.2
 static void CodeGenerateIf(Context *context, LangNode_t *stmt, VariableArr *arr, AsmInfo *info, Sub *sub) {
     assert(context);
     assert(stmt);
@@ -1020,15 +1113,15 @@ static void CodeGenerateIf(Context *context, LangNode_t *stmt, VariableArr *arr,
     char else_label[DEFAULT_LABEL_SIZE] = {}, end_label[DEFAULT_LABEL_SIZE] = {};
 
     MakeLabel(else_label, sizeof(else_label), "else", else_number);
-    MakeLabel(end_label,  sizeof(end_label), "end_if", if_number);
+    MakeLabel(end_label,  sizeof(end_label),  "end_if", if_number);
 
     CodeGenerateExpr(context, cond->left, arr, info, sub);
     CodeGenerateExpr(context, cond->right, arr, info, sub);
-    POP(kRBX);                                          // pop rbx
-    POP(kRAX);                                          // pop rax
-    CMP_RAX_RBX();                                      // cmp rax, rbx
+    POP(kRBX);
+    POP(kRAX);
+    CMP_RAX_RBX();
 
-    JCC(ChooseJCC(cond), else_label);                   // jcc
+    JCC(ChooseJCC(cond), else_label);
 
     if (has_else) {
         CodeGenerateStatement(context, stmt->right->left, arr, info, sub);
@@ -1036,7 +1129,7 @@ static void CodeGenerateIf(Context *context, LangNode_t *stmt, VariableArr *arr,
         CodeGenerateStatement(context, stmt->right, arr, info, sub);
     }
 
-    JMP(end_label);                                     // jmp <addr of label called end_label>
+    JMP(end_label);
     LabelAdd(context, else_label, CODE->size);
 
     if (has_else) {
@@ -1046,6 +1139,10 @@ static void CodeGenerateIf(Context *context, LangNode_t *stmt, VariableArr *arr,
     LabelAdd(context, end_label, CODE->size);
 }
 
+// while (cond) { body }:
+//   start: считаем cond, потом cmp, потом jcc end
+//          body; jmp start
+//   end:
 static void CodeGenerateWhile(Context *context, LangNode_t *stmt, VariableArr *arr, AsmInfo *info, Sub *sub) {
     assert(context);
     assert(stmt);
@@ -1059,21 +1156,22 @@ static void CodeGenerateWhile(Context *context, LangNode_t *stmt, VariableArr *a
     char end_label[DEFAULT_LABEL_SIZE] = {};
 
     MakeLabel(start_label, sizeof(start_label), "wstart", start_number);
-    MakeLabel(end_label, sizeof(end_label), "wend", end_number);
+    MakeLabel(end_label,   sizeof(end_label),   "wend",   end_number);
 
     LabelAdd(context, start_label, CODE->size);
     CodeGenerateExpr(context, stmt->left->left, arr, info, sub);
     CodeGenerateExpr(context, stmt->left->right, arr, info, sub);
-    POP(kRBX);                                         // pop rbx
-    POP(kRAX);                                         // pop rax
+    POP(kRBX);
+    POP(kRAX);
 
-    CMP_RAX_RBX();                                     // cmp rax, rbx
+    CMP_RAX_RBX();
     JCC(ChooseJCC(stmt->left), end_label);
     CodeGenerateStatement(context, stmt->right, arr, info, sub);
-    JMP(start_label);                                  // jmp <addr with label called start_label>
+    JMP(start_label);
     LabelAdd(context, end_label, CODE->size);
 }
 
+// return expr: кладём значение в rax, эпилог, ret
 static void CodeGenerateReturn(Context *context, LangNode_t *stmt, VariableArr *arr, AsmInfo *info, Sub *sub) {
     assert(context);
     assert(stmt);
@@ -1082,11 +1180,13 @@ static void CodeGenerateReturn(Context *context, LangNode_t *stmt, VariableArr *
     assert(sub);
 
     CodeGenerateExpr(context, stmt->left, arr, info, sub);
-    POP(kRAX);                                      // pop rax
-    EPILOGUE();                                     // do prologue things
-    RET();                                          // ret
+    POP(kRAX);
+    EPILOGUE();
+    RET();
 }
 
+// Аргументы кладутся на стек в обратном порядке (правый первый, левый последний),
+// чтобы при чтении через [rbp + 16 + 8*i] параметр 0 был ближе к rbp
 static void CodeGenerateParamsToStack(Context *context, LangNode_t *args, VariableArr *arr, AsmInfo *info, Sub *sub) {
     assert(context);
     assert(arr);
@@ -1108,6 +1208,7 @@ static void CodeGenerateParamsToStack(Context *context, LangNode_t *args, Variab
     }
 }
 
+// Кодоген выражения: результат всегда оказывается на верхушке стека
 static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *arr, AsmInfo *info, Sub *sub) {
     assert(context);
     assert(arr);
@@ -1117,18 +1218,20 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *ar
 
     switch (expr->type) {
         case kNumber: {
+            // Литерал: imm32 короче (7 байт) если влезает, иначе imm64 (10 байт)
+            // Методичка: гл. 8.1, 8.2
             int64_t number = (int64_t)expr->value.number;
             if (number >= INT32_MIN && number <= INT32_MAX) {
                 MOV_R_IMM32(kRAX, number);
             } else {
                 MOV_R_IMM64(kRAX, number);
             }
-
             PUSH(kRAX);
             break;
         }
 
         case kVariable: {
+            // push qword [&var]
             int slot = GetVarSlot(arr, expr);
             VAR_ADDR(slot, sub->param_count);
             PUSH_MEM(kRCX);
@@ -1141,34 +1244,33 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *ar
             switch (expr->value.operation) {
                 case kOperationAdd:
                     CodeGenerateBinOp(context, expr, arr, info, sub, kOperationAdd); break;
-
                 case kOperationSub:
                     CodeGenerateBinOp(context, expr, arr, info, sub, kOperationSub); break;
-
                 case kOperationMul:
                     CodeGenerateBinOp(context, expr, arr, info, sub, kOperationMul); break;
-
                 case kOperationDiv:
                     CodeGenerateBinOp(context, expr, arr, info, sub, kOperationDiv); break;
 
                 case kOperationSQRT:
+                    // sqrt через xmm0: int, double, sqrt, обратно int
+                    // Опкоды SSE лежат в методичке, гл. 10.12
                     CodeGenerateExpr(context, expr->left, arr, info, sub);
                     POP(kRAX);
 
                     CVTSI2SD_XMM0_R(kRAX);   // xmm0 = (double)rax
                     SQRTSD_XMM_XMM(0, 0);    // xmm0 = sqrt(xmm0)
-                    CVTTSD2SI_R_XMM0(kRAX);  // rax = (int64_t)xmm0
+                    CVTTSD2SI_R_XMM0(kRAX);  // rax  = (int64_t)xmm0 (truncate)
 
                     PUSH(kRAX);
                     break;
 
                 case kOperationCallAddr:
                     CodeGenerateAddrOf(context, expr->left, arr, info, sub); break;
-
                 case kOperationGetAddr:
                     CodeGenerateDeref(context, expr->left, arr, info, sub); break;
 
                 case kOperationCall: {
+                    // Кладём аргументы, делаем вызов, чистим стек, кладём результат
                     const char *callee = arr->var_array[expr->left->value.pos].variable_name;
                     int num_args = CountArgs(expr->right);
                     CodeGenerateParamsToStack(context, expr->right, arr, info, sub);
@@ -1182,18 +1284,19 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *ar
                 }
 
                 case kOperationArrPos: {
+                    // arr[i] : push qword [base - 8*i]
+                    // Методичка: гл. 5 (адресация массивов)
                     int slot = GetVarSlot(arr, expr->left);
                     int local_index = slot - sub->param_count;
 
                     CodeGenerateExpr(context, expr->right, arr, info, sub);
-                    POP(kRDI);              // rdi = index
+                    POP(kRDI);
 
-                    // rcx = lea [rbp - 8 * (local_index + 1)]
                     int32_t base_disp = -8 * (local_index + 1);
                     LEA_RCX_RBP(base_disp);
-                    SHL_R_IMM8(kRDI, 3); // rdi <<= 3
-                    SUB_RR(kRCX, kRDI);  // rcx -= rdi
-                    PUSH_MEM(kRCX);      // push qword [rcx]
+                    SHL_R_IMM8(kRDI, 3);
+                    SUB_RR(kRCX, kRDI);
+                    PUSH_MEM(kRCX);
                     break;
                 }
 
@@ -1207,6 +1310,8 @@ static void CodeGenerateExpr(Context *context, LangNode_t *expr, VariableArr *ar
     }
 }
 
+// Кодоген statement'а: ничего не оставляет на стеке (кроме случаев,
+// когда сам statement это выражение в default-ветке)
 static void CodeGenerateStatement(Context *context, LangNode_t *stmt, VariableArr *arr, AsmInfo *info, Sub *sub) {
     assert(context);
     assert(arr);
@@ -1232,18 +1337,19 @@ static void CodeGenerateStatement(Context *context, LangNode_t *stmt, VariableAr
                     break;
 
                 case kOperationCall: {
+                    // Вызов как statement: результат отбрасываем
                     const char *callee = arr->var_array[stmt->left->value.pos].variable_name;
                     int num_args = CountArgs(stmt->right);
                     CodeGenerateParamsToStack(context, stmt->right, arr, info, sub);
                     CALL(callee);
                     if (num_args > 0) {
-                        ADD_R_IMM(kRSP, (int64_t)(num_args * 8)); // add rsp, (num_args * 8)
+                        ADD_R_IMM(kRSP, (int64_t)(num_args * 8));
                     }
-
                     break;
                 }
 
                 case kOperationIs:
+                    // Присваивание: левая часть может быть массивом, разыменованием или переменной
                     if (IsThatOperation(stmt->left, kOperationArrPos)) {
                         CodeGenerateArrAssign(context, stmt, arr, info, sub);
                         break;
@@ -1258,17 +1364,9 @@ static void CodeGenerateStatement(Context *context, LangNode_t *stmt, VariableAr
                     CodeGenerateStatement(context, stmt->left, arr, info, sub);
                     break;
 
-                case kOperationReturn:
-                    CodeGenerateReturn(context, stmt, arr, info, sub);
-                    break;
-
-                case kOperationWrite:
-                    CodeGeneratePrintInt(context, stmt, arr, info, sub);
-                    break;
-
-                case kOperationWriteChar:
-                    CodeGeneratePrintChar(context, stmt, arr, info, sub);
-                    break;
+                case kOperationReturn:    CodeGenerateReturn(context, stmt, arr, info, sub); break;
+                case kOperationWrite:     CodeGeneratePrintInt(context, stmt, arr, info, sub); break;
+                case kOperationWriteChar: CodeGeneratePrintChar(context, stmt, arr, info, sub); break;
 
                 case kOperationRead:
                     CodeGenerateReadInt(context);
@@ -1280,26 +1378,16 @@ static void CodeGenerateStatement(Context *context, LangNode_t *stmt, VariableAr
                     CodeGenerateStatement(context, stmt->right, arr, info, sub);
                     break;
 
-                case kOperationIf:
-                    CodeGenerateIf(context, stmt, arr, info, sub);
-                    break;
-
-                case kOperationWhile:
-                    CodeGenerateWhile(context, stmt, arr, info, sub);
-                    break;
+                case kOperationIf:    CodeGenerateIf(context, stmt, arr, info, sub); break;
+                case kOperationWhile: CodeGenerateWhile(context, stmt, arr, info, sub); break;
 
                 case kOperationTernary:
                     CodeGenerateStatement(context, stmt->left->right, arr, info, sub);
                     CodeGenerateStatement(context, stmt->left->left, arr, info, sub);
                     break;
 
-                case kOperationArrDecl:
-                    CodeGenerateArrDecl(context, stmt, arr, info, sub);
-                    break;
-
-                case kOperationDraw:
-                    CodeGenerateDraw(context, stmt, arr, info, sub);
-                    break;
+                case kOperationArrDecl: CodeGenerateArrDecl(context, stmt, arr, info, sub); break;
+                case kOperationDraw:    CodeGenerateDraw(context, stmt, arr, info, sub); break;
 
                 default:
                     CodeGenerateExpr(context, stmt, arr, info, sub);
@@ -1314,8 +1402,8 @@ static void CodeGenerateStatement(Context *context, LangNode_t *stmt, VariableAr
 
         case kNumber: {
             int64_t number = (int64_t)stmt->value.number;
-            MOV_R_IMM32(kRAX, number);                      // mov rax, number
-            PUSH(kRAX);                                     // push rax
+            MOV_R_IMM32(kRAX, number);
+            PUSH(kRAX);
             break;
         }
 
@@ -1324,6 +1412,8 @@ static void CodeGenerateStatement(Context *context, LangNode_t *stmt, VariableAr
     }
 }
 
+// Параметрам функции назначаются slot'ы 0..param_count-1
+// (адреса [rbp + 16 + 8*slot])
 static void AssignParamSlots(LangNode_t *args, VariableArr *arr, int *slot_counter) {
     if (!args) return;
 
@@ -1350,6 +1440,8 @@ static void AssignParamSlots(LangNode_t *args, VariableArr *arr, int *slot_count
     AssignParamSlots(args->right, arr, slot_counter);
 }
 
+// Кодоген одной функции: пролог, тело, эпилог, потом ret (или call my_exit для main)
+// frame_size округляется до 16 ради ABI (методичка: гл. 14.3, 14.5)
 static void CodeGenerateFunction(Context *context, LangNode_t *func_node, VariableArr *arr, AsmInfo *info) {
     assert(context);
     assert(arr);
@@ -1375,7 +1467,6 @@ static void CodeGenerateFunction(Context *context, LangNode_t *func_node, Variab
         slot_counter = param_count;
     }
 
-
     info->counter = slot_counter;
     CountLocalSlots(body, arr, info);
     int total_slots = info->counter;
@@ -1397,12 +1488,13 @@ static void CodeGenerateFunction(Context *context, LangNode_t *func_node, Variab
     EPILOGUE();
 
     if (is_main) {
-        CALL("my_exit");                // call <addr label> ("my_exit")
+        CALL("my_exit");
     } else {
-        RET();                          // ret
+        RET();
     }
 }
 
+// Идём по дереву верхнего уровня и пишем код всех функций по очереди
 static void CodeGenerateProgram(Context *context, LangNode_t *root, VariableArr *arr, AsmInfo *info) {
     assert(context);
     assert(arr);
@@ -1424,6 +1516,8 @@ static void CodeGenerateProgram(Context *context, LangNode_t *root, VariableArr 
     }
 }
 
+
+// Читаем весь файл в память. Кто вызвал, тот и должен free()'нуть результат
 static uint8_t* ReadELFToMemory(const char *path, long *out_size) {
     assert(path);
     assert(out_size);
@@ -1471,7 +1565,8 @@ typedef struct {
     int text_index;
 } FoundSections;
 
-
+// Собираем offset'ы R_X86_64_64-релокаций внутри .text (относительно
+// её начала). Методичка: гл. 19.2 (SHT_RELA)
 static int LoadRelocations(LibBlob *blob, uint8_t *file_buf, Elf64_Shdr *rela_sh, Elf64_Shdr *text_sh) {
     assert(blob);
     assert(file_buf);
@@ -1480,39 +1575,41 @@ static int LoadRelocations(LibBlob *blob, uint8_t *file_buf, Elf64_Shdr *rela_sh
 
     blob->relocs = NULL;
     blob->reloc_count = 0;
-    
+
     if (!rela_sh) return 1;
-    
+
     Elf64_Rela *rels = (Elf64_Rela *)(file_buf + rela_sh->sh_offset);
     size_t rel_count = rela_sh->sh_size / sizeof(Elf64_Rela);
-    
+
     if (rel_count == 0) return 1;
-    
+
     blob->relocs = (uint32_t *) calloc (rel_count, sizeof(uint32_t));
     if (!blob->relocs) {
         perror("Error calloc relocs.\n");
         return 0;
     }
-    
+
     for (size_t i = 0; i < rel_count; i++) {
         if (ELF64_R_TYPE(rels[i].r_info) == R_X86_64_64) {
-            blob->relocs[blob->reloc_count++] =  (uint32_t)(rels[i].r_offset - text_sh->sh_addr);
+            blob->relocs[blob->reloc_count++] = (uint32_t)(rels[i].r_offset - text_sh->sh_addr);
         }
     }
-    
+
     return 1;
 }
 
+// Ищем .text / .symtab / .strtab / .rela.text по имени. Имена секций
+// читаются из .shstrtab. Методичка: гл. 19.5
 static FoundSections FindSections(Elf64_Ehdr *elf_header, Elf64_Shdr *section_header, const char *shstr) {
     assert(elf_header);
     assert(section_header);
     assert(shstr);
 
     FoundSections found = {NULL, NULL, NULL, NULL, -1};
-    
+
     for (int i = 0; i < elf_header->e_shnum; i++) {
         const char *name = shstr + section_header[i].sh_name;
-        
+
         if (strcmp(name, ".text") == 0) {
             found.text = &section_header[i];
             found.text_index = i;
@@ -1524,10 +1621,11 @@ static FoundSections FindSections(Elf64_Ehdr *elf_header, Elf64_Shdr *section_he
             found.rela = &section_header[i];
         }
     }
-    
+
     return found;
 }
 
+// Ищем offset'ы стандартных функций в .text (относительно начала .text)
 static int FindStandardSymbols(Elf64_Sym *syms, size_t sym_count, const char *strtab, Elf64_Shdr *text_sh, LibBlob *blob) {
     assert(syms);
     assert(sym_count);
@@ -1536,12 +1634,12 @@ static int FindStandardSymbols(Elf64_Sym *syms, size_t sym_count, const char *st
     assert(blob);
 
     const char *want_functions[] = {"my_printf", "my_scanf", "my_exit", "my_draw"};
-    uint32_t *out_offs[] = {&blob->printf_off, &blob->scanf_off,  &blob->exit_off, &blob->draw_off};
+    uint32_t *out_offs[] = {&blob->printf_off, &blob->scanf_off, &blob->exit_off, &blob->draw_off};
     int found[STANDART_FUNCTIONS_NUMBER] = {};
-    
+
     for (size_t i = 0; i < sym_count; i++) {
         const char *name = strtab + syms[i].st_name;
-        
+
         for (int k = 0; k < STANDART_FUNCTIONS_NUMBER; k++) {
             if (!found[k] && strcmp(name, want_functions[k]) == 0) {
                 *out_offs[k] = (uint32_t)(syms[i].st_value - text_sh->sh_addr);
@@ -1549,7 +1647,7 @@ static int FindStandardSymbols(Elf64_Sym *syms, size_t sym_count, const char *st
             }
         }
     }
-    
+
     for (int k = 0; k < STANDART_FUNCTIONS_NUMBER; k++) {
         if (!found[k]) return 0;
     }
@@ -1557,6 +1655,11 @@ static int FindStandardSymbols(Elf64_Sym *syms, size_t sym_count, const char *st
     return 1;
 }
 
+// Полная загрузка my_lib.elf:
+//   - проверяем ELF64-магию (методичка: гл. 17.2);
+//   - находим нужные секции;
+//   - копируем .text в blob->data;
+//   - запоминаем offset'ы стандартных функций и список релокаций
 static int LoadLib(LibBlob *blob, const char *path) {
     assert(blob);
     assert(path);
@@ -1566,19 +1669,22 @@ static int LoadLib(LibBlob *blob, const char *path) {
     if (!file_buf) return 0;
 
     Elf64_Ehdr *elf_header = (Elf64_Ehdr *)file_buf;
-    if (memcmp(elf_header->e_ident, ELFMAG, SELFMAG) != 0 || elf_header->e_ident[EI_CLASS] != ELFCLASS64) { // ELFMAG = 0x7ELF // SELFMAG = 4
-        fprintf(stderr, "%s: not ELF64.\n", path);              // ^ this thing was really important for me as I didn't change the file name
+    // ELFMAG = "\x7FELF", SELFMAG = 4
+    if (memcmp(elf_header->e_ident, ELFMAG, SELFMAG) != 0
+            || elf_header->e_ident[EI_CLASS] != ELFCLASS64) {
+        fprintf(stderr, "%s: not ELF64.\n", path);
         free(file_buf);
         return 0;
     }
 
-    Elf64_Shdr *section_header = (Elf64_Shdr *)(file_buf + elf_header->e_shoff);                            // this is the 
-    const char *shstr = (const char *)(file_buf + section_header[elf_header->e_shstrndx].sh_offset);        // e_shstrndx -> index of zero elem in s_table
-    // so there we get .shstrtab pointer
+    // shstrtab: секция, в которой лежат имена остальных секций;
+    // её индекс хранится в e_shstrndx (методичка: гл. 17.6, 19.5)
+    Elf64_Shdr *section_header = (Elf64_Shdr *)(file_buf + elf_header->e_shoff);
+    const char *shstr = (const char *)(file_buf + section_header[elf_header->e_shstrndx].sh_offset);
 
     FoundSections found = FindSections(elf_header, section_header, shstr);
     if (!found.text || !found.symtab || !found.strtab) {
-        fprintf(stderr, "%s: AAAAA missing required ELF sections.\n", path);
+        fprintf(stderr, "%s: missing required ELF sections.\n", path);
         free(file_buf);
         return 0;
     }
@@ -1597,7 +1703,7 @@ static int LoadLib(LibBlob *blob, const char *path) {
     Elf64_Sym *syms = (Elf64_Sym *)(file_buf + found.symtab->sh_offset);
     size_t sym_count = found.symtab->sh_size / sizeof(Elf64_Sym);
     const char *strtab = (const char *)(file_buf + found.strtab->sh_offset);
-    
+
     if (!FindStandardSymbols(syms, sym_count, strtab, found.text, blob)) {
         fprintf(stderr, "%s: standard symbol not found.\n", path);
         free(blob->data);

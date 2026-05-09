@@ -1,6 +1,34 @@
 #ifndef DSL_H
 #define DSL_H
 
+#define REX_BASE         0x40
+#define REX_W_BIT        0x08
+#define REX_R_BIT        0x04
+#define REX_X_BIT        0x02
+#define REX_B_BIT        0x01
+#define REX_W_BYTE       0x48
+#define REX_B_BYTE       0x41
+
+#define OP_MOV_R64_IMM64    0xB8
+#define OP_MOV_RM_R         0x89
+#define OP_PUSH_R           0x50
+#define OP_POP_R            0x58
+#define OP_ADD_RM_IMM8      0x83
+#define OP_ADD_RM_IMM32     0x81
+#define OP_CALL_REL32       0xE8
+#define OP_JMP_REL32        0xE9
+#define OP_TWO_BYTE_PREFIX  0x0F
+#define OP_RET              0xC3
+#define OP_LEA              0x8D
+#define IMM8_MINUS_16       0xF0
+
+#define JCC_JE   0x84
+#define JCC_JNE  0x85
+#define JCC_JL   0x8C
+#define JCC_JGE  0x8D
+#define JCC_JLE  0x8E
+#define JCC_JG   0x8F
+
 #define BYTE(byte)                  Emit8(CODE,  (uint8_t)(byte))
 #define DWORD(double_word)          Emit32(CODE, (uint32_t)(double_word))
 #define QWORD(quad_word)            Emit64(CODE, (uint64_t)(quad_word))
@@ -124,7 +152,6 @@
 
 #define LEA_RCX_RBP(disp)     EmitLeaRcxRbp(context, (int32_t)(disp))
 #define VAR_ADDR(slot, pc)    EmitVarAddrBySlot(context, slot, pc)
-// #define MOV_DATA(reg, symbol) EmitMovData(context, reg, symbol);
 
 #define ALIGN_STACK()         EmitAlignStack(context)
 #define PROLOGUE(frame)       EmitPrologue(context, frame)
