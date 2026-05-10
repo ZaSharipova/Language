@@ -426,21 +426,56 @@ static void GenFunctionCall(LangNode_t *node, FILE *out, VariableArr *arr, int i
     fprintf(out, ")%s\n", PrintCodeNameFromTable(kOperationThen));
 }
 
-static const char *magic_prefixes[] = {
-    "arcane", "crystal", "dragon", "elder", "ethereal", "forgotten",
-    "hidden", "lost", "mystic", "phantom", "shadow", "spirit",
-    "stellar", "tempest", "void", "whispering", "ancient"
+static const char *famous_first[] = {
+    // Computer Science pioneers
+    "alan", "ada", "dennis", "ken", "grace", "donald", "edsger",
+    "john", "claude", "richard", "barbara", "guido", "james",
+    "bjarne", "margaret", "niklaus", "tim", "andrew", "linus",
+
+    // mathematicians
+    "leonhard", "carl", "gottfried", "pierre", "blaise", "georg",
+    "henri", "david", "emmy", "srinivasa", "kurt", "john",
+
+    // physicists
+    "albert", "niels", "richard", "james", "erwin", "werner",
+    "marie", "max", "paul", "enrico", "stephen", "nikola",
+
+    // engineers & inventors
+    "charles", "george", "hedy", "katherine", "annie", "dorothy",
+    "frances", "jean", "sister", "frances",
+    
+    // modern tech
+    "jeff", "linus", "brendan", "rob", "ken", "ryan", "rasmus",
+    "yukihiro", "anders", "larry", "brian"
 };
 
-static const char *magic_suffixes[] = {
-    "blood", "bone", "breath", "claw", "core", "essence", "eye",
-    "fang", "flame", "heart", "leaf", "light", "mist", "moon",
-    "scale", "shadow", "shard", "shell", "sky", "soul", "star",
-    "stone", "thorn", "veil", "wind", "wing"
+static const char *famous_last[] = {
+    // CS pioneers
+    "turing", "lovelace", "ritchie", "thompson", "hopper", "knuth",
+    "dijkstra", "neumann", "shannon", "stallman", "liskov",
+    "van_rossum", "gosling", "stroustrup", "hamilton", "wirth",
+    "berners_lee", "tanenbaum", "torvalds",
+
+    // mathematicians
+    "euler", "gauss", "leibniz", "fermat", "pascal", "cantor",
+    "poincare", "hilbert", "noether", "ramanujan", "godel", "nash",
+
+    // physicists
+    "einstein", "bohr", "feynman", "maxwell", "schrodinger",
+    "heisenberg", "curie", "planck", "dirac", "fermi", "hawking",
+    "tesla",
+
+    // engineers & inventors
+    "babbage", "boole", "lovelace", "lamport", "backus", "mccarthy",
+    "minsky", "floyd", "hoare", "codd", "kay", "engelbart",
+
+    // modern tech
+    "bezos", "eich", "pike", "dahl", "matsumoto", "hejlsberg",
+    "wall", "kernighan", "lerdorf"
 };
 
-static const char *magic_connectors[] = {
-    "_of_", "_", ""
+static const char *name_connectors[] = {
+    "_", "__"
 };
 
 static bool RandSpace(void) {
@@ -466,36 +501,31 @@ static void MaybeNewline(FILE *out) {
 static void GenerateMagicName(char *buffer, size_t buffer_size) {
     assert(buffer);
 
-    int prefix_idx = (size_t)rand() % (sizeof(magic_prefixes) / sizeof(magic_prefixes[0]));
-    int suffix_idx = (size_t)rand() % (sizeof(magic_suffixes) / sizeof(magic_suffixes[0]));
-    int connector_idx = (size_t)rand() % (sizeof(magic_connectors) / sizeof(magic_connectors[0]));
-    
+    int first_index = rand() % (int)(sizeof(famous_first) / sizeof(famous_first[0]));
+    int last_index = rand() % (int)(sizeof(famous_last)  / sizeof(famous_last[0]));
+    int conn_index = rand() % (int)(sizeof(name_connectors) / sizeof(name_connectors[0]));
+
     snprintf(buffer, buffer_size, "%s%s%s",
-        magic_prefixes[prefix_idx],
-        magic_connectors[connector_idx],
-        magic_suffixes[suffix_idx]);
+        famous_first[first_index],
+        name_connectors[conn_index],
+        famous_last[last_index]);
 }
 
 static void InitRenameTable(VariableArr *arr) {
     assert(arr);
 
     srand((unsigned int)time(NULL));
-    
+
     rename_table_size = arr->size;
-    rename_table = (RenameEntry *) calloc (rename_table_size, sizeof(RenameEntry));
+    rename_table = (RenameEntry *) calloc(rename_table_size, sizeof(RenameEntry));
     assert(rename_table);
 
-    for (size_t i = 0; i < rename_table_size; i++) {
-        if (rand() % 2 == 0) {
-            GenerateMagicName(rename_table[i].new_name, sizeof(rename_table[i].new_name));
-        } else {
-            char random_name[8] = {};
-            for (int j = 0; j < 6; j++) {
-                random_name[j] = 'a' + (rand() % 26);
-            }
-            random_name[6] = '\0';
-            snprintf(rename_table[i].new_name, sizeof(rename_table[i].new_name), "%s", random_name);
-        }
+    if (rename_table_size > 0) {
+        snprintf(rename_table[0].new_name, sizeof(rename_table[0].new_name), "main");
+    }
+
+    for (size_t i = 1; i < rename_table_size; i++) {
+        GenerateMagicName(rename_table[i].new_name, sizeof(rename_table[i].new_name));
     }
 }
 

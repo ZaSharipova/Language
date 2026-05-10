@@ -34,7 +34,8 @@ static void GenArrDecl(FILE *out, LangNode_t *node, VariableArr *arr, int indent
 
 static void GenUnaryOperation(FILE *out, LangNode_t *node, VariableArr *arr, const char *name);
 static void GenBinaryOperation(FILE *out, LangNode_t *node, VariableArr *arr, const char *name);
-static void GenExprWithPrecedence(LangNode_t *node, OperationTypes parent_op, FILE *out, VariableArr *arr);
+static void GenExprWithPrecedence(LangNode_t *node, OperationTypes parent_op,
+    bool is_right_child, FILE *out, VariableArr *arr);
 static void GenCondition(FILE *out, LangNode_t *node, VariableArr *arr, const char *name);
 static void GenCall(FILE *out, LangNode_t *node, VariableArr *arr);
 
@@ -385,7 +386,7 @@ static int GetOpPrecedence(OperationTypes op) {
         case kOperationAE:      return 1;
         case kOperationE:       return 1;
         case kOperationNE:      return 1;
-        default:                return 0;
+        default:                return -1;
     }
 
     #pragma GCC diagnostic pop
@@ -483,36 +484,64 @@ static void GenUnaryOperation(FILE *out, LangNode_t *node, VariableArr *arr, con
     fprintf(out, ")");
 }
 
+// static void GenBinaryOperation(FILE *out, LangNode_t *node, VariableArr *arr, const char *name) {
+//     assert(out);
+//     assert(node);
+//     assert(arr);
+//     assert(name);
+
+//     GenExprWithPrecedence(node->left, node->value.operation, out, arr);
+//     fprintf(out, " %s ", name);
+
+//     if (node->right && node->right->type == kOperation)  {
+//         //fprintf(out, "(");
+//         GenExpr(node->right, out, arr);
+//         //fprintf(out, ")");
+//     } else {
+//         GenExpr(node->right, out, arr);
+//     }
+// }
+
+static void GenExprWithPrecedence(LangNode_t *node, OperationTypes parent_op,
+        bool is_right_child, FILE *out, VariableArr *arr) {
+    assert(node);
+    assert(out);
+    assert(arr);
+
+    if (node->type != kOperation) {
+        GenExpr(node, out, arr);
+        return;
+    }
+
+    int child_prec  = GetOpPrecedence(node->value.operation);
+    if (child_prec < 0) {
+        GenExpr(node, out, arr);
+        return;
+    }
+    int parent_prec = GetOpPrecedence(parent_op);
+
+    bool need_parens = (child_prec < parent_prec) ||
+        (child_prec == parent_prec && is_right_child &&
+        (parent_op == kOperationSub || parent_op == kOperationDiv));
+
+    if (need_parens) {
+        fprintf(out, "(");
+        GenExpr(node, out, arr);
+        fprintf(out, ")");
+    } else {
+        GenExpr(node, out, arr);
+    }
+}
+
 static void GenBinaryOperation(FILE *out, LangNode_t *node, VariableArr *arr, const char *name) {
     assert(out);
     assert(node);
     assert(arr);
     assert(name);
 
-    GenExprWithPrecedence(node->left, node->value.operation, out, arr);
+    GenExprWithPrecedence(node->left,  node->value.operation, false, out, arr);
     fprintf(out, " %s ", name);
-
-    if (node->right && node->right->type == kOperation)  {
-        fprintf(out, "(");
-        GenExpr(node->right, out, arr);
-        fprintf(out, ")");
-    } else {
-        GenExpr(node->right, out, arr);
-    }
-}
-
-static void GenExprWithPrecedence(LangNode_t *node, OperationTypes parent_op, FILE *out, VariableArr *arr) {
-    assert(node);
-    assert(out);
-    assert(arr);
-
-    if (node && node->type == kOperation && GetOpPrecedence(node->value.operation) <= GetOpPrecedence(parent_op)) {
-        fprintf(out, "(");
-        GenExpr(node, out, arr);
-        fprintf(out, ")");
-    } else {
-        GenExpr(node, out, arr);
-    }
+    GenExprWithPrecedence(node->right, node->value.operation, true,  out, arr);
 }
 
 static void GenCondition(FILE *out, LangNode_t *node, VariableArr *arr, const char *name) {
