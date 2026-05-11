@@ -316,7 +316,7 @@ static uint8_t RexW(int reg, int rm) {
     return result;
 }
 
-// mov r64, imm64  (REX.W + B8+r + imm64)
+// mov r64, imm64  (REX.W + B8 + r + imm64)
 // Методичка: гл. 8.2
 static void EmitMovR64Imm64(Context *context, int reg, int64_t value) {
     assert(context);
@@ -326,7 +326,7 @@ static void EmitMovR64Imm64(Context *context, int reg, int64_t value) {
 
     BYTE(rex);                              // REX префикс
     BYTE((OP_MOV_R64_IMM64 + (reg & 7)));   // B8 + r (младшие 3 бита регистра)
-    BYTE(value);                            // 8-байтовое значение
+    QWORD(value);                           // 64 - байтовое значение
 }
 
 // push r64. Методичка: гл. 9.1, 9.2
@@ -511,6 +511,8 @@ static void EmitStart(Context *context) {
     ADD_R_IMM(kRSP, -8);                            // add rsp, -8 -> sub rsp, 8
 
     CALL("main");                                   // call <label addr> ("main")
+    MOV_RR(kRDI, kRAX);                             // mov rdi, rax
+    MOV_R_IMM32(kRAX, 60);                          // mov rax, 60
     CALL("my_exit");                                // call <label addr> ("my_exit")
 }
 
@@ -788,18 +790,18 @@ static void MakeLabel(char *buf, size_t size, const char *prefix, int number) {
  * Логика инвертирована: на условии "true" мы не прыгаем, на "false" —
  * прыгаем в else/конец цикла. */
 static uint8_t ChooseJCC(LangNode_t *cond) {
-    if (!cond || cond->type != kOperation) return 0x84;
+    if (!cond || cond->type != kOperation) return JCC_JE;
 
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wswitch-enum"
     switch (cond->value.operation) {
-        case kOperationA:  return JCC_JG;
-        case kOperationAE: return JCC_JGE;
-        case kOperationB:  return JCC_JL;
-        case kOperationBE: return JCC_JLE;
-        case kOperationE:  return JCC_JE;
-        case kOperationNE: return JCC_JNE;
-        default:           return JCC_JNE;
+        case kOperationA:  return JCC_JLE;
+        case kOperationAE: return JCC_JL;
+        case kOperationB:  return JCC_JGE;
+        case kOperationBE: return JCC_JG;
+        case kOperationE:  return JCC_JNE;
+        case kOperationNE: return JCC_JE;
+        default:           return JCC_JE;
     }
     #pragma GCC diagnostic pop
 }
@@ -1706,11 +1708,11 @@ static int LoadLib(LibBlob *blob, const char *path) {
         return 0;
     }
 
-    // if (!LoadRelocations(blob, file_buf, found.rela, found.text)) {
-    //     free(blob->data);
-    //     free(file_buf);
-    //     return 0;
-    // }
+    if (!LoadRelocations(blob, file_buf, found.rela, found.text)) {
+        free(blob->data);
+        free(file_buf);
+        return 0;
+    }
 
     free(file_buf);
     return 1;

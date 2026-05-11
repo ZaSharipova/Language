@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gdb \
  && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /langroot
-COPY . .
+# WORKDIR /langroot
+# COPY . .
 
 CMD ["/bin/bash"]
