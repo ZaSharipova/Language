@@ -17,14 +17,15 @@
 
 В моем языке программирования реализованы 3 программы:
 
-- решатель квадратных уравнений
+- решатель квадратных уравнений;
 ![Square](./ast_screenshots/image1.svg)
 
-- подсчет факториала
+- подсчет факториала;
 ![Factorial](./ast_screenshots/image2.svg)
 
-- рисовальщик круга
+- рисовальщик круга: реализовано 2 варианта - с поточечной отрисовкой и с отрисовкой всего массива функцией `Draw`.
 ![Draw](./ast_screenshots/image3.svg)
+![Draw_wm](./ast_screenshots/image4.svg)
 
 По каждой из них строится дерево команд. 
 
@@ -35,17 +36,42 @@
 ### Front-End 
 - code -> tree
 
-### Reverse-End
-- tree -> code
-
-### Middle-End 
-- optimise tree
-
 ### Back-End
 Перевод из ast в:
 - мой, реализованный в [Processor](/https://github.com/ZaSharipova/Processor) asm;
 - x86_64 nasm;
 - elf исполняемый файл.
+
+### Middle-End 
+- optimise tree
+
+### Reverse-End
+- tree -> code
+
+### Trick-End
+> Суть в том, что исходный код переписывается так, чтобы его было еще сложнее понять не только за счет нового языка, но и за счет несвязных названий переменных и функций и отступов.
+- code -> tree
+- tree -> new code
+
+Так выглядит переделанный `codeFact.txt`:
+```
+incantatio main() |>
+	henri__codd magica  0~~
+	augurio(henri__codd)~~
+
+
+	georg_berners_lee magica  james__dijkstra(henri__codd)~~
+	revelatio(georg_berners_lee)~~
+<|
+
+incantatio james__dijkstra(henri__codd) |>
+	si ((henri__codd minuo 1) inferior_aut  0) |>
+		reporto  1~~
+	<| altius |>
+		reporto (henri__codd multiplico james__dijkstra((henri__codd minuo 1)))~~
+	<|
+<|
+```
 
 ## 📚 Синтаксис и команды
 
@@ -100,6 +126,7 @@
 | **revelatio** | `printf` | Вывод на экран | `revelatio(arg)` |
 | **printc** | `putchar или printf("%c", ...)` | Вывод символа | `printc(arg)` |
 | **augurio** | `scanf` | Ввод с клавиатуры | `augurio(arg)` |
+| **draw** | `draw` | Дамп массива | `draw(arr)` |
 
 ### 🏗️ **Функции и управление программой**
 

@@ -310,13 +310,13 @@ static uint8_t ModRM(int mod, int reg, int rm) {
 static uint8_t RexW(int reg, int rm) {
     uint8_t result = REX_W_BYTE;          // 0x40 | W = 1
 
-    if (reg >= 8) result |= REX_R_BIT;    // REX.R -> расширение регисттра
+    if (reg >= 8) result |= REX_R_BIT;    // REX.R -> расширение регистра
     if (rm  >= 8) result |= REX_B_BIT;    // REX.B -> расширение rm
 
     return result;
 }
 
-// mov r64, imm64  (REX.W + B8 + r + imm64)
+// mov r64, imm64 (REX.W + B8 + r + imm64)
 // Методичка: гл. 8.2
 static void EmitMovR64Imm64(Context *context, int reg, int64_t value) {
     assert(context);
